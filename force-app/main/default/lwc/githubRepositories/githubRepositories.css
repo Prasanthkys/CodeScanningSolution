@@ -1,0 +1,12 @@
+.slds-grid {
+    display: flex;
+    align-items: center; /* Align items vertically centered */
+}
+
+.slds-col {
+    padding-right: 1rem; /* Add spacing between columns, if needed */
+}
+
+.slds-col:last-child {
+    padding-right: 0; /* Remove padding from the last column */
+}

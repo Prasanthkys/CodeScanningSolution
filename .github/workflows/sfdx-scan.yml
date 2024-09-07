@@ -1,4 +1,4 @@
-name: SFDX Code Scan
+name: SFDX SCAN CODE
 
 #sfdx
 on:
@@ -39,13 +39,20 @@ jobs:
           base64 scanner-report.csv | tr -d '\n' > encoded_report.txt
       - name: Install jq
         run: sudo apt-get install -y jq
+      - name: Get Repository and Branch Info
+        id: get_info
+        run: |
+          REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
+          BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
+          FILE_TITLE="Scanner Report_${REPO_NAME}_${BRANCH_NAME}"
+          echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
       - name: Upload CSV Report to Salesforce
         run: |
           contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
             -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
             -H "Content-Type: application/json" \
             -d '{
-              "Title": "Scanner Report_Overall",
+              "Title": "'"${{ env.FILE_TITLE }}"'",
               "PathOnClient": "scanner-report.csv",
               "VersionData": "'"$(cat encoded_report.txt)"'"
             }')
