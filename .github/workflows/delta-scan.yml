@@ -78,7 +78,7 @@ jobs:
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
               -H "Content-Type: application/json" \
               -d '{
-                "Title": "Scanner Report",
+                "Title": "Scanner Report_Delta",
                 "PathOnClient": "scanner-report.csv",
                 "VersionData": "'"$(cat encoded_report.txt)"'"
               }')
