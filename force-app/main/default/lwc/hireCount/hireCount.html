@@ -1,0 +1,36 @@
+<template>
+    <lightning-card title="Placement Metrics">
+        <div class="slds-m-around_medium">
+            <div class="slds-grid slds-gutters">
+                <div class="slds-col slds-size_1-of-2">
+                    <lightning-combobox
+                        label="Filter Type"
+                        value={filterType}
+                        options={filterOptions}
+                        onchange={handleFilterChange}>
+                    </lightning-combobox>
+                </div>
+                <div class="slds-col slds-size_1-of-2">
+                    <template if:true={selectedValueOptions.length}>
+                        <lightning-combobox
+                            label="Select Value"
+                            value={selectedValue}
+                            options={selectedValueOptions}
+                            onchange={handleValueChange}>
+                        </lightning-combobox>
+                    </template>
+                </div>
+            </div>
+            <div class="table">
+            <div class="custom-datatable">
+                <lightning-datatable
+                    key-field="id"
+                    data={placements}
+                     hide-checkbox-column="true"
+                    columns={columns}>
+                </lightning-datatable>
+            </div>
+            </div>
+        </div>
+    </lightning-card>
+</template>

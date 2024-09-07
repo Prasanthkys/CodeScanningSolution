@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Work_Authorization__c</fullName>
+    <label>Work Authorization</label>
+    <required>true</required>
+    <trackHistory>false</trackHistory>
+    <trackTrending>false</trackTrending>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>Citizen</fullName>
+                <default>false</default>
+                <label>Citizen</label>
+            </value>
+            <value>
+                <fullName>GC</fullName>
+                <default>false</default>
+                <label>GC</label>
+            </value>
+            <value>
+                <fullName>GC-EAD</fullName>
+                <default>false</default>
+                <label>GC-EAD</label>
+            </value>
+            <value>
+                <fullName>H1-B</fullName>
+                <default>false</default>
+                <label>H1-B</label>
+            </value>
+            <value>
+                <fullName>L1-A</fullName>
+                <default>false</default>
+                <label>L1-A</label>
+            </value>
+            <value>
+                <fullName>L1-B</fullName>
+                <default>false</default>
+                <label>L1-B</label>
+            </value>
+            <value>
+                <fullName>L2-EAD</fullName>
+                <default>false</default>
+                <label>L2-EAD</label>
+            </value>
+            <value>
+                <fullName>OPT-EAD</fullName>
+                <default>false</default>
+                <label>OPT-EAD</label>
+            </value>
+            <value>
+                <fullName>TV Visa</fullName>
+                <default>false</default>
+                <label>TV Visa</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

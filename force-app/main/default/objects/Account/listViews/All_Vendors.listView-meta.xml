@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ListView xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>All_Vendors</fullName>
+    <columns>ACCOUNT.NAME</columns>
+    <columns>Vendor_Number__c</columns>
+    <columns>Country__c</columns>
+    <columns>Business_Unit__c</columns>
+    <columns>Account_Type__c</columns>
+    <filterScope>Everything</filterScope>
+    <filters>
+        <field>Account_Type__c</field>
+        <operation>equals</operation>
+        <value>Vendor</value>
+    </filters>
+    <label>All Vendors</label>
+</ListView>
