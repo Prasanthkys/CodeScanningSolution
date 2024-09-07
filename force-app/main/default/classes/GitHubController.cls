@@ -1,6 +1,6 @@
 public with sharing class GitHubController {
     private static final String GITHUB_API_BASE_URL = 'https://api.github.com/';
-    private static final String ACCESS_TOKEN = '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';
+    private static final String ACCESS_TOKEN = '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';//Access Token
 
     @AuraEnabled(cacheable=true)
     public static List<String> getRepositories() {

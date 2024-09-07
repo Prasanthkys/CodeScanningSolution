@@ -70,6 +70,18 @@ jobs:
         if: success()
         run: sudo apt-get install -y jq
 
+      - name: Get Repository and Branch Info
+        id: get-info
+        run: |
+          # Extract the repository name from GITHUB_REPOSITORY
+          REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
+          # Extract the branch name from GITHUB_REF
+          BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
+          # Construct the file title
+          FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}"
+          # Output the file title to the environment
+          echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
+
       - name: Upload CSV Report to Salesforce
         if: success()
         run: |
@@ -78,7 +90,7 @@ jobs:
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
               -H "Content-Type: application/json" \
               -d '{
-                "Title": "Scanner Report_Delta",
+                "Title": "'"${{ env.FILE_TITLE }}"'",
                 "PathOnClient": "scanner-report.csv",
                 "VersionData": "'"$(cat encoded_report.txt)"'"
               }')

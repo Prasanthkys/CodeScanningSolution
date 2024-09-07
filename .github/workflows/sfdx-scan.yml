@@ -44,7 +44,7 @@ jobs:
         run: |
           REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
           BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
-          FILE_TITLE="Scanner Report_${REPO_NAME}_${BRANCH_NAME}"
+          FILE_TITLE="Code Scanner Overall Report_${REPO_NAME}_${BRANCH_NAME}"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
       - name: Upload CSV Report to Salesforce
         run: |
