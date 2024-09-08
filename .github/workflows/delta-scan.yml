@@ -42,7 +42,7 @@ jobs:
             while read -r file; do
               if [ -f "$file" ]; then
                 # Use git diff to get the specific lines that changed in the file
-                git diff HEAD~1 HEAD "$file" > "${file}.diff"
+                git diff HEAD~1 HEAD "$file" > "${file//\//_}.diff"
               fi
             done < changed_files.txt
           else
@@ -58,9 +58,10 @@ jobs:
           echo "File,Line,Change" > $report_file
 
           while read -r file; do
-            if [ -f "${file}.diff" ]; then
+            diff_file="${file//\//_}.diff"
+            if [ -f "$diff_file" ]; then
               # Parse the diff output to extract line numbers and changes
-              awk '/^\+[^+]/ {print FILENAME "," FNR "," substr($0, 2)}' "${file}.diff" | sed "s/^/${file},/" >> $report_file
+              awk -v file="$file" '/^\+[^+]/ {print file "," FNR "," substr($0, 2)}' "$diff_file" >> $report_file
             fi
           done < changed_files.txt
         env:
