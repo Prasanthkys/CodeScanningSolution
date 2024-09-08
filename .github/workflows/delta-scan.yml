@@ -1,10 +1,10 @@
 name: SFDX Code Scan Delta
- 
+
 on:
   push:
     branches:
       - '**'  # Trigger workflow on any branch
- 
+
 jobs:
   installcli:
     runs-on: ubuntu-latest
@@ -12,43 +12,43 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
- 
+
       - name: Use Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20.x
- 
+
       - name: Install CLI
         run: npm install @salesforce/cli --global
- 
+
       - name: Install Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
- 
+
       - name: Verify SFDX CLI Installation
         run: sf --version
- 
+
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
- 
+
       - name: Get changed files and specific changes
         id: get-changes
         run: |
-          git fetch --unshallow || true
- 
+          # No need to run git fetch --unshallow as fetch-depth: 0 is already used
+          
           # Check if there is more than one commit
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files between HEAD~1 and HEAD"
             git diff --name-only HEAD~1 HEAD > changed_files.txt
- 
+
             # Fetch specific changes in each file
             git diff HEAD~1 HEAD > specific_changes.txt
-          else:
+          else
             echo "No previous commit to compare to." > changed_files.txt
             echo "No specific changes found." > specific_changes.txt
           fi
           cat changed_files.txt
           cat specific_changes.txt
- 
+
       - name: Run SFDX Scanner on Specific Changes
         if: success()
         run: |
@@ -58,7 +58,7 @@ jobs:
             # Extract specific changes and pass to scanner
             changes=$(cat specific_changes.txt)
             echo "Scanning specific changes in files: $changes"
- 
+
             # Run the scanner only on the changed files
             sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
           else
@@ -69,7 +69,7 @@ jobs:
           SF_LAZY_LOAD_MODULES: 'true'
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
- 
+
       - name: Encode CSV file to Base64
         if: success()
         id: encode_file
@@ -79,7 +79,9 @@ jobs:
           else
             echo "Scanner report CSV file not found."
             exit 1
- 
+        env:
+          SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
+
       - name: Upload CSV Report to Salesforce
         if: success()
         run: |
@@ -93,18 +95,18 @@ jobs:
                 "VersionData": "'"$(cat encoded_report.txt)"'"
               }')
             echo "Response: $contentDocumentResponse"
- 
+
             contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
             if [ -z "$contentVersionId" ]; then
               echo "Error: Failed to upload file. No ContentVersionId found."
               exit 1
             fi
             echo "ContentVersionId: $contentVersionId"
- 
+
             contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
             echo "ContentDocument Response: $contentDocumentResponse"
- 
+
             contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
             if [ -z "$contentDocumentId" ]; then
               echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."

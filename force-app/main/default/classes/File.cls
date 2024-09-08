@@ -24,6 +24,8 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     ContentVersion file = [SELECT VersionData FROM ContentVersion WHERE ContentDocumentId = :fileId LIMIT 1];
     String csvContent = file.VersionData.toString();  // Convert Blob to String
     System.debug('Original CSV Content: ' + csvContent);
+
+    System.debug('CSV Content');
     
     List<String> foundLines = new List<String>();
     List<String> lines = csvContent.split('\n');
@@ -31,7 +33,6 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     if (lines.isEmpty()) {
         // Handle empty file case
         System.debug('Lines');
-        System.debug('Hello');
         return EncodingUtil.base64Encode(Blob.valueOf(''));
     }
     
