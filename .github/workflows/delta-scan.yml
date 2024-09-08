@@ -33,15 +33,12 @@ jobs:
       - name: Get changed files and specific changes
         id: get-changes
         run: |
-          # Check if there is more than one commit
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files between HEAD~1 and HEAD"
             git diff --name-only HEAD~1 HEAD > changed_files.txt
 
-            # Extract specific changes in each file
             while read -r file; do
               if [ -f "$file" ]; then
-                # Use git diff to get the specific lines that changed in the file
                 git diff HEAD~1 HEAD "$file" > "${file//\//_}.diff"
               fi
             done < changed_files.txt
@@ -58,31 +55,40 @@ jobs:
             diff_file="${file//\//_}.diff"
             temp_file="temp_${file//\//_}"
 
-            # Ensure the temporary file is created
             echo "Creating temporary file for $file"
             touch "$temp_file"
 
-            # Process the diff file to extract only changed lines and write to temp file
             awk '/^\+[^+]/ {print substr($0, 2)}' "$diff_file" > "$temp_file"
 
-            # Ensure the temp file exists and is not empty
             if [ ! -s "$temp_file" ]; then
-              echo "No changes found in $file."
+              echo "No changes found in $file." >> skipped_files.txt
               rm "$temp_file"
             else
               echo "Temporary file created for $file."
             fi
           done < changed_files.txt
+          
+          # Debug output
+          echo "List of temporary files created:"
+          ls temp_* || echo "No temporary files created."
 
       - name: Run SFDX Scanner on Temporary Files
         if: success()
         run: |
-          temp_files=$(ls temp_*)
+          temp_files=$(ls temp_* 2>/dev/null)
           echo "Files to scan: $temp_files"
 
           if [ -n "$temp_files" ]; then
-            # Run the scanner only on the temporary files
-            sf scanner:run --target "$temp_files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
+            sf scanner:run --target "$temp_files" --format "csv" --outfile "scanner-report.csv"
+            echo "Scanner report generated."
+
+            # Check if the report contains data
+            if [ -s scanner-report.csv ]; then
+              echo "Scanner report content:"
+              head -n 10 scanner-report.csv
+            else
+              echo "Scanner report is empty."
+            fi
           else
             echo "No relevant files found for scanning."
             touch scanner-report.csv
