@@ -46,32 +46,42 @@ jobs:
           cat changed_files.txt
           cat changes.patch
 
-      - name: Generate Delta Report
-        id: generate-delta-report
+      - name: Run SFDX Scanner on Changed Files
+        if: success()
         run: |
-          files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$')
+          files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
           if [ -n "$files" ]; then
-            # Create a file to hold delta results
-            echo "Delta Changes Report" > delta-report.txt
+            # Create a CSV file to hold the report
+            echo "File,Line,Issue,Severity" > vulnerability-report.csv
             
-            # Process each changed file
             for file in $files; do
-              echo "File: $file" >> delta-report.txt
+              echo "Scanning $file"
               
-              # Extract changes for each file
-              grep -E "^\+\+\+ b/$file|^@@.*\+\+\+ b/$file" changes.patch | sed -e 's/^@@.*@@ //g' -e 's/^\+\+ b\/.*//g' >> delta-report.txt
-              echo "" >> delta-report.txt
+              # Run the scanner and save the result
+              sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv"
+              
+              # Append results to the final report
+              if [ -s scanner-report.csv ]; then
+                # Process the CSV to include only relevant lines
+                awk -F',' -v file="$file" 'NR==1 || $1==file' scanner-report.csv >> vulnerability-report.csv
+              else
+                echo "No issues found in $file."
+              fi
             done
           else
-            echo "No relevant files changed." > delta-report.txt
+            echo "No relevant files changed."
+            touch vulnerability-report.csv
           fi
-        continue-on-error: true
+        env:
+          SF_LAZY_LOAD_MODULES: 'true'
+          SF_AUTOUPDATE_DISABLE: 'true'
+          SF_DISABLE_AUTOUPDATE: 'true'
 
-      - name: Encode Delta Report to Base64
+      - name: Encode CSV file to Base64
         if: success()
         id: encode_file
         run: |
-          base64 delta-report.txt | tr -d '\n' > encoded_report.txt
+          base64 vulnerability-report.csv | tr -d '\n' > encoded_report.txt
 
       - name: Install jq
         if: success()
@@ -85,7 +95,7 @@ jobs:
           FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
 
-      - name: Upload Delta Report to Salesforce
+      - name: Upload CSV Report to Salesforce
         if: success()
         run: |
           if [ -s encoded_report.txt ]; then
@@ -94,7 +104,7 @@ jobs:
               -H "Content-Type: application/json" \
               -d '{
                 "Title": "'"${{ env.FILE_TITLE }}"'",
-                "PathOnClient": "delta-report.txt",
+                "PathOnClient": "vulnerability-report.csv",
                 "VersionData": "'"$(cat encoded_report.txt)"'"
               }')
             echo "Response: $contentDocumentResponse"
@@ -117,7 +127,7 @@ jobs:
             fi
             echo "ContentDocumentId: $contentDocumentId"
           else
-            echo "No delta report generated, skipping upload."
+            echo "No vulnerability report generated, skipping upload."
           fi
         env:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
