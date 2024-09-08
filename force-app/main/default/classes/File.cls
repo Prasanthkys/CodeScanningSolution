@@ -15,8 +15,8 @@ public with sharing class File {
             fileData.put('label', cv.Title + ' - ' + cv.CreatedDate.format('yyyy-MM-dd HH:mm:ss'));
             files.add(fileData);
         }
+        System.debug('Files');
         return files;
-        //files
     }
 
     @AuraEnabled(cacheable=true)
@@ -24,8 +24,6 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     ContentVersion file = [SELECT VersionData FROM ContentVersion WHERE ContentDocumentId = :fileId LIMIT 1];
     String csvContent = file.VersionData.toString();  // Convert Blob to String
     System.debug('Original CSV Content: ' + csvContent);
-    System.debug('Original');
-    System.debug('CSV Content');
     
     List<String> foundLines = new List<String>();
     List<String> lines = csvContent.split('\n');

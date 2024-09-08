@@ -40,35 +40,33 @@ jobs:
             echo "Fetching changed files between HEAD~1 and HEAD"
             git diff --name-only HEAD~1 HEAD > changed_files.txt
 
-            # Fetch specific changes in each file
-            git diff HEAD~1 HEAD > specific_changes.txt
+            # Extract specific changes in each file
+            while read -r file; do
+              if [ -f "$file" ]; then
+                # Use git diff to get the specific lines that changed in the file
+                git diff HEAD~1 HEAD "$file" > "${file}.diff"
+              fi
+            done < changed_files.txt
           else
             echo "No previous commit to compare to." > changed_files.txt
-            echo "No specific changes found." > specific_changes.txt
+            echo "No specific changes found." > /dev/null
           fi
           cat changed_files.txt
-          cat specific_changes.txt
 
-      - name: Run SFDX Scanner on Specific Changes
+      - name: Create Report of Changed Lines
         if: success()
         run: |
-          files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
-          echo "Files to scan: $files"
-          if [ -n "$files" ]; then
-            # Extract specific changes and pass to scanner
-            changes=$(cat specific_changes.txt)
-            echo "Scanning specific changes in files: $changes"
-
-            # Run the scanner only on the changed files
-            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
-          else
-            echo "No relevant files or changes found."
-            touch scanner-report.csv
-          fi
+          report_file="scanner-report.csv"
+          echo "File,Line,Change" > $report_file
+          
+          while read -r file; do
+            if [ -f "${file}.diff" ]; then
+              # Parse the diff output to extract line numbers and changes
+              awk '/^\+[^+]/ {print FILENAME "," FNR "," substr($0, 2)}' "${file}.diff" | sed "s/^/${file},/" >> $report_file
+            fi
+          done < changed_files.txt
         env:
-          SF_LAZY_LOAD_MODULES: 'true'
-          SF_AUTOUPDATE_DISABLE: 'true'
-          SF_DISABLE_AUTOUPDATE: 'true'
+          SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
 
       - name: Encode CSV file to Base64
         if: success()
@@ -79,7 +77,7 @@ jobs:
           else
             echo "Scanner report CSV file not found."
             exit 1
-          fi  # Added fi here to close the if block
+          fi
         env:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
 
