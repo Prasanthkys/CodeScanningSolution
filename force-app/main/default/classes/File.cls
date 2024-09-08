@@ -47,6 +47,7 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     for (Integer i = 0; i < headers.size(); i++) {
         String header = headers[i].trim();
         System.debug('header');
+        System.debug('header[i]');
 
         if (categoryPattern.matcher(header).find()) {
             categoryIndex = i;

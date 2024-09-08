@@ -1,6 +1,6 @@
 name: SFDX Scan Code
 
-#sfdx delta
+#delta report on filter
 on:
   push:
     branches:
@@ -45,9 +45,10 @@ jobs:
           # Create a directory to store changed lines
           mkdir -p changed_lines
 
-          # Extract changed files with lines
+          # Extract changed lines for each file
           while IFS= read -r file; do
-            git diff -U0 HEAD~1 HEAD -- "$file" | grep '^@@' > "changed_lines/${file//\//_}.txt"
+            # Store changed lines with line numbers
+            git diff -U0 HEAD~1 HEAD -- "$file" | grep -E '^\+' | grep -vE '^\+\+\+' > "changed_lines/${file//\//_}.txt"
           done < changed_files.txt
 
       - name: Filter Changed LWC and Apex Files
@@ -57,32 +58,28 @@ jobs:
           cat filtered_files.txt
         continue-on-error: true
 
-      - name: Run SFDX Scanner on Changed Files
+      - name: Run SFDX Scanner on Changed Lines
         if: success()
         run: |
-          files=$(cat filtered_files.txt)
-          if [ -n "$files" ]; then
-            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv"
-          else
-            echo "No relevant files changed."
-            touch scanner-report.csv
+          rm -f scanner-report.csv
+          touch scanner-report.csv
+          while IFS= read -r file; do
+            # Run scanner on the specific lines that changed
+            while IFS= read -r line; do
+              sf scanner:run --target "$file" --line "$line" --format "csv" --outfile "temp_scanner_report.csv"
+              # Append the results to the main report
+              tail -n +2 temp_scanner_report.csv >> scanner-report.csv
+            done < "changed_lines/${file//\//_}.txt"
+          done < filtered_files.txt
+
+          # If no results were generated, create an empty file
+          if [ ! -s scanner-report.csv ]; then
+            echo "No issues found in the changed lines." > scanner-report.csv
           fi
         env:
           SF_LAZY_LOAD_MODULES: 'true'
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
-
-      - name: Filter Scanner Report by Changed Lines
-        if: success()
-        run: |
-          if [ -f "scanner-report.csv" ]; then
-            touch filtered_scanner_report.csv
-            while IFS= read -r file; do
-              awk -v file="$file" 'BEGIN { FS=","; OFS="," } 
-              NR==1 || $3 ~ file {print $0}' scanner-report.csv >> filtered_scanner_report.csv
-            done < filtered_files.txt
-            mv filtered_scanner_report.csv scanner-report.csv
-          fi
 
       - name: Encode CSV file to Base64
         if: success()
