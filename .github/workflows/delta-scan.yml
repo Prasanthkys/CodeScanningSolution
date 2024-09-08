@@ -33,8 +33,6 @@ jobs:
       - name: Get changed files and specific changes
         id: get-changes
         run: |
-          # No need to run git fetch --unshallow as fetch-depth: 0 is already used
-          
           # Check if there is more than one commit
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files between HEAD~1 and HEAD"
@@ -58,7 +56,7 @@ jobs:
         run: |
           report_file="scanner-report.csv"
           echo "File,Line,Change" > $report_file
-          
+
           while read -r file; do
             if [ -f "${file}.diff" ]; then
               # Parse the diff output to extract line numbers and changes
@@ -78,8 +76,6 @@ jobs:
             echo "Scanner report CSV file not found."
             exit 1
           fi
-        env:
-          SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
 
       - name: Upload CSV Report to Salesforce
         if: success()
