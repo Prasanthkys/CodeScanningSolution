@@ -23,6 +23,7 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     ContentVersion file = [SELECT VersionData FROM ContentVersion WHERE ContentDocumentId = :fileId LIMIT 1];
     String csvContent = file.VersionData.toString();  // Convert Blob to String
     //File
+    //code scanner
     System.debug('Original CSV Content: ' + csvContent);
     
     List<String> foundLines = new List<String>();
