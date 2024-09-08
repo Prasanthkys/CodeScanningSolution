@@ -1,3 +1,5 @@
+name: SFDX Scan Code
+
 #delta report on filter
 on:
   push:
@@ -33,9 +35,6 @@ jobs:
       - name: Get changed files and lines
         id: get-changes
         run: |
-          # Fetch all commits to ensure we can reference HEAD~1
-          git fetch --unshallow || true
-          
           # Get the changed files
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             git diff --name-only HEAD~1 HEAD > changed_files.txt
@@ -43,10 +42,13 @@ jobs:
             echo "No previous commit to compare to." > changed_files.txt
           fi
 
+          # Create a directory to store changed lines
+          mkdir -p changed_lines
+
           # Extract changed files with lines
-          for file in $(cat changed_files.txt); do
-            git diff -U0 HEAD~1 HEAD -- $file | grep '^@@' > changed_lines_$file.txt
-          done
+          while IFS= read -r file; do
+            git diff -U0 HEAD~1 HEAD -- "$file" | grep '^@@' > "changed_lines/${file//\//_}.txt"
+          done < changed_files.txt
 
       - name: Filter Changed LWC and Apex Files
         id: filter-changes
@@ -73,13 +75,12 @@ jobs:
       - name: Filter Scanner Report by Changed Lines
         if: success()
         run: |
-          # This step will filter the scanner report to include only the lines that were changed
           if [ -f "scanner-report.csv" ]; then
             touch filtered_scanner_report.csv
-            for file in $(cat filtered_files.txt); do
+            while IFS= read -r file; do
               awk -v file="$file" 'BEGIN { FS=","; OFS="," } 
               NR==1 || $3 ~ file {print $0}' scanner-report.csv >> filtered_scanner_report.csv
-            done
+            done < filtered_files.txt
             mv filtered_scanner_report.csv scanner-report.csv
           fi
 

@@ -22,7 +22,6 @@ public with sharing class File {
 public static String getCSVFileContent(Id fileId, String categorySearch, String engineSearch, String ruleSearch) {
     ContentVersion file = [SELECT VersionData FROM ContentVersion WHERE ContentDocumentId = :fileId LIMIT 1];
     String csvContent = file.VersionData.toString();  // Convert Blob to String
-    System.debug('Original CSV content');
     System.debug('Original CSV Content: ' + csvContent);
     
     List<String> foundLines = new List<String>();
@@ -30,6 +29,7 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     
     if (lines.isEmpty()) {
         // Handle empty file case
+        System.debug('Lines');
         return EncodingUtil.base64Encode(Blob.valueOf(''));
     }
     
