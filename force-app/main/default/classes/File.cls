@@ -29,7 +29,6 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     
     if (lines.isEmpty()) {
         // Handle empty file case
-        System.debug('Lines');
         return EncodingUtil.base64Encode(Blob.valueOf(''));
     }
     
@@ -47,6 +46,7 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
 
     for (Integer i = 0; i < headers.size(); i++) {
         String header = headers[i].trim();
+        System.debug('header');
 
         if (categoryPattern.matcher(header).find()) {
             categoryIndex = i;

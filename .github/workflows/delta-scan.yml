@@ -1,6 +1,6 @@
 name: SFDX Scan Code
 
-#delta report on filter
+#sfdx delta
 on:
   push:
     branches:
