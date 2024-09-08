@@ -7,7 +7,7 @@ public with sharing class File {
             WHERE Title LIKE 'Scanner Report%' 
             ORDER BY CreatedDate DESC
         ];
-        System.debug('File');
+
         List<Map<String, String>> files = new List<Map<String, String>>();
         for (ContentVersion cv : contentVersions) {
             Map<String, String> fileData = new Map<String, String>();
@@ -15,7 +15,6 @@ public with sharing class File {
             fileData.put('label', cv.Title + ' - ' + cv.CreatedDate.format('yyyy-MM-dd HH:mm:ss'));
             files.add(fileData);
         }
-        System.debug('Files');
         return files;
     }
 
@@ -31,6 +30,7 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     if (lines.isEmpty()) {
         // Handle empty file case
         System.debug('Lines');
+        System.debug('File');
         return EncodingUtil.base64Encode(Blob.valueOf(''));
     }
     

@@ -98,8 +98,6 @@ public with sharing class JobMetrics {
             startDate = today; // Default to today if no valid filter
             endDate = today;
         }
-        System.debug('Job Metrics');
-
         return new Date[] {startDate, endDate};
     }
 
@@ -140,6 +138,10 @@ public static List<Job_Posting__c> getJobStatusInformation(String jobByStatus, S
                                           AND CreatedDate >= :startDate AND CreatedDate <= :endDate];
     
     System.debug('Job Status: ' + jobByStatus + ', Filter: ' + filter + ', Data: ' + jobStatusList);
+    System.debug('Job Status');
+
+    System.debug('Filter');//Debug Statement
+    System.debug('Data');
     return jobStatusList;
 }
 
