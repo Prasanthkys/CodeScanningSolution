@@ -1,6 +1,5 @@
 name: SFDX Code Scan
 
-#delta report on filter
 on:
   push:
     branches:
@@ -32,48 +31,47 @@ jobs:
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
 
-      - name: Get changed files
+      - name: Get Changed Files and Line Changes
         id: get-changes
         run: |
-          # Fetch all commits to ensure we can reference HEAD~1
           git fetch --unshallow || true
           
-          # Check if there is more than one commit
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             git diff --name-only HEAD~1 HEAD > changed_files.txt
+            git diff --unified=1000 HEAD~1 HEAD | grep -E '^\+\+\+|^---|^@@' > changes.patch
           else
             echo "No previous commit to compare to." > changed_files.txt
+            echo "No changes to report." > changes.patch
           fi
           cat changed_files.txt
+          cat changes.patch
 
-      - name: Filter Changed LWC and Apex Files
-        id: filter-changes
+      - name: Generate Delta Report
+        id: generate-delta-report
         run: |
-          # Extract changed lwc and apex files
-          grep -E '\.cls$|\.lwc$' changed_files.txt > filtered_files.txt
-          cat filtered_files.txt
+          files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$')
+          if [ -n "$files" ]; then
+            # Create a file to hold delta results
+            echo "Delta Changes Report" > delta-report.txt
+            
+            # Process each changed file
+            for file in $files; do
+              echo "File: $file" >> delta-report.txt
+              
+              # Extract changes for each file
+              grep -E "^\+\+\+ b/$file|^@@.*\+\+\+ b/$file" changes.patch | sed -e 's/^@@.*@@ //g' -e 's/^\+\+ b\/.*//g' >> delta-report.txt
+              echo "" >> delta-report.txt
+            done
+          else
+            echo "No relevant files changed." > delta-report.txt
+          fi
         continue-on-error: true
 
-      - name: Run SFDX Scanner on Changed Files
-        if: success()
-        run: |
-          files=$(cat filtered_files.txt)
-          if [ -n "$files" ]; then
-            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv"
-          else
-            echo "No relevant files changed."
-            touch scanner-report.csv
-          fi
-        env:
-          SF_LAZY_LOAD_MODULES: 'true'
-          SF_AUTOUPDATE_DISABLE: 'true'
-          SF_DISABLE_AUTOUPDATE: 'true'
-
-      - name: Encode CSV file to Base64
+      - name: Encode Delta Report to Base64
         if: success()
         id: encode_file
         run: |
-          base64 scanner-report.csv | tr -d '\n' > encoded_report.txt
+          base64 delta-report.txt | tr -d '\n' > encoded_report.txt
 
       - name: Install jq
         if: success()
@@ -82,16 +80,12 @@ jobs:
       - name: Get Repository and Branch Info
         id: get-info
         run: |
-          # Extract the repository name from GITHUB_REPOSITORY
           REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
-          # Extract the branch name from GITHUB_REF
           BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
-          # Construct the file title
           FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}"
-          # Output the file title to the environment
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
 
-      - name: Upload CSV Report to Salesforce
+      - name: Upload Delta Report to Salesforce
         if: success()
         run: |
           if [ -s encoded_report.txt ]; then
@@ -100,7 +94,7 @@ jobs:
               -H "Content-Type: application/json" \
               -d '{
                 "Title": "'"${{ env.FILE_TITLE }}"'",
-                "PathOnClient": "scanner-report.csv",
+                "PathOnClient": "delta-report.txt",
                 "VersionData": "'"$(cat encoded_report.txt)"'"
               }')
             echo "Response: $contentDocumentResponse"
@@ -123,7 +117,7 @@ jobs:
             fi
             echo "ContentDocumentId: $contentDocumentId"
           else
-            echo "No scanner report generated, skipping upload."
+            echo "No delta report generated, skipping upload."
           fi
         env:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}

@@ -24,6 +24,7 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     String csvContent = file.VersionData.toString();  // Convert Blob to String
     //File
     //code scanner
+    //comments
     System.debug('Original CSV Content: ' + csvContent);
     
     List<String> foundLines = new List<String>();
