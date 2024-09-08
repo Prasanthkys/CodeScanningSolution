@@ -29,6 +29,7 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     
     if (lines.isEmpty()) {
         // Handle empty file case
+        System.debug('Lines');
         return EncodingUtil.base64Encode(Blob.valueOf(''));
     }
     

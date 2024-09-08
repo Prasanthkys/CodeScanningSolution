@@ -1,6 +1,6 @@
 name: SFDX Scan Code
 
-#delta report on filter
+# delta report on filter
 on:
   push:
     branches:
@@ -47,7 +47,7 @@ jobs:
 
           # Extract changed lines for each file
           while IFS= read -r file; do
-            # Store changed lines with line numbers
+            # Create a temporary file with only the changed lines
             git diff -U0 HEAD~1 HEAD -- "$file" | grep -E '^\+' | grep -vE '^\+\+\+' > "changed_lines/${file//\//_}.txt"
           done < changed_files.txt
 
@@ -58,19 +58,30 @@ jobs:
           cat filtered_files.txt
         continue-on-error: true
 
-      - name: Run SFDX Scanner on Changed Lines
+      - name: Create Temporary Files for Changed Lines
+        if: success()
+        run: |
+          mkdir -p temp_files
+          while IFS= read -r file; do
+            temp_file="temp_files/${file//\//_}"
+            touch "$temp_file"
+            echo "Processing $file"
+            while IFS= read -r line; do
+              # Remove the leading '+' and append to temp file
+              echo "${line#\+}" >> "$temp_file"
+            done < "changed_lines/${file//\//_}.txt"
+          done < filtered_files.txt
+
+      - name: Run SFDX Scanner on Temporary Files
         if: success()
         run: |
           rm -f scanner-report.csv
           touch scanner-report.csv
-          while IFS= read -r file; do
-            # Run scanner on the specific lines that changed
-            while IFS= read -r line; do
-              sf scanner:run --target "$file" --line "$line" --format "csv" --outfile "temp_scanner_report.csv"
-              # Append the results to the main report
-              tail -n +2 temp_scanner_report.csv >> scanner-report.csv
-            done < "changed_lines/${file//\//_}.txt"
-          done < filtered_files.txt
+          for temp_file in temp_files/*; do
+            sf scanner:run --target "$temp_file" --format "csv" --outfile "temp_scanner_report.csv"
+            # Append the results to the main report
+            tail -n +2 temp_scanner_report.csv >> scanner-report.csv
+          done
 
           # If no results were generated, create an empty file
           if [ ! -s scanner-report.csv ]; then
