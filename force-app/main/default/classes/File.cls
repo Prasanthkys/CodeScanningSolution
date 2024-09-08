@@ -14,6 +14,7 @@ public with sharing class File {
             fileData.put('id', cv.ContentDocumentId);
             fileData.put('label', cv.Title + ' - ' + cv.CreatedDate.format('yyyy-MM-dd HH:mm:ss'));
             files.add(fileData);
+            System.debug('File Data');
         }
         return files;
     }
@@ -28,9 +29,6 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     List<String> lines = csvContent.split('\n');
     
     if (lines.isEmpty()) {
-        // Handle empty file case
-        System.debug('Lines');
-        System.debug('File');
         return EncodingUtil.base64Encode(Blob.valueOf(''));
     }
     

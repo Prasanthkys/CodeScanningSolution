@@ -138,11 +138,6 @@ public static List<Job_Posting__c> getJobStatusInformation(String jobByStatus, S
                                           AND CreatedDate >= :startDate AND CreatedDate <= :endDate];
     
     System.debug('Job Status: ' + jobByStatus + ', Filter: ' + filter + ', Data: ' + jobStatusList);
-    System.debug('Job Status');
-
-    System.debug('Filter');//Debug Statement
-    System.debug('Data');
-    System.debug('Job');
     return jobStatusList;
 }
 
