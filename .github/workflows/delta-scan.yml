@@ -31,27 +31,23 @@ jobs:
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
 
-      - name: Get Changed Files and Line Changes
+      - name: Get Changed Files
         id: get-changes
         run: |
           git fetch --unshallow || true
           
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             git diff --name-only HEAD~1 HEAD > changed_files.txt
-            git diff --unified=1000 HEAD~1 HEAD | grep -E '^\+\+\+|^---|^@@' > changes.patch
           else
             echo "No previous commit to compare to." > changed_files.txt
-            echo "No changes to report." > changes.patch
           fi
           cat changed_files.txt
-          cat changes.patch
 
       - name: Run SFDX Scanner on Changed Files
         if: success()
         run: |
           files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
           if [ -n "$files" ]; then
-            # Create a CSV file to hold the report
             echo "File,Line,Issue,Severity" > vulnerability-report.csv
             
             for file in $files; do
@@ -60,8 +56,13 @@ jobs:
               # Run the scanner and save the result
               sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv"
               
-              # Append results to the final report
+              # Check if the scanner report contains data
               if [ -s scanner-report.csv ]; then
+                echo "Scanner report generated for $file"
+                # Debug: Display the content of the report
+                echo "Raw scanner report:"
+                cat scanner-report.csv
+                
                 # Process the CSV to include only relevant lines
                 awk -F',' -v file="$file" 'NR==1 || $1==file' scanner-report.csv >> vulnerability-report.csv
               else
@@ -72,10 +73,11 @@ jobs:
             echo "No relevant files changed."
             touch vulnerability-report.csv
           fi
-        env:
-          SF_LAZY_LOAD_MODULES: 'true'
-          SF_AUTOUPDATE_DISABLE: 'true'
-          SF_DISABLE_AUTOUPDATE: 'true'
+
+      - name: Debug Report Content
+        run: |
+          echo "Final vulnerability report:"
+          cat vulnerability-report.csv
 
       - name: Encode CSV file to Base64
         if: success()
