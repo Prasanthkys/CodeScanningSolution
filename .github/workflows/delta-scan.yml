@@ -3,7 +3,7 @@ name: SFDX Code Scan Delta
 on:
   push:
     branches:
-      - '**'  # This will trigger the workflow on any branch
+      - '**'  # Trigger workflow on any branch
  
 jobs:
   installcli:
@@ -30,29 +30,39 @@ jobs:
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
  
-      - name: Get changed files
+      - name: Get changed files and specific changes
         id: get-changes
         run: |
           git fetch --unshallow || true
-         
+ 
           # Check if there is more than one commit
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files between HEAD~1 and HEAD"
             git diff --name-only HEAD~1 HEAD > changed_files.txt
-          else
+ 
+            # Fetch specific changes in each file
+            git diff HEAD~1 HEAD > specific_changes.txt
+          else:
             echo "No previous commit to compare to." > changed_files.txt
+            echo "No specific changes found." > specific_changes.txt
           fi
           cat changed_files.txt
+          cat specific_changes.txt
  
-      - name: Run SFDX Scanner on Changed Files
+      - name: Run SFDX Scanner on Specific Changes
         if: success()
         run: |
           files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
           echo "Files to scan: $files"
           if [ -n "$files" ]; then
+            # Extract specific changes and pass to scanner
+            changes=$(cat specific_changes.txt)
+            echo "Scanning specific changes in files: $changes"
+ 
+            # Run the scanner only on the changed files
             sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
           else
-            echo "No relevant files changed."
+            echo "No relevant files or changes found."
             touch scanner-report.csv
           fi
         env:
@@ -69,23 +79,6 @@ jobs:
           else
             echo "Scanner report CSV file not found."
             exit 1
-          fi
- 
-      - name: Install jq
-        if: success()
-        run: sudo apt-get install -y jq
- 
-      - name: Get Repository and Branch Info
-        id: get-info
-        run: |
-          # Extract the repository name from GITHUB_REPOSITORY
-          REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
-          # Extract the branch name from GITHUB_REF
-          BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
-          # Construct the file title
-          FILE_TITLE="Scanner Report_${REPO_NAME}_${BRANCH_NAME}"
-          # Output the file title to the environment
-          echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
  
       - name: Upload CSV Report to Salesforce
         if: success()
@@ -100,18 +93,18 @@ jobs:
                 "VersionData": "'"$(cat encoded_report.txt)"'"
               }')
             echo "Response: $contentDocumentResponse"
-           
+ 
             contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
             if [ -z "$contentVersionId" ]; then
               echo "Error: Failed to upload file. No ContentVersionId found."
               exit 1
             fi
             echo "ContentVersionId: $contentVersionId"
-           
+ 
             contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
             echo "ContentDocument Response: $contentDocumentResponse"
-           
+ 
             contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
             if [ -z "$contentDocumentId" ]; then
               echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
@@ -123,4 +116,3 @@ jobs:
           fi
         env:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
-        shell: bash
