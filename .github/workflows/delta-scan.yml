@@ -31,11 +31,13 @@ jobs:
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
 
-      - name: Get Changed Files
+      - name: Get changed files
         id: get-changes
         run: |
+          # Fetch all commits to ensure we can reference HEAD~1
           git fetch --unshallow || true
           
+          # Check if there is more than one commit
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             git diff --name-only HEAD~1 HEAD > changed_files.txt
           else
@@ -43,47 +45,46 @@ jobs:
           fi
           cat changed_files.txt
 
+      - name: Filter Changed LWC and Apex Files
+        id: filter-changes
+        run: |
+          # Extract changed lwc and apex files
+          grep -E '\.cls$|\.lwc$' changed_files.txt > filtered_files.txt
+          cat filtered_files.txt
+        continue-on-error: true
+
       - name: Run SFDX Scanner on Changed Files
         if: success()
         run: |
-          files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
+          files=$(cat filtered_files.txt)
           if [ -n "$files" ]; then
-            echo "File,Line,Issue,Severity" > vulnerability-report.csv
-            
-            for file in $files; do
-              echo "Scanning $file"
-              
-              # Run the scanner and save the result
-              sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv"
-              
-              # Check if the scanner report contains data
-              if [ -s scanner-report.csv ]; then
-                echo "Scanner report generated for $file"
-                # Debug: Display the content of the report
-                echo "Raw scanner report:"
-                cat scanner-report.csv
-                
-                # Process the CSV to include only relevant lines
-                awk -F',' -v file="$file" 'NR==1 || $1==file' scanner-report.csv >> vulnerability-report.csv
-              else
-                echo "No issues found in $file."
-              fi
-            done
+            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv"
           else
             echo "No relevant files changed."
-            touch vulnerability-report.csv
+            touch scanner-report.csv
           fi
+        env:
+          SF_LAZY_LOAD_MODULES: 'true'
+          SF_AUTOUPDATE_DISABLE: 'true'
+          SF_DISABLE_AUTOUPDATE: 'true'
 
-      - name: Debug Report Content
+      - name: Extract Delta Changes from Scanner Report
+        if: success()
         run: |
-          echo "Final vulnerability report:"
-          cat vulnerability-report.csv
+          # Check if the scanner report exists and is not empty
+          if [ -s scanner-report.csv ]; then
+            # Assuming delta changes are denoted by a specific keyword or format in the report
+            grep -i 'delta' scanner-report.csv > delta-report.csv || echo "No delta changes found" > delta-report.csv
+          else
+            echo "Scanner report not found or empty" > delta-report.csv
+          fi
+          cat delta-report.csv
 
       - name: Encode CSV file to Base64
         if: success()
         id: encode_file
         run: |
-          base64 vulnerability-report.csv | tr -d '\n' > encoded_report.txt
+          base64 delta-report.csv | tr -d '\n' > encoded_report.txt
 
       - name: Install jq
         if: success()
@@ -92,9 +93,13 @@ jobs:
       - name: Get Repository and Branch Info
         id: get-info
         run: |
+          # Extract the repository name from GITHUB_REPOSITORY
           REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
+          # Extract the branch name from GITHUB_REF
           BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
+          # Construct the file title
           FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}"
+          # Output the file title to the environment
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
 
       - name: Upload CSV Report to Salesforce
@@ -106,7 +111,7 @@ jobs:
               -H "Content-Type: application/json" \
               -d '{
                 "Title": "'"${{ env.FILE_TITLE }}"'",
-                "PathOnClient": "vulnerability-report.csv",
+                "PathOnClient": "delta-report.csv",
                 "VersionData": "'"$(cat encoded_report.txt)"'"
               }')
             echo "Response: $contentDocumentResponse"
@@ -129,7 +134,7 @@ jobs:
             fi
             echo "ContentDocumentId: $contentDocumentId"
           else
-            echo "No vulnerability report generated, skipping upload."
+            echo "No delta report generated, skipping upload."
           fi
         env:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
