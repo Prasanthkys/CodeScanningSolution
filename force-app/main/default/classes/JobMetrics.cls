@@ -98,6 +98,7 @@ public with sharing class JobMetrics {
             startDate = today; // Default to today if no valid filter
             endDate = today;
         }
+        System.debug('Job Metrics');
 
         return new Date[] {startDate, endDate};
     }

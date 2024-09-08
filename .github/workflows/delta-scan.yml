@@ -51,21 +51,42 @@ jobs:
           fi
           cat changed_files.txt
 
-      - name: Create Report of Changed Lines
+      - name: Create Temporary Files with Changed Lines
         if: success()
         run: |
-          report_file="scanner-report.csv"
-          echo "File,Line,Change" > $report_file
-
           while read -r file; do
             diff_file="${file//\//_}.diff"
-            if [ -f "$diff_file" ]; then
-              # Parse the diff output to extract line numbers and changes
-              awk -v file="$file" '/^\+[^+]/ {print file "," FNR "," substr($0, 2)}' "$diff_file" >> $report_file
+            temp_file="temp_${file//\//_}"
+
+            # Ensure the temporary file is created
+            echo "Creating temporary file for $file"
+            touch "$temp_file"
+
+            # Process the diff file to extract only changed lines and write to temp file
+            awk '/^\+[^+]/ {print substr($0, 2)}' "$diff_file" > "$temp_file"
+
+            # Ensure the temp file exists and is not empty
+            if [ ! -s "$temp_file" ]; then
+              echo "No changes found in $file."
+              rm "$temp_file"
+            else
+              echo "Temporary file created for $file."
             fi
           done < changed_files.txt
-        env:
-          SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
+
+      - name: Run SFDX Scanner on Temporary Files
+        if: success()
+        run: |
+          temp_files=$(ls temp_*)
+          echo "Files to scan: $temp_files"
+
+          if [ -n "$temp_files" ]; then
+            # Run the scanner only on the temporary files
+            sf scanner:run --target "$temp_files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
+          else
+            echo "No relevant files found for scanning."
+            touch scanner-report.csv
+          fi
 
       - name: Encode CSV file to Base64
         if: success()
