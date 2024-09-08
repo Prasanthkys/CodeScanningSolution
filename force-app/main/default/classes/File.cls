@@ -30,6 +30,7 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     if (lines.isEmpty()) {
         // Handle empty file case
         System.debug('Lines');
+        System.debug('Hello');
         return EncodingUtil.base64Encode(Blob.valueOf(''));
     }
     
