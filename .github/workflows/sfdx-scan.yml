@@ -3,8 +3,7 @@ name: SFDX Code Scan
 on:
   push:
     branches:
-      - feature_2
-      - '*' #all branches
+      - '**'  # This will trigger the workflow on any branch
   workflow_dispatch:
 
 jobs:
