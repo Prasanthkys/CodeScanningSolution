@@ -79,6 +79,7 @@ jobs:
           else
             echo "Scanner report CSV file not found."
             exit 1
+          fi  # Added fi here to close the if block
         env:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
 
