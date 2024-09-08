@@ -1,6 +1,8 @@
 public with sharing class File {
     @AuraEnabled(cacheable=true)
     public static List<Map<String, String>> getAllScannerReportFiles() {
+        System.debug('Scanner Report');
+        //Scanner Report
         List<ContentVersion> contentVersions = [
             SELECT ContentDocumentId, Title, CreatedDate 
             FROM ContentVersion 
@@ -14,7 +16,6 @@ public with sharing class File {
             fileData.put('id', cv.ContentDocumentId);
             fileData.put('label', cv.Title + ' - ' + cv.CreatedDate.format('yyyy-MM-dd HH:mm:ss'));
             files.add(fileData);
-            System.debug('File Data');
         }
         return files;
     }
