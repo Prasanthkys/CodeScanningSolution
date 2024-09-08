@@ -7,7 +7,7 @@ public with sharing class JobMetrics {
         Date endDate = dateRange[1];
 
         System.debug('Entering getJobStatus method'); // Debug statement
-        //Sample comment
+        System.debug('Job Metrics');
         Map<String, Integer> statusCounts = new Map<String, Integer>{
             'Active' => 0,
             'Inactive' => 0
