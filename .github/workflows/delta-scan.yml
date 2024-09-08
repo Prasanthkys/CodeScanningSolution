@@ -1,8 +1,12 @@
 name: SFDX scan code
 
-# delta report on filter
 on:
-  push:
+  pull_request:
+    paths:
+      - '**/*.cls'
+      - '**/*.trigger'
+      - '**/*.xml'
+      - '**/*.lwc'
     branches:
       - main
       - '**'
@@ -147,3 +151,9 @@ jobs:
         env:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
         shell: bash
+
+      - name: Post Scan Report as Comment on Pull Request
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: scanner-report.csv
