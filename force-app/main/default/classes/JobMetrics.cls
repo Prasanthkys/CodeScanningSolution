@@ -142,6 +142,7 @@ public static List<Job_Posting__c> getJobStatusInformation(String jobByStatus, S
 
     System.debug('Filter');//Debug Statement
     System.debug('Data');
+    System.debug('Job');
     return jobStatusList;
 }
 

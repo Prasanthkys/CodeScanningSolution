@@ -1,6 +1,5 @@
 name: SFDX Code Scan Delta
 
-#Delta
 on:
   push:
     branches:
@@ -59,6 +58,7 @@ jobs:
             echo "Creating temporary file for $file"
             touch "$temp_file"
 
+            # Extract only changed lines
             awk '/^\+[^+]/ {print substr($0, 2)}' "$diff_file" > "$temp_file"
 
             if [ ! -s "$temp_file" ]; then
@@ -68,10 +68,10 @@ jobs:
               echo "Temporary file created for $file."
             fi
           done < changed_files.txt
-          
+
           # Debug output
           echo "List of temporary files created:"
-          ls temp_* || echo "No temporary files created."
+          ls -l temp_* || echo "No temporary files created."
 
       - name: Run SFDX Scanner on Temporary Files
         if: success()
@@ -80,7 +80,7 @@ jobs:
           echo "Files to scan: $temp_files"
 
           if [ -n "$temp_files" ]; then
-            sf scanner:run --target "$temp_files" --format "csv" --outfile "scanner-report.csv"
+            sf scanner:run --target "$temp_files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
             echo "Scanner report generated."
 
             # Check if the report contains data
