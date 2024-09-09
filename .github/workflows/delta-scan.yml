@@ -1,7 +1,7 @@
 name: SFDX Code Scan Delta
 
 on:
-  push:
+  pull_request:
     branches:
       - '**'
 
