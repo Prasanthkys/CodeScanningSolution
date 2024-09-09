@@ -76,16 +76,17 @@ jobs:
 
       - name: Configure msmtp
         run: |
-          echo "defaults
-          auth            on
-          tls             on
-          tls_trust_file  /etc/ssl/certs/ca-certificates.crt
-          host            smtp.gmail.com
-          port            587
-          user            ${{ secrets.GMAIL_EMAIL }}
-          password        ${{ secrets.GMAIL_APP_PASSWORD }}" > ~/.msmtprc
-
-          chmod 600 ~/.msmtprc
+            echo "defaults
+            auth            on
+            tls             on
+            tls_trust_file  /etc/ssl/certs/ca-certificates.crt
+            host            smtp.gmail.com
+            port            587
+            user            ${{ secrets.GMAIL_EMAIL }}
+            password        ${{ secrets.GMAIL_APP_PASSWORD }}
+            logfile         /tmp/msmtp.log" > ~/.msmtprc
+            chmod 600 ~/.msmtprc
+        
 
       - name: Get Repository and Branch Info
         id: get-info
@@ -134,16 +135,23 @@ jobs:
         shell: bash
 
       - name: Print msmtp configuration
-        run: cat ~/.msmtprc
+        run: |
+          cat ~/.msmtprc
+          ls -l ~/.msmtprc
+      
 
-      - name: Send Email with Gmail
+          - name: Install mailx
+          run: sudo apt-get install -y mailutils
+        
+      - name: Send Email with mailx
         if: success()
         run: |
-          if [ -f scanner-report.csv ]; then
-            echo "Please find the attached SFDX Code Scan Delta Report." | mutt -s "SFDX Code Scan Delta Report" -a scanner-report.csv -- ${{ secrets.GMAIL_EMAIL }}
-          else
-            echo "No scanner report to send."
-          fi
+            if [ -f scanner-report.csv ]; then
+              echo "Please find the attached SFDX Code Scan Delta Report." | mailx -s "SFDX Code Scan Delta Report" -a scanner-report.csv ${{ secrets.GMAIL_EMAIL }}
+            else
+              echo "No scanner report to send."
+            fi
         env:
           GMAIL_EMAIL: ${{ secrets.GMAIL_EMAIL }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+        
