@@ -91,17 +91,13 @@ jobs:
           COMMIT_SHA=${{ github.sha }}
           REPO=${{ github.repository }}
           PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
-            "
-https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}"
-| jq -r '.commit.committer.email')
+            "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}"| jq -r '.commit.committer.email')
           echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
       - name: Upload CSV Report to Salesforce
         if: success()
         run: |
           if [ -s encoded_report.txt ]; then
-            contentDocumentResponse=$(curl -X POST
-https://your-instance.salesforce.com/services/data/v61.0/sobjects/ContentVersion/
-\
+            contentDocumentResponse=$(curl -X POST https://your-instance.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
               -H "Content-Type: application/json" \
               -d '{
@@ -116,9 +112,7 @@ https://your-instance.salesforce.com/services/data/v61.0/sobjects/ContentVersion
               exit 1
             fi
             echo "ContentVersionId: $contentVersionId"
-            contentDocumentResponse=$(curl -X GET
-https://your-instance.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId
-\
+            contentDocumentResponse=$(curl -X GET https://your-instance.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
             echo "ContentDocument Response: $contentDocumentResponse"
             contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
