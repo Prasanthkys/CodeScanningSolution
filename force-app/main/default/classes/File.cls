@@ -24,7 +24,6 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     ContentVersion file = [SELECT VersionData FROM ContentVersion WHERE ContentDocumentId = :fileId LIMIT 1];
     String csvContent = file.VersionData.toString();  // Convert Blob to String
     System.debug('Original CSV Content: ' + csvContent);
-    System.debug('Original');
     
     List<String> foundLines = new List<String>();
     List<String> lines = csvContent.split('\n');
@@ -117,6 +116,8 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
         // Step 1: Delete existing Vulnerability records
         List<Vulnerability__c> existingRecords = [SELECT Id FROM Vulnerability__c];
         delete existingRecords;
+
+        System.debug('Records');
 
         // Step 2: Get the CSV content of the selected file
         ContentVersion file = [

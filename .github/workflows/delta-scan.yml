@@ -43,30 +43,36 @@ jobs:
           fi
           cat changed_files.txt
  
-      - name: Get method-level changes
-        id: get-method-changes
-        run: |
-          files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
-          echo "Files to scan: $files"
-          if [ -n "$files" ]; then
-            for file in $files; do
-              echo "Checking changes in $file"
-              git diff HEAD~1 HEAD -- $file | grep -E '^\+' | grep -E 'function|method|@AuraEnabled' || true
-            done > method_changes.txt
-          else
-            echo "No relevant files with method changes."
-          fi
-          cat method_changes.txt
- 
-      - name: Run SFDX Scanner on Files with Method Changes
+      - name: Filter for Method-Level Changes in .cls Files
         if: success()
         run: |
-          files=$(cat method_changes.txt | grep -E '\.cls$|\.lwc$' || true)
-          echo "Files with method changes to scan: $files"
-          if [ -n "$files" ]; then
-            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
+          files=$(cat changed_files.txt | grep -E '\.cls$' || true)
+          echo "Checking method-level changes in the following files: $files"
+          method_changes=""
+          for file in $files; do
+            method_diff=$(git diff HEAD~1 HEAD -- $file | grep -E '^\+.*(public|private|protected)\s+[\w<>]+\s+\w+\s*\(.*\)\s*{' || true)
+            if [ -n "$method_diff" ]; then
+              echo "Method changes found in: $file"
+              method_changes="$method_changes $file"
+            fi
+          done
+          if [ -n "$method_changes" ]; then
+            echo "Files with method-level changes: $method_changes"
+            echo "$method_changes" > files_to_scan.txt
           else
-            echo "No files with method changes found."
+            echo "No method-level changes found."
+            echo "" > files_to_scan.txt
+          fi
+ 
+      - name: Run SFDX Scanner on Method-Level Changed Files
+        if: success()
+        run: |
+          files_to_scan=$(cat files_to_scan.txt)
+          echo "Files to scan: $files_to_scan"
+          if [ -n "$files_to_scan" ]; then
+            sf scanner:run --target "$files_to_scan" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
+          else
+            echo "No relevant method-level changes detected."
             touch scanner-report.csv
           fi
         env:
@@ -116,7 +122,7 @@ jobs:
         if: success()
         run: |
           if [ -s encoded_report.txt ]; then
-            contentDocumentResponse=$(curl -X POST https://your-instance-url.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
+            contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
               -H "Content-Type: application/json" \
               -d '{
@@ -125,15 +131,18 @@ jobs:
                 "VersionData": "'"$(cat encoded_report.txt)"'"
               }')
             echo "Response: $contentDocumentResponse"
+ 
             contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
             if [ -z "$contentVersionId" ]; then
               echo "Error: Failed to upload file. No ContentVersionId found."
               exit 1
             fi
             echo "ContentVersionId: $contentVersionId"
-            contentDocumentResponse=$(curl -X GET https://your-instance-url.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
+ 
+            contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
             echo "ContentDocument Response: $contentDocumentResponse"
+ 
             contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
             if [ -z "$contentDocumentId" ]; then
               echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
