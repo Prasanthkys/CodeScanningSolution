@@ -35,6 +35,13 @@ jobs:
       run: |
         sfdx scanner:run --target force-app/main/default/classes/Talent_Bench_Data.cls --format csv --outfile scanner-report.csv
 
+    - name: Debugging - List directory contents
+      run: |
+        echo "Listing contents of current directory:"
+        ls -la
+        echo "Listing contents of force-app/main/default/classes directory:"
+        ls -la force-app/main/default/classes
+
     - name: Filter Scanner Report for Changed Lines
       run: |
         python filter_scanner_report.py changed_lines.txt scanner-report.csv filtered-scanner-report.csv
