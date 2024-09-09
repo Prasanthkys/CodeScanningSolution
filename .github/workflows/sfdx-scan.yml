@@ -34,12 +34,6 @@ jobs:
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
           
-      - name: Upload Scanner Report as Artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: SFDX Scan Code
-          path: scanner-report.csv
-
       - name: Encode CSV file to Base64
         id: encode_file
         run: |
@@ -54,6 +48,13 @@ jobs:
           COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
           FILE_TITLE="Code Scanner Overall Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
+
+      - name: Upload Scanner Report as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.FILE_TITLE }}
+          path: scanner-report.csv
+
       - name: Upload CSV Report to Salesforce
         run: |
           contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
