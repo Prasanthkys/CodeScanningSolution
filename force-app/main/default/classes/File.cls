@@ -16,8 +16,6 @@ public with sharing class File {
             fileData.put('label', cv.Title + ' - ' + cv.CreatedDate.format('yyyy-MM-dd HH:mm:ss'));
             files.add(fileData);
         }
-        System.debug('Files');
-        System.debug('label');
         return files;
     }
 
@@ -32,9 +30,6 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     
     if (lines.isEmpty()) {
         // Handle empty file case
-        System.debug('Lines');
-        System.debug('Hello');
-        System.debug('Encoding');
         return EncodingUtil.base64Encode(Blob.valueOf(''));
     }
     
@@ -71,6 +66,7 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
 
     // Add header to found lines
     foundLines.add(lines[0]);
+    System.debug('Changed Lines');
 
     if (String.isBlank(categorySearch) && String.isBlank(engineSearch) && String.isBlank(ruleSearch)) {
         // If all filters are null or empty, include all lines

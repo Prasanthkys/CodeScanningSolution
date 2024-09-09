@@ -43,13 +43,26 @@ jobs:
           fi
           cat changed_files.txt
 
-      - name: Run SFDX Scanner on Changed Files
+      - name: Extract Changed Lines and Create Temporary Files
+        id: extract-changes
+        run: |
+          while IFS= read -r file; do
+            if [[ "$file" == *.cls || "$file" == *.lwc ]]; then
+              mkdir -p temp
+              echo "Processing file: $file"
+              git diff HEAD~1 HEAD "$file" | grep '^+[^+]' | sed 's/^+//' > "temp/$(basename $file)"
+            fi
+          done < changed_files.txt
+        shell: bash
+
+      - name: Run SFDX Scanner on Changed Lines
         if: success()
         run: |
-          files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
-          echo "Files to scan: $files"
-          if [ -n "$files" ]; then
-            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
+          temp_files=$(ls temp/*.cls temp/*.lwc || true)
+          if [ -n "$temp_files" ]; then
+            for file in $temp_files; do
+              sf scanner:run --target "$file" --format "csv" --outfile "${file##*/}_scanner-report.csv" || { echo "Scanner run failed for $file"; exit 1; }
+            done
           else
             echo "No relevant files changed."
             touch scanner-report.csv
@@ -59,16 +72,14 @@ jobs:
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
 
-      - name: Encode CSV file to Base64
+      - name: Encode CSV files to Base64
         if: success()
         id: encode_file
         run: |
-          if [ -f scanner-report.csv ]; then
-            base64 scanner-report.csv | tr -d '\n' > encoded_report.txt
-          else
-            echo "Scanner report CSV file not found."
-            exit 1
-          fi
+          reports=$(ls temp/*_scanner-report.csv || true)
+          for report in $reports; do
+            base64 "$report" | tr -d '\n' > "${report}.b64"
+          done
 
       - name: Install mailx
         run: sudo apt-get install -y mailutils
@@ -82,11 +93,13 @@ jobs:
           FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
 
-      - name: Upload Scanner Report as Artifact
+      - name: Upload Scanner Reports as Artifacts
         uses: actions/upload-artifact@v3
         with:
           name: ${{ env.FILE_TITLE }}
-          path: scanner-report.csv
+          path: |
+            temp/*.csv
+            temp/*.b64
 
       - name: Get Pusher's Email
         id: get-pusher-email
@@ -97,17 +110,18 @@ jobs:
             "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
           echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
 
-      - name: Upload CSV Report to Salesforce
+      - name: Upload CSV Reports to Salesforce
         if: success()
         run: |
-          if [ -s encoded_report.txt ]; then
+          reports=$(ls temp/*.b64 || true)
+          for report in $reports; do
             contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
               -H "Content-Type: application/json" \
               -d '{
                 "Title": "'"${{ env.FILE_TITLE }}"'",
-                "PathOnClient": "scanner-report.csv",
-                "VersionData": "'"$(cat encoded_report.txt)"'"
+                "PathOnClient": "'"${report%.b64}"'",
+                "VersionData": "'"$(cat $report)"'"
               }')
             echo "Response: $contentDocumentResponse"
             
@@ -128,9 +142,7 @@ jobs:
               exit 1
             fi
             echo "ContentDocumentId: $contentDocumentId"
-          else
-            echo "No scanner report generated, skipping upload."
-          fi
+          done
         env:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
         shell: bash
@@ -146,4 +158,5 @@ jobs:
           subject: 'SFDX Code Scan Delta Report'
           body: 'Please find the attached SFDX Code Scan Delta Report.'
           to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
-          attachments: scanner-report.csv
+          attachments: |
+            $(ls temp/*_scanner-report.csv || true)
