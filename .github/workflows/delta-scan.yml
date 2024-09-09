@@ -34,8 +34,6 @@ jobs:
         id: get-changes
         run: |
           git fetch --unshallow || true
-          
-          # Check if there is more than one commit
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files between HEAD~1 and HEAD"
             git diff --name-only HEAD~1 HEAD > changed_files.txt
@@ -75,6 +73,19 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y msmtp-mta mutt
+
+      - name: Configure msmtp
+        run: |
+          echo "defaults
+          auth            on
+          tls             on
+          tls_trust_file  /etc/ssl/certs/ca-certificates.crt
+          host            smtp.gmail.com
+          port            587
+          user            ${{ secrets.GMAIL_EMAIL }}
+          password        ${{ secrets.GMAIL_APP_PASSWORD }}" > ~/.msmtprc
+
+          chmod 600 ~/.msmtprc
 
       - name: Get Repository and Branch Info
         id: get-info
@@ -122,18 +133,8 @@ jobs:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
         shell: bash
 
-      - name: Configure msmtp
-        run: |
-          echo "defaults
-          auth            on
-          tls             on
-          tls_trust_file  /etc/ssl/certs/ca-certificates.crt
-          host            smtp.gmail.com
-          port            587
-          user            ${{ secrets.GMAIL_EMAIL }}
-          password        ${{ secrets.GMAIL_APP_PASSWORD }}" > ~/.msmtprc
-          
-          chmod 600 ~/.msmtprc
+      - name: Print msmtp configuration
+        run: cat ~/.msmtprc
 
       - name: Send Email with Gmail
         if: success()
