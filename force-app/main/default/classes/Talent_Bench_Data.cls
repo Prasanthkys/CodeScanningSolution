@@ -21,4 +21,9 @@ public with sharing class Talent_Bench_Data {
     public static void sample(){
         System.debug('Sample method');
     }
+
+    @AuraEnabled(cacheable=true)
+    public static void Testing(){
+        System.debug('Testing method');
+    }
 }
