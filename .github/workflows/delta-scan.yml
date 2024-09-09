@@ -3,7 +3,7 @@ name: SFDX Code Scan Delta
 on:
   push:
     branches:
-      - '**'  # Trigger workflow on any branch
+      - '**'
 
 jobs:
   installcli:
@@ -30,70 +30,34 @@ jobs:
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
 
-      - name: Get changed files and specific changes
+      - name: Get changed files
         id: get-changes
         run: |
+          git fetch --unshallow || true
+          
+          # Check if there is more than one commit
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files between HEAD~1 and HEAD"
             git diff --name-only HEAD~1 HEAD > changed_files.txt
-
-            while read -r file; do
-              if [ -f "$file" ]; then
-                git diff HEAD~1 HEAD "$file" > "${file//\//_}.diff"
-              fi
-            done < changed_files.txt
           else
             echo "No previous commit to compare to." > changed_files.txt
-            echo "No specific changes found." > /dev/null
           fi
           cat changed_files.txt
-
-      - name: Create Temporary Files with Changed Lines
+      - name: Run SFDX Scanner on Changed Files
         if: success()
         run: |
-          while read -r file; do
-            diff_file="${file//\//_}.diff"
-            temp_file="temp_${file//\//_}"
-
-            echo "Creating temporary file for $file"
-            touch "$temp_file"
-
-            # Extract only changed lines
-            awk '/^\+[^+]/ {print substr($0, 2)}' "$diff_file" > "$temp_file"
-
-            if [ ! -s "$temp_file" ]; then
-              echo "No changes found in $file." >> skipped_files.txt
-              rm "$temp_file"
-            else
-              echo "Temporary file created for $file."
-            fi
-          done < changed_files.txt
-
-          # Debug output
-          echo "List of temporary files created:"
-          ls -l temp_* || echo "No temporary files created."
-
-      - name: Run SFDX Scanner on Temporary Files
-        if: success()
-        run: |
-          temp_files=$(ls temp_* 2>/dev/null)
-          echo "Files to scan: $temp_files"
-
-          if [ -n "$temp_files" ]; then
-            sf scanner:run --target "$temp_files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
-            echo "Scanner report generated."
-
-            # Check if the report contains data
-            if [ -s scanner-report.csv ]; then
-              echo "Scanner report content:"
-              head -n 10 scanner-report.csv
-            else
-              echo "Scanner report is empty."
-            fi
+          files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
+          echo "Files to scan: $files"
+          if [ -n "$files" ]; then
+            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
           else
-            echo "No relevant files found for scanning."
+            echo "No relevant files changed."
             touch scanner-report.csv
           fi
+        env:
+          SF_LAZY_LOAD_MODULES: 'true'
+          SF_AUTOUPDATE_DISABLE: 'true'
+          SF_DISABLE_AUTOUPDATE: 'true'
 
       - name: Encode CSV file to Base64
         if: success()
@@ -105,7 +69,21 @@ jobs:
             echo "Scanner report CSV file not found."
             exit 1
           fi
+      - name: Install jq
+        if: success()
+        run: sudo apt-get install -y jq
 
+      - name: Get Repository and Branch Info
+        id: get-info
+        run: |
+          # Extract the repository name from GITHUB_REPOSITORY
+          REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
+          # Extract the branch name from GITHUB_REF
+          BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
+          # Construct the file title
+          FILE_TITLE="Scanner Report_${REPO_NAME}_${BRANCH_NAME}"
+          # Output the file title to the environment
+          echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
       - name: Upload CSV Report to Salesforce
         if: success()
         run: |
@@ -119,18 +97,18 @@ jobs:
                 "VersionData": "'"$(cat encoded_report.txt)"'"
               }')
             echo "Response: $contentDocumentResponse"
-
+            
             contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
             if [ -z "$contentVersionId" ]; then
               echo "Error: Failed to upload file. No ContentVersionId found."
               exit 1
             fi
             echo "ContentVersionId: $contentVersionId"
-
+            
             contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
             echo "ContentDocument Response: $contentDocumentResponse"
-
+            
             contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
             if [ -z "$contentDocumentId" ]; then
               echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
@@ -142,3 +120,4 @@ jobs:
           fi
         env:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
+        shell: bash
