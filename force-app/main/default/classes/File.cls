@@ -1,6 +1,8 @@
 public with sharing class File {
     @AuraEnabled(cacheable=true)
     public static List<Map<String, String>> getAllScannerReportFiles() {
+        
+        System.debug('Records');
         List<ContentVersion> contentVersions = [
             SELECT ContentDocumentId, Title, CreatedDate 
             FROM ContentVersion 
@@ -116,8 +118,6 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
         // Step 1: Delete existing Vulnerability records
         List<Vulnerability__c> existingRecords = [SELECT Id FROM Vulnerability__c];
         delete existingRecords;
-
-        System.debug('Records');
 
         // Step 2: Get the CSV content of the selected file
         ContentVersion file = [
