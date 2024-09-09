@@ -7,6 +7,7 @@ public with sharing class File {
             WHERE Title LIKE 'Scanner Report%' 
             ORDER BY CreatedDate DESC
         ];
+        System.debug('Scanner Report');
 
         List<Map<String, String>> files = new List<Map<String, String>>();
         for (ContentVersion cv : contentVersions) {
@@ -15,8 +16,6 @@ public with sharing class File {
             fileData.put('label', cv.Title + ' - ' + cv.CreatedDate.format('yyyy-MM-dd HH:mm:ss'));
             files.add(fileData);
         }
-        System.debug('Files');
-        System.debug('Label');
         return files;
     }
 

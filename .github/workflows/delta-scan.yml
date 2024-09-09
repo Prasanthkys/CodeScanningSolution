@@ -78,7 +78,7 @@ jobs:
           REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
           BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
           COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
-          FILE_TITLE="Code Scanner Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
+          FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
           echo "PUSHER_EMAIL=$(jq -r '.pusher.email' < $GITHUB_EVENT_PATH)" >> $GITHUB_ENV
 
