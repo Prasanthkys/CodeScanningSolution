@@ -34,6 +34,7 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     // Header mapping to determine column indices using regex
     List<String> headers = lines[0].split(',');
     System.debug('Headers');
+    System.debug('Header Lines');
     System.debug('Lines');
 
     // Regex patterns for matching headers
