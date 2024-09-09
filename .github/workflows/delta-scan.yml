@@ -1,11 +1,6 @@
 name: SFDX Code Scan Delta
 
-on:
-  push:
-    branches:
-      - main
-      - '**'
-
+on: push
 
 jobs:
   sfdx_scan_delta:
@@ -14,11 +9,13 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v2
+      with:
+        fetch-depth: 2  # Fetch the last 2 commits
 
     - name: Set up Node.js
       uses: actions/setup-node@v2
       with:
-        node-version: 20.x
+        node-version: '14'
 
     - name: Install SFDX CLI
       run: npm install sfdx-cli --global
@@ -26,8 +23,13 @@ jobs:
     - name: Identify changed lines
       id: diff
       run: |
-        git diff --unified=0 HEAD~1 HEAD -- force-app/main/default/classes/Talent_Bench_Data.cls > changed_lines.txt
-        echo "::set-output name=changed_lines::$(cat changed_lines.txt)"
+        if git rev-parse HEAD~1 >/dev/null 2>&1; then
+          git diff --unified=0 HEAD~1 HEAD -- force-app/main/default/classes/Talent_Bench_Data.cls > changed_lines.txt
+        else
+          echo "No previous commit found. Assuming this is the first commit."
+          echo "" > changed_lines.txt
+        fi
+      continue-on-error: true
 
     - name: Run SFDX Scanner
       run: |
