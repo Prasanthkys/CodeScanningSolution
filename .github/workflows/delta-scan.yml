@@ -118,14 +118,14 @@ jobs:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
         shell: bash
 
-      - name: Send Email with mailx
-        if: success()
-        run: |
-          if [ -f scanner-report.csv ]; then
-            echo "Please find the attached SFDX Code Scan Delta Report." | mailx -s "SFDX Code Scan Delta Report" -a scanner-report.csv ${{ secrets.GMAIL_EMAIL }}
-          else
-            echo "No scanner report to send."
-          fi
-        env:
-          GMAIL_EMAIL: ${{ secrets.GMAIL_EMAIL }}
-          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+      - name: Send Email with actions-send-mail
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: 'smtp.gmail.com'
+          server_port: '587'
+          username: ${{ secrets.GMAIL_EMAIL }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          subject: 'SFDX Code Scan Delta Report'
+          body: 'Please find the attached SFDX Code Scan Delta Report.'
+          to: ${{ secrets.GMAIL_EMAIL }}
+          attachments: scanner-report.csv

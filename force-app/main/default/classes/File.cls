@@ -33,6 +33,7 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     
     // Header mapping to determine column indices using regex
     List<String> headers = lines[0].split(',');
+    System.debug('Headers');
 
     // Regex patterns for matching headers
     Pattern categoryPattern = Pattern.compile('(?i)\\bcategory\\b');  // Case-insensitive 'category'
@@ -63,8 +64,6 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
 
     // Add header to found lines
     foundLines.add(lines[0]);
-    System.debug('Lines');
-
     if (String.isBlank(categorySearch) && String.isBlank(engineSearch) && String.isBlank(ruleSearch)) {
         // If all filters are null or empty, include all lines
         for (Integer i = 1; i < lines.size(); i++) {
