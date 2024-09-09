@@ -80,6 +80,7 @@ jobs:
           COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
           FILE_TITLE="Code Scanner Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
+          echo "PUSHER_EMAIL=$(jq -r '.pusher.email' < $GITHUB_EVENT_PATH)" >> $GITHUB_ENV
 
       - name: Upload CSV Report to Salesforce
         if: success()
@@ -129,5 +130,5 @@ jobs:
           from: ${{ secrets.GMAIL_EMAIL }}
           subject: 'SFDX Code Scan Delta Report'
           body: 'Please find the attached SFDX Code Scan Delta Report.'
-          to: ${{ secrets.GMAIL_EMAIL }}
+          to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
           attachments: scanner-report.csv
