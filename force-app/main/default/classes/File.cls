@@ -17,6 +17,7 @@ public with sharing class File {
         }
         System.debug('Files');
         System.debug('filedata');
+        System.debug('Document');
         return files;
     }
 
