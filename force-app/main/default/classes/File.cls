@@ -55,6 +55,8 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
         }
     }
 
+    System.debug('Filters');
+
     // Debug output to check indices
     System.debug('Category Index: ' + categoryIndex);
     System.debug('Engine Index: ' + engineIndex);
@@ -62,8 +64,6 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
 
     // Add header to found lines
     foundLines.add(lines[0]);
-    System.debug('Filters');
-    System.debug('By');
 
     if (String.isBlank(categorySearch) && String.isBlank(engineSearch) && String.isBlank(ruleSearch)) {
         // If all filters are null or empty, include all lines
