@@ -135,6 +135,13 @@ jobs:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
         shell: bash
 
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.FILE_TITLE }}
+          path: scanner-report.csv
+
+
       - name: Send Email with actions-send-mail
         uses: dawidd6/action-send-mail@v3
         with:
