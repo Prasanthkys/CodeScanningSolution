@@ -28,8 +28,11 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     List<String> lines = csvContent.split('\n');
     
     if (lines.isEmpty()) {
+<<<<<<< HEAD
         // Handle empty file case
         System.debug('Lines');
+=======
+>>>>>>> Dev1Mnr
         return EncodingUtil.base64Encode(Blob.valueOf(''));
     }
     
@@ -66,6 +69,7 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
 
     // Add header to found lines
     foundLines.add(lines[0]);
+    System.debug('Filters');
 
     if (String.isBlank(categorySearch) && String.isBlank(engineSearch) && String.isBlank(ruleSearch)) {
         // If all filters are null or empty, include all lines

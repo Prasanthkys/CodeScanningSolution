@@ -1,10 +1,13 @@
+<<<<<<< HEAD
 name: SFDX Scan Code
+=======
+name: SFDX Code Scan Delta
+>>>>>>> Dev1Mnr
 
 # delta report on filter
 on:
-  push:
+  pull_request:
     branches:
-      - main
       - '**'
 
 jobs:
@@ -35,12 +38,20 @@ jobs:
       - name: Get changed files and lines
         id: get-changes
         run: |
+<<<<<<< HEAD
           # Get the changed files
+=======
+          git fetch --unshallow || true
+          
+          # Check if there is more than one commit
+>>>>>>> Dev1Mnr
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
+            echo "Fetching changed files between HEAD~1 and HEAD"
             git diff --name-only HEAD~1 HEAD > changed_files.txt
           else
             echo "No previous commit to compare to." > changed_files.txt
           fi
+<<<<<<< HEAD
 
           # Create a directory to store changed lines
           mkdir -p changed_lines
@@ -86,6 +97,19 @@ jobs:
           # If no results were generated, create an empty file
           if [ ! -s scanner-report.csv ]; then
             echo "No issues found in the changed lines." > scanner-report.csv
+=======
+          cat changed_files.txt
+      - name: Run SFDX Scanner on Changed Files
+        if: success()
+        run: |
+          files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
+          echo "Files to scan: $files"
+          if [ -n "$files" ]; then
+            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
+          else
+            echo "No relevant files changed."
+            touch scanner-report.csv
+>>>>>>> Dev1Mnr
           fi
         env:
           SF_LAZY_LOAD_MODULES: 'true'
@@ -96,8 +120,12 @@ jobs:
         if: success()
         id: encode_file
         run: |
-          base64 scanner-report.csv | tr -d '\n' > encoded_report.txt
-
+          if [ -f scanner-report.csv ]; then
+            base64 scanner-report.csv | tr -d '\n' > encoded_report.txt
+          else
+            echo "Scanner report CSV file not found."
+            exit 1
+          fi
       - name: Install jq
         if: success()
         run: sudo apt-get install -y jq
@@ -105,11 +133,22 @@ jobs:
       - name: Get Repository and Branch Info
         id: get-info
         run: |
+<<<<<<< HEAD
           REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
           BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
           FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
 
+=======
+          # Extract the repository name from GITHUB_REPOSITORY
+          REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
+          # Extract the branch name from GITHUB_REF
+          BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
+          # Construct the file title
+          FILE_TITLE="Scanner Report_${REPO_NAME}_${BRANCH_NAME}"
+          # Output the file title to the environment
+          echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
+>>>>>>> Dev1Mnr
       - name: Upload CSV Report to Salesforce
         if: success()
         run: |
