@@ -17,4 +17,8 @@ public with sharing class Talent_Bench_Data {
         System.debug('Job Submission Data::' + jobSubmissionList);
         return jobSubmissionList;
     }
+    @AuraEnabled(cacheable=true)
+    public static void sample(){
+        System.debug('Sample method');
+    }
 }
