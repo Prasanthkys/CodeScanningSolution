@@ -1,11 +1,11 @@
 name: SFDX Code Scan Delta
-
+ 
 on:
   push:
     branches:
       - main
       - '**'
-
+ 
 jobs:
   installcli:
     runs-on: ubuntu-latest
@@ -13,24 +13,24 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-
+ 
       - name: Use Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20.x
-
+ 
       - name: Install CLI
         run: npm install @salesforce/cli --global
-
+ 
       - name: Install Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
-
+ 
       - name: Verify SFDX CLI Installation
         run: sf --version
-
+ 
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
-
+ 
       - name: Get changed files
         id: get-changes
         run: |
@@ -42,48 +42,52 @@ jobs:
             echo "No previous commit to compare to." > changed_files.txt
           fi
           cat changed_files.txt
-
-      - name: Extract Changed Lines and Create Temporary Files
-        id: extract-changes
+ 
+      - name: Get method-level changes
+        id: get-method-changes
         run: |
-          while IFS= read -r file; do
-            if [[ "$file" == *.cls || "$file" == *.lwc ]]; then
-              mkdir -p temp
-              echo "Processing file: $file"
-              git diff HEAD~1 HEAD "$file" | grep '^+[^+]' | sed 's/^+//' > "temp/$(basename $file)"
-            fi
-          done < changed_files.txt
-        shell: bash
-
-      - name: Run SFDX Scanner on Changed Lines
+          files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
+          echo "Files to scan: $files"
+          if [ -n "$files" ]; then
+            for file in $files; do
+              echo "Checking changes in $file"
+              git diff HEAD~1 HEAD -- $file | grep -E '^\+' | grep -E 'function|method|@AuraEnabled' || true
+            done > method_changes.txt
+          else
+            echo "No relevant files with method changes."
+          fi
+          cat method_changes.txt
+ 
+      - name: Run SFDX Scanner on Files with Method Changes
         if: success()
         run: |
-          temp_files=$(ls temp/*.cls temp/*.lwc || true)
-          if [ -n "$temp_files" ]; then
-            for file in $temp_files; do
-              sf scanner:run --target "$file" --format "csv" --outfile "${file##*/}_scanner-report.csv" || { echo "Scanner run failed for $file"; exit 1; }
-            done
+          files=$(cat method_changes.txt | grep -E '\.cls$|\.lwc$' || true)
+          echo "Files with method changes to scan: $files"
+          if [ -n "$files" ]; then
+            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
           else
-            echo "No relevant files changed."
+            echo "No files with method changes found."
             touch scanner-report.csv
           fi
         env:
           SF_LAZY_LOAD_MODULES: 'true'
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
-
-      - name: Encode CSV files to Base64
+ 
+      - name: Encode CSV file to Base64
         if: success()
         id: encode_file
         run: |
-          reports=$(ls temp/*_scanner-report.csv || true)
-          for report in $reports; do
-            base64 "$report" | tr -d '\n' > "${report}.b64"
-          done
-
+          if [ -f scanner-report.csv ]; then
+            base64 scanner-report.csv | tr -d '\n' > encoded_report.txt
+          else
+            echo "Scanner report CSV file not found."
+            exit 1
+          fi
+ 
       - name: Install mailx
         run: sudo apt-get install -y mailutils
-
+ 
       - name: Get Repository and Branch Info
         id: get-info
         run: |
@@ -92,15 +96,13 @@ jobs:
           COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
           FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
-
-      - name: Upload Scanner Reports as Artifacts
+ 
+      - name: Upload Scanner Report as Artifact
         uses: actions/upload-artifact@v3
         with:
           name: ${{ env.FILE_TITLE }}
-          path: |
-            temp/*.csv
-            temp/*.b64
-
+          path: scanner-report.csv
+ 
       - name: Get Pusher's Email
         id: get-pusher-email
         run: |
@@ -109,44 +111,42 @@ jobs:
           PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
             "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
           echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
-
-      - name: Upload CSV Reports to Salesforce
+ 
+      - name: Upload CSV Report to Salesforce
         if: success()
         run: |
-          reports=$(ls temp/*.b64 || true)
-          for report in $reports; do
-            contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
+          if [ -s encoded_report.txt ]; then
+            contentDocumentResponse=$(curl -X POST https://your-instance-url.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
               -H "Content-Type: application/json" \
               -d '{
                 "Title": "'"${{ env.FILE_TITLE }}"'",
-                "PathOnClient": "'"${report%.b64}"'",
-                "VersionData": "'"$(cat $report)"'"
+                "PathOnClient": "scanner-report.csv",
+                "VersionData": "'"$(cat encoded_report.txt)"'"
               }')
             echo "Response: $contentDocumentResponse"
-            
             contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
             if [ -z "$contentVersionId" ]; then
               echo "Error: Failed to upload file. No ContentVersionId found."
               exit 1
             fi
             echo "ContentVersionId: $contentVersionId"
-            
-            contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
+            contentDocumentResponse=$(curl -X GET https://your-instance-url.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
             echo "ContentDocument Response: $contentDocumentResponse"
-            
             contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
             if [ -z "$contentDocumentId" ]; then
               echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
               exit 1
             fi
             echo "ContentDocumentId: $contentDocumentId"
-          done
+          else
+            echo "No scanner report generated, skipping upload."
+          fi
         env:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
         shell: bash
-
+ 
       - name: Send Email with actions-send-mail
         uses: dawidd6/action-send-mail@v3
         with:
@@ -158,5 +158,4 @@ jobs:
           subject: 'SFDX Code Scan Delta Report'
           body: 'Please find the attached SFDX Code Scan Delta Report.'
           to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
-          attachments: |
-            $(ls temp/*_scanner-report.csv || true)
+          attachments: scanner-report.csv

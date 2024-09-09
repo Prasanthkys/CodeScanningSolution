@@ -24,6 +24,7 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     ContentVersion file = [SELECT VersionData FROM ContentVersion WHERE ContentDocumentId = :fileId LIMIT 1];
     String csvContent = file.VersionData.toString();  // Convert Blob to String
     System.debug('Original CSV Content: ' + csvContent);
+    System.debug('Original');
     
     List<String> foundLines = new List<String>();
     List<String> lines = csvContent.split('\n');
@@ -66,7 +67,6 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
 
     // Add header to found lines
     foundLines.add(lines[0]);
-    System.debug('Changed Lines');
 
     if (String.isBlank(categorySearch) && String.isBlank(engineSearch) && String.isBlank(ruleSearch)) {
         // If all filters are null or empty, include all lines
