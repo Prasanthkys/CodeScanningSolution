@@ -3,6 +3,8 @@ public with sharing class File {
     public static List<Map<String, String>> getAllScannerReportFiles() {
         
         System.debug('Records');
+        System.debug('Records');
+
         List<ContentVersion> contentVersions = [
             SELECT ContentDocumentId, Title, CreatedDate 
             FROM ContentVersion 
