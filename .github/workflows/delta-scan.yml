@@ -1,4 +1,4 @@
-name: SFDX scan code
+name: SFDX Code Scan Delta
 
 on:
   push:
@@ -31,52 +31,28 @@ jobs:
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
 
-      - name: Get changed files and context
+      - name: Get changed files
         id: get-changes
         run: |
+          git fetch --unshallow || true
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
+            echo "Fetching changed files between HEAD~1 and HEAD"
             git diff --name-only HEAD~1 HEAD > changed_files.txt
           else
             echo "No previous commit to compare to." > changed_files.txt
           fi
+          cat changed_files.txt
 
-          mkdir -p changed_lines
-          while IFS= read -r file; do
-            git diff -U5 HEAD~1 HEAD -- "$file" > "changed_lines/${file//\//_}.txt"
-          done < changed_files.txt
-
-      - name: Filter Changed LWC and Apex Files
-        id: filter-changes
-        run: |
-          grep -E '\.cls$|\.lwc$' changed_files.txt > filtered_files.txt
-          cat filtered_files.txt
-        continue-on-error: true
-
-      - name: Create Temporary Files with Context
+      - name: Run SFDX Scanner on Changed Files
         if: success()
         run: |
-          mkdir -p temp_files
-          while IFS= read -r file; do
-            temp_file="temp_files/${file//\//_}.cls"
-            touch "$temp_file"
-            echo "Processing $file"
-            grep -E '^\+|^ ' "changed_lines/${file//\//_}.txt" | sed 's/^+//' > "$temp_file"
-          done < filtered_files.txt
-
-      - name: Run SFDX Scanner on Temporary Files
-        if: success()
-        run: |
-          rm -f scanner-report.csv
-          touch scanner-report.csv
-          for temp_file in temp_files/*; do
-            if [ -s "$temp_file" ]; then
-              sf scanner:run --target "$temp_file" --format "csv" --outfile "temp_scanner_report.csv"
-              tail -n +2 temp_scanner_report.csv >> scanner-report.csv
-            fi
-          done
-
-          if [ ! -s scanner-report.csv ]; then
-            echo "No issues found in the changed lines." > scanner-report.csv
+          files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
+          echo "Files to scan: $files"
+          if [ -n "$files" ]; then
+            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
+          else
+            echo "No relevant files changed."
+            touch scanner-report.csv
           fi
         env:
           SF_LAZY_LOAD_MODULES: 'true'
@@ -94,9 +70,8 @@ jobs:
             exit 1
           fi
 
-      - name: Install jq
-        if: success()
-        run: sudo apt-get install -y jq
+      - name: Install mailx
+        run: sudo apt-get install -y mailutils
 
       - name: Get Repository and Branch Info
         id: get-info
@@ -168,7 +143,7 @@ jobs:
           username: ${{ secrets.GMAIL_EMAIL }}
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
           from: ${{ secrets.GMAIL_EMAIL }}
-          subject: 'Code Scanner Delta Report'
-          body: 'Please find the attached Code Scanner Delta Report.'
+          subject: 'SFDX Code Scan Delta Report'
+          body: 'Please find the attached SFDX Code Scan Delta Report.'
           to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
           attachments: scanner-report.csv
