@@ -43,35 +43,36 @@ jobs:
           fi
           cat changes.diff
 
-      - name: Parse Changed Methods
-        id: parse-changes
+      - name: Create Temporary Files for Changed Methods
+        id: create-temp-files
         run: |
-          changed_methods=""
+          temp_files=""
           while IFS= read -r line; do
             if [[ $line =~ ^\+\+\+.*\.cls$ ]]; then
               current_file=$(echo $line | sed 's|+++ b/||')
+              temp_file=$(mktemp)
+              temp_files="$temp_files $temp_file"
+              echo "Temporary file for $current_file: $temp_file"
             elif [[ $line =~ ^@@ ]]; then
-              changed_lines=$(echo $line | sed -n 's/^@@ -[0-9]*,[0-9]* \+\([0-9]*\),\([0-9]*\) @@/\1+\2/p')
-              changed_methods="$changed_methods $current_file:$changed_lines"
+              line_numbers=$(echo $line | sed -n 's/^@@ -[0-9]*,[0-9]* \+\([0-9]*\),\([0-9]*\) @@/\1+\2/p')
+            elif [[ $line =~ ^+[^+] ]]; then
+              echo "$line" >> $temp_file
             fi
           done < changes.diff
-          echo "Changed methods: $changed_methods"
-          echo "changed_methods=$changed_methods" >> $GITHUB_ENV
+          echo "Temp files created: $temp_files"
+          echo "temp_files=$temp_files" >> $GITHUB_ENV
 
-      - name: Run SFDX Scanner on Changed Methods
+      - name: Run SFDX Scanner on Temporary Files
         if: success()
         run: |
-          if [ -n "$changed_methods" ]; then
-            for method in $changed_methods; do
-              file=$(echo $method | cut -d':' -f1)
-              lines=$(echo $method | cut -d':' -f2)
-              echo "Scanning $file at lines $lines"
-              sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" --lines "$lines" || { echo "Scanner run failed"; exit 1; }
-            done
-          else
-            echo "No relevant methods changed."
-            touch scanner-report.csv
-          fi
+          for file in $temp_files; do
+            if [ -s "$file" ]; then
+              echo "Scanning temporary file $file"
+              sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
+            else
+              echo "No relevant changes in file $file."
+            fi
+          done
         env:
           SF_LAZY_LOAD_MODULES: 'true'
           SF_AUTOUPDATE_DISABLE: 'true'
