@@ -8,27 +8,6 @@ public with sharing class Talent_Bench_Data {
         return talentBenchList;
     }
 
-
-    @AuraEnabled(cacheable=true)
-    public static void Testing(){
-        System.debug('Testing method');
-    }
-
-    @AuraEnabled(cacheable=true)
-    public static void Testing(){
-        System.debug('Testing method');
-    }
-
-    @AuraEnabled(cacheable=true)
-    public static void Testing(){
-        System.debug('Testing method');
-    }
-
-    @AuraEnabled(cacheable=true)
-    public static void Testing(){
-        System.debug('Testing method');
-    }
-
     @AuraEnabled(cacheable=true)
     public static List<Job_Submission__c> getJobDetails(String talentBenchId) {
         List<Job_Submission__c> jobSubmissionList = [SELECT Talent_Bench_ID__c, Talent_Bench_ID__r.Name, First_Name__c, Last_Name__c, Job_Id__c, Job_ID__r.Name, Job_Title__c, Email_Address__c, Phone_Number__c
@@ -37,5 +16,11 @@ public with sharing class Talent_Bench_Data {
         
         System.debug('Job Submission Data::' + jobSubmissionList);
         return jobSubmissionList;
+    }
+
+
+    @AuraEnabled(cacheable=true)
+    public static void Testing(){
+        System.debug('Testing method');
     }
 }

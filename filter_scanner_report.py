@@ -1,40 +1,18 @@
-import csv
-import sys
-import re
-
-def extract_changed_lines(diff_file):
-    changed_lines = set()
-    with open(diff_file, 'r') as file:
-        for line in file:
-            match = re.match(r'^\+\d+,\d+\s', line)
-            if match:
-                line_numbers = match.group(0).strip().split(",")
-                start_line = int(line_numbers[0].replace("+", ""))
-                count = int(line_numbers[1]) if len(line_numbers) > 1 else 1
-                changed_lines.update(range(start_line, start_line + count))
-    return changed_lines
+import os
 
 def filter_report_by_lines(scanner_report_file, changed_lines_file, output_file):
-    changed_lines = extract_changed_lines(changed_lines_file)
+    if not os.path.isfile(scanner_report_file):
+        raise FileNotFoundError(f"The file {scanner_report_file} does not exist.")
     
-    filtered_issues = []
-    with open(scanner_report_file, mode='r') as file:
-        reader = csv.DictReader(file)
-        for row in reader:
-            line_number = int(row['Line'])
-            if line_number in changed_lines:
-                filtered_issues.append(row)
+    # Your existing logic to filter the report
 
-    if filtered_issues:
-        fieldnames = filtered_issues[0].keys()
-        with open(output_file, mode='w', newline='') as file:
-            writer = csv.DictWriter(file, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(filtered_issues)
-    else:
-        print(f"No issues found in changed lines.")
-
+# Example usage
 if __name__ == "__main__":
+    import sys
+    if len(sys.argv) != 4:
+        print("Usage: python filter_scanner_report.py <changed_lines_file> <scanner_report_file> <output_file>")
+        sys.exit(1)
+    
     changed_lines_file = sys.argv[1]
     scanner_report_file = sys.argv[2]
     output_file = sys.argv[3]
