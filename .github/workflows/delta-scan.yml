@@ -80,7 +80,15 @@ jobs:
           COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
           FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
-          echo "PUSHER_EMAIL=$(jq -r '.pusher.email' < $GITHUB_EVENT_PATH)" >> $GITHUB_ENV
+
+      - name: Get Pusher's Email
+        id: get-pusher-email
+        run: |
+          COMMIT_SHA=${{ github.sha }}
+          REPO=${{ github.repository }}
+          PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
+            "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
+          echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
 
       - name: Upload CSV Report to Salesforce
         if: success()
