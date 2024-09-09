@@ -45,6 +45,7 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
 
     for (Integer i = 0; i < headers.size(); i++) {
         String header = headers[i].trim();
+        System.debug('Header');
 
         if (categoryPattern.matcher(header).find()) {
             categoryIndex = i;
@@ -54,8 +55,6 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
             ruleIndex = i;
         }
     }
-
-    System.debug('Filters');
 
     // Debug output to check indices
     System.debug('Category Index: ' + categoryIndex);
