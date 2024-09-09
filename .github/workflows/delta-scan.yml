@@ -125,6 +125,7 @@ jobs:
           server_port: '587'
           username: ${{ secrets.GMAIL_EMAIL }}
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          from: ${{ secrets.GMAIL_EMAIL }}
           subject: 'SFDX Code Scan Delta Report'
           body: 'Please find the attached SFDX Code Scan Delta Report.'
           to: ${{ secrets.GMAIL_EMAIL }}
