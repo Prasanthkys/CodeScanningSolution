@@ -1,6 +1,5 @@
 name: SFDX scan code
 
-# delta report on filter
 on:
   push:
     branches:
@@ -35,19 +34,14 @@ jobs:
       - name: Get changed files and context
         id: get-changes
         run: |
-          # Get the changed files
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             git diff --name-only HEAD~1 HEAD > changed_files.txt
           else
             echo "No previous commit to compare to." > changed_files.txt
           fi
 
-          # Create a directory to store changed lines
           mkdir -p changed_lines
-
-          # Extract changed lines with context for each file
           while IFS= read -r file; do
-            # Create a temporary file with changed lines + context
             git diff -U5 HEAD~1 HEAD -- "$file" > "changed_lines/${file//\//_}.txt"
           done < changed_files.txt
 
@@ -66,7 +60,6 @@ jobs:
             temp_file="temp_files/${file//\//_}.cls"
             touch "$temp_file"
             echo "Processing $file"
-            # Filter only the additions with context
             grep -E '^\+|^ ' "changed_lines/${file//\//_}.txt" | sed 's/^+//' > "$temp_file"
           done < filtered_files.txt
 
@@ -78,12 +71,10 @@ jobs:
           for temp_file in temp_files/*; do
             if [ -s "$temp_file" ]; then
               sf scanner:run --target "$temp_file" --format "csv" --outfile "temp_scanner_report.csv"
-              # Append the results to the main report
               tail -n +2 temp_scanner_report.csv >> scanner-report.csv
             fi
           done
 
-          # If no results were generated, create an empty file
           if [ ! -s scanner-report.csv ]; then
             echo "No issues found in the changed lines." > scanner-report.csv
           fi
@@ -96,7 +87,12 @@ jobs:
         if: success()
         id: encode_file
         run: |
-          base64 scanner-report.csv | tr -d '\n' > encoded_report.txt
+          if [ -f scanner-report.csv ]; then
+            base64 scanner-report.csv | tr -d '\n' > encoded_report.txt
+          else
+            echo "Scanner report CSV file not found."
+            exit 1
+          fi
 
       - name: Install jq
         if: success()
@@ -132,7 +128,7 @@ jobs:
             echo "ContentVersionId: $contentVersionId"
             
             contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
-              -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" )
+              -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
             echo "ContentDocument Response: $contentDocumentResponse"
             
             contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
@@ -147,3 +143,16 @@ jobs:
         env:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
         shell: bash
+
+      - name: Send Email with actions-send-mail
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: 'smtp.gmail.com'
+          server_port: '587'
+          username: ${{ secrets.GMAIL_EMAIL }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          from: ${{ secrets.GMAIL_EMAIL }}
+          subject: 'Code Scanner Delta Report'
+          body: 'Please find the attached Code Scanner Delta Report.'
+          to: ${{ secrets.GMAIL_EMAIL }}
+          attachments: scanner-report.csv

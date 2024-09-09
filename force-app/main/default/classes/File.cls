@@ -33,6 +33,7 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
         // Handle empty file case
         System.debug('Lines');
         System.debug('Hello');
+        System.debug('Encoding');
         return EncodingUtil.base64Encode(Blob.valueOf(''));
     }
     
