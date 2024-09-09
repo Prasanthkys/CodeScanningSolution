@@ -42,7 +42,6 @@ jobs:
           if [ -n "$files" ]; then
             for file in $files; do
               echo "Checking method-level changes in $file"
-              # Check if the file has specific method changes
               method_changes=$(git diff HEAD~1 HEAD "$file" | grep -E '^(\+|\-) *(public|private|protected) ' || true)
               if [ -n "$method_changes" ]; then
                 echo "Methods changed in $file:"
@@ -61,7 +60,7 @@ jobs:
           SF_LAZY_LOAD_MODULES: 'true'
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
-          - name: Encode CSV file to Base64
+      - name: Encode CSV file to Base64
         if: success()
         id: encode_file
         run: |
@@ -71,10 +70,8 @@ jobs:
             echo "Scanner report CSV file not found."
             exit 1
           fi
- 
       - name: Install mailx
         run: sudo apt-get install -y mailutils
- 
       - name: Get Repository and Branch Info
         id: get-info
         run: |
@@ -83,27 +80,28 @@ jobs:
           COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
           FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
- 
       - name: Upload Scanner Report as Artifact
         uses: actions/upload-artifact@v3
         with:
           name: ${{ env.FILE_TITLE }}
           path: scanner-report.csv
- 
       - name: Get Pusher's Email
         id: get-pusher-email
         run: |
           COMMIT_SHA=${{ github.sha }}
           REPO=${{ github.repository }}
           PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
-            "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
+            "
+https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}"
+| jq -r '.commit.committer.email')
           echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
- 
       - name: Upload CSV Report to Salesforce
         if: success()
         run: |
           if [ -s encoded_report.txt ]; then
-            contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
+            contentDocumentResponse=$(curl -X POST
+https://your-instance.salesforce.com/services/data/v61.0/sobjects/ContentVersion/
+\
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
               -H "Content-Type: application/json" \
               -d '{
@@ -118,7 +116,9 @@ jobs:
               exit 1
             fi
             echo "ContentVersionId: $contentVersionId"
-            contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
+            contentDocumentResponse=$(curl -X GET
+https://your-instance.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId
+\
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
             echo "ContentDocument Response: $contentDocumentResponse"
             contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
@@ -133,7 +133,6 @@ jobs:
         env:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
         shell: bash
- 
       - name: Send Email with actions-send-mail
         uses: dawidd6/action-send-mail@v3
         with:
