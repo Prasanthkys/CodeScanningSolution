@@ -8,6 +8,7 @@ public with sharing class File {
             ORDER BY CreatedDate DESC
         ];
 
+        System.debug('Scanner Report');
         List<Map<String, String>> files = new List<Map<String, String>>();
         for (ContentVersion cv : contentVersions) {
             Map<String, String> fileData = new Map<String, String>();
@@ -15,9 +16,6 @@ public with sharing class File {
             fileData.put('label', cv.Title + ' - ' + cv.CreatedDate.format('yyyy-MM-dd HH:mm:ss'));
             files.add(fileData);
         }
-        System.debug('Files');
-        System.debug('filedata');
-        System.debug('Document');
         return files;
     }
 
