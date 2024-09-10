@@ -1,4 +1,4 @@
-name: Graph-Based Code Analysis on Changed Lines
+name: SFDX Code Scan Delta
 
 on:
   push:
@@ -7,54 +7,66 @@ on:
       - '**'
 
 jobs:
-  setup:
+  installcli:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      - name: Set Up Python
-        uses: actions/setup-python@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v3
         with:
-          python-version: '3.x'
+          node-version: 20.x
 
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install networkx matplotlib  # Example packages for graph analysis
+      - name: Install CLI
+        run: npm install @salesforce/cli --global
 
-      - name: Get Changed Lines
+      - name: Install Scanner Plugin
+        run: sf plugins install @salesforce/sfdx-scanner
+
+      - name: Verify SFDX CLI Installation
+        run: sf --version
+
+      - name: Verify SFDX Scanner Plugin Installation
+        run: sf plugins --core
+
+      - name: Get changed files
         id: get-changes
         run: |
           git fetch --unshallow || true
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-            echo "Fetching changes between HEAD~1 and HEAD"
-            git diff HEAD~1 HEAD --unified=0 > changed_lines.diff
+            echo "Fetching changed files between HEAD~1 and HEAD"
+            git diff --name-only HEAD~1 HEAD > changed_files.txt
           else
-            echo "No previous commit to compare to." > changed_lines.diff
+            echo "No previous commit to compare to." > changed_files.txt
           fi
-          cat changed_lines.diff
+          cat changed_files.txt
 
-      - name: Run Graph Analysis on Changed Lines
+      - name: Run SFDX Scanner on Changed Files
         if: success()
         run: |
-          if [ -s changed_lines.diff ]; then
-            echo "Running graph-based analysis on changed lines."
-            python graph-analysis.py --diff-file "changed_lines.diff" --output "graph-analysis-report.csv" || { echo "Graph analysis failed"; exit 1; }
+          files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
+          echo "Files to scan: $files"
+          if [ -n "$files" ]; then
+            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
           else
-            echo "No relevant changes detected."
-            touch graph-analysis-report.csv
+            echo "No relevant files changed."
+            touch scanner-report.csv
           fi
+        env:
+          SF_LAZY_LOAD_MODULES: 'true'
+          SF_AUTOUPDATE_DISABLE: 'true'
+          SF_DISABLE_AUTOUPDATE: 'true'
 
       - name: Encode CSV file to Base64
         if: success()
         id: encode_file
         run: |
-          if [ -f graph-analysis-report.csv ]; then
-            base64 graph-analysis-report.csv | tr -d '\n' > encoded_report.txt
+          if [ -f scanner-report.csv ]; then
+            base64 scanner-report.csv | tr -d '\n' > encoded_report.txt
           else
-            echo "Graph analysis report CSV file not found."
+            echo "Scanner report CSV file not found."
             exit 1
           fi
 
@@ -67,14 +79,14 @@ jobs:
           REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
           BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
           COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
-          FILE_TITLE="Graph-Based Code Analysis Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
+          FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
 
-      - name: Upload Report as Artifact
+      - name: Upload Scanner Report as Artifact
         uses: actions/upload-artifact@v3
         with:
           name: ${{ env.FILE_TITLE }}
-          path: graph-analysis-report.csv
+          path: scanner-report.csv
 
       - name: Get Pusher's Email
         id: get-pusher-email
@@ -94,7 +106,7 @@ jobs:
               -H "Content-Type: application/json" \
               -d '{
                 "Title": "'"${{ env.FILE_TITLE }}"'",
-                "PathOnClient": "graph-analysis-report.csv",
+                "PathOnClient": "scanner-report.csv",
                 "VersionData": "'"$(cat encoded_report.txt)"'"
               }')
             echo "Response: $contentDocumentResponse"
@@ -117,7 +129,7 @@ jobs:
             fi
             echo "ContentDocumentId: $contentDocumentId"
           else
-            echo "No graph analysis report generated, skipping upload."
+            echo "No scanner report generated, skipping upload."
           fi
         env:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
@@ -131,7 +143,7 @@ jobs:
           username: ${{ secrets.GMAIL_EMAIL }}
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
           from: ${{ secrets.GMAIL_EMAIL }}
-          subject: 'Graph-Based Code Analysis Report'
-          body: 'Please find the attached Graph-Based Code Analysis Report.'
+          subject: 'SFDX Code Scan Delta Report'
+          body: 'Please find the attached SFDX Code Scan Delta Report.'
           to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
-          attachments: graph-analysis-report.csv
+          attachments: scanner-report.csv
