@@ -38,7 +38,6 @@ jobs:
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files and lines between HEAD~1 and HEAD"
             git diff --unified=0 HEAD~1 HEAD > changes.diff
-            # Extract the list of files changed
             grep '^diff --git' changes.diff | sed 's/^diff --git a\//\n/g' | sed 's/ b\//\n/g' | awk '{print $1}' | sort -u > changed_files.txt
           else
             echo "No previous commit to compare to." > changes.diff
@@ -47,47 +46,32 @@ jobs:
           cat changes.diff
           cat changed_files.txt
 
-      - name: Apply Changes to Files
-        id: apply-changes
-        run: |
-          mkdir -p modified_files
-          while read -r file; do
-            if [ -f "$file" ]; then
-              cp "$file" "modified_files/$(basename $file)"
-              grep -E '^@@ ' changes.diff | while read -r line; do
-                if [[ "$line" == *"$(basename $file)"* ]]; then
-                  start_line=$(echo $line | awk '{print $2}' | sed 's/^-\([0-9]*\).*/\1/')
-                  end_line=$(echo $line | awk '{print $3}' | sed 's/^+\([0-9]*\).*/\1/')
-                  sed -n "${start_line},${end_line}p" "modified_files/$(basename $file)" >> "modified_files/$(basename $file)"
-                fi
-              done
-            fi
-          done < changed_files.txt
-
-      - name: Run SFDX Scanner on Modified Files
+      - name: Run SFDX Scanner on Entire Codebase
         if: success()
         run: |
-          files=$(ls modified_files | grep -E '\.cls$|\.lwc$' || true)
-          echo "Files to scan: $files"
-          if [ -n "$files" ]; then
-            sf scanner:run --target "modified_files/*" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
-          else
-            echo "No relevant files changed."
-            touch scanner-report.csv
-          fi
-        env:
-          SF_LAZY_LOAD_MODULES: 'true'
-          SF_AUTOUPDATE_DISABLE: 'true'
-          SF_DISABLE_AUTOUPDATE: 'true'
+          sf scanner:run --target "." --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
+
+      - name: Filter Scanner Report for Committed Lines
+        if: success()
+        run: |
+          # Extract changed lines from the diff file
+          awk '/^@@/ {flag=1; next} /^diff/ {flag=0} flag' changes.diff > temp_changes.txt
+          # Create a file to store filtered report
+          touch filtered-report.csv
+          while IFS=, read -r file line column severity message; do
+            if grep -q "$file" temp_changes.txt && grep -q "$line" temp_changes.txt; then
+              echo "$file,$line,$column,$severity,$message" >> filtered-report.csv
+            fi
+          done < <(tail -n +2 scanner-report.csv) # Skip header line
 
       - name: Encode CSV file to Base64
         if: success()
         id: encode_file
         run: |
-          if [ -f scanner-report.csv ]; then
-            base64 scanner-report.csv | tr -d '\n' > encoded_report.txt
+          if [ -f filtered-report.csv ]; then
+            base64 filtered-report.csv | tr -d '\n' > encoded_report.txt
           else
-            echo "Scanner report CSV file not found."
+            echo "Filtered report CSV file not found."
             exit 1
           fi
 
@@ -107,7 +91,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: ${{ env.FILE_TITLE }}
-          path: scanner-report.csv
+          path: filtered-report.csv
 
       - name: Get Pusher's Email
         id: get-pusher-email
@@ -127,7 +111,7 @@ jobs:
               -H "Content-Type: application/json" \
               -d '{
                 "Title": "'"${{ env.FILE_TITLE }}"'",
-                "PathOnClient": "scanner-report.csv",
+                "PathOnClient": "filtered-report.csv",
                 "VersionData": "'"$(cat encoded_report.txt)"'"
               }')
             echo "Response: $contentDocumentResponse"
@@ -150,7 +134,7 @@ jobs:
             fi
             echo "ContentDocumentId: $contentDocumentId"
           else
-            echo "No scanner report generated, skipping upload."
+            echo "No filtered report generated, skipping upload."
           fi
         env:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
@@ -167,4 +151,4 @@ jobs:
           subject: 'SFDX Code Scan Delta Report'
           body: 'Please find the attached SFDX Code Scan Delta Report.'
           to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
-          attachments: scanner-report.csv
+          attachments: filtered-report.csv
