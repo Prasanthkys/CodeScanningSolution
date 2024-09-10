@@ -1,12 +1,12 @@
-# .github/workflows/sfdx-scan-code.yml
+# .github/workflows/sfdx-scan.yml
 
 name: SFDX Scan Code
 
 on:
-  workflow_run:
-    workflows: ["Flag Workflow"]
-    types:
-      - completed
+  push:
+    branches:
+      - main
+      - '**'
 
 jobs:
   check-run-once:
@@ -15,27 +15,42 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0  # Fetch the entire history
+          fetch-depth: 0
 
       - name: Check for Flag File
         id: check_flag
         run: |
-          if [ -f .github/flag.txt ]; then
+          BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
+          FLAG_FILE=".github/flags/${BRANCH_NAME}_flag.txt"
+          if [ -f "$FLAG_FILE" ]; then
             echo "Flag file exists. Skipping workflow."
             exit 1
           else
             echo "Flag file does not exist. Proceeding with workflow."
           fi
 
+      - name: Create Flag File
+        if: success()
+        run: |
+          BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
+          FLAG_FILE=".github/flags/${BRANCH_NAME}_flag.txt"
+          mkdir -p .github/flags
+          echo "This file indicates that the workflow has run on this branch." > "$FLAG_FILE"
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add "$FLAG_FILE"
+          git commit -m "Add flag file to indicate that the workflow has run on branch ${BRANCH_NAME}"
+          git push
+
   installcli:
     runs-on: ubuntu-latest
     needs: check-run-once
-    if: success()  # Run this job only if the check-run-once job succeeds
+    if: success()  # Only run if the check-run-once job succeeds
 
     steps:
       - uses: actions/checkout@v3
         with:
-          fetch-depth: 0  # Fetch the entire history
+          fetch-depth: 0
 
       - name: Use Node.js
         uses: actions/setup-node@v3
