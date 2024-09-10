@@ -43,24 +43,27 @@ jobs:
             echo "No previous commit to compare to." > changed_files.txt
             echo "No previous commit to compare to." > changes.diff
           fi
-          cat changed_files.txt
+          cat changes.diff # Debug: Show the diff content
 
       - name: Extract changed line numbers and create CSV
         id: extract-lines
         run: |
           echo "File,Start Line,End Line" > changed_lines.csv
+          
           while read -r file; do
+            echo "Processing file: $file" # Debug: Show which file is being processed
+            
             if [ -f "$file" ]; then
-              grep -E '^@@ ' changes.diff | while read -r line; do
-                file_name=$(echo "$line" | grep -oP '(?<=@@ -)[^\+]+')
-                if [ "$file" = "$file_name" ]; then
-                  start_line=$(echo "$line" | sed -E 's/@@ -([0-9]+),[0-9]+ \+([0-9]+),[0-9]+ @@/\2/')
-                  echo "$file,$start_line" >> changed_lines.csv
-                fi
+              # Extract line numbers for this file
+              grep -E "^@@ " changes.diff | grep "$file" | while read -r line; do
+                start_line=$(echo "$line" | sed -E 's/@@ -[0-9]+,[0-9]+ \+([0-9]+),[0-9]+ @@/\1/')
+                end_line=$(echo "$line" | sed -E 's/@@ -[0-9]+,[0-9]+ \+([0-9]+),([0-9]+) @@/\2/')
+                echo "$file,$start_line,$end_line" >> changed_lines.csv
               done
             fi
           done < changed_files.txt
-          cat changed_lines.csv
+          
+          cat changed_lines.csv # Debug: Show the CSV content
 
       - name: Run SFDX Scanner on Changed Files
         if: success()
@@ -112,7 +115,6 @@ jobs:
         with:
           name: ${{ env.FILE_TITLE }}
           path: |
-            # scanner-report.csv
             changed_lines.csv
 
       - name: Get Pusher's Email
