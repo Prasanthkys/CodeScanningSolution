@@ -1,0 +1,24 @@
+# .github/workflows/flag-workflow.yml
+
+name: Flag Workflow
+
+on:
+  workflow_dispatch:  # Manually trigger this workflow or set up a different trigger
+
+jobs:
+  set-flag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Fetch the entire history
+
+      - name: Create Flag File
+        run: |
+          echo "This file indicates that the workflow has run on this branch." > .github/flag.txt
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add .github/flag.txt
+          git commit -m "Add flag file to indicate that the workflow has run"
+          git push

@@ -1,10 +1,12 @@
+# .github/workflows/sfdx-scan-code.yml
+
 name: SFDX Scan Code
 
 on:
-  push:
-    branches:
-      - main
-      - '**'
+  workflow_run:
+    workflows: ["Flag Workflow"]
+    types:
+      - completed
 
 jobs:
   check-run-once:
@@ -13,7 +15,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0  # Fetch the entire history to ensure Git commands work
+          fetch-depth: 0  # Fetch the entire history
 
       - name: Check for Flag File
         id: check_flag
@@ -24,16 +26,6 @@ jobs:
           else
             echo "Flag file does not exist. Proceeding with workflow."
           fi
-
-      - name: Create Flag File
-        if: success()  # Run this step only if the check_flag step succeeded
-        run: |
-          echo "This file indicates that the workflow has run on this branch." > .github/flag.txt
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add .github/flag.txt
-          git commit -m "Add flag file to indicate that the workflow has run"
-          git push
 
   installcli:
     runs-on: ubuntu-latest
