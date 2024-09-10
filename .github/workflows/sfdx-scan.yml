@@ -63,7 +63,7 @@ jobs:
           echo "ENCODED_TITLE=${ENCODED_TITLE}"
 
           # Construct the URL for the query
-          QUERY_URL="https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/query?q=SELECT+Id+FROM+ContentDocument+WHERE+Title+%3D+%27${ENCODED_TITLE}%27"
+          QUERY_URL="https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/query?q=SELECT+Id+Title+FROM+ContentVersion+WHERE+Title+%3D+%27${ENCODED_TITLE}%27"
           echo "Query URL: ${QUERY_URL}"
 
           # Perform the GET request to Salesforce
