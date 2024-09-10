@@ -47,23 +47,30 @@ jobs:
           cat changes.diff
           cat changed_files.txt
 
-      - name: Apply Changed Lines to Files
-        id: apply-changes
+      - name: Create Modified Files with Changed Lines Only
+        id: create-modified-files
         run: |
+          mkdir -p modified_files
           while read -r file; do
             if [ -f "$file" ]; then
-              cp "$file" "${file}.orig"
-              patch "$file" < changes.diff
+              # Create a modified copy of the file with only changed lines
+              cp "$file" "modified_files/$(basename $file)"
+              grep -E '^@@ ' changes.diff | sed -e 's/^@@ -[0-9]*,[0-9]* @@ //' -e 's/\\ No newline at end of file//' > temp_lines.txt
+              while read -r line; do
+                # Extract line numbers from diff and update the file accordingly
+                line_number=$(echo $line | awk '{print $1}' | sed 's/-//')
+                sed -n "${line_number}p" "modified_files/$(basename $file)" >> "modified_files/$(basename $file)"
+              done < temp_lines.txt
             fi
           done < changed_files.txt
 
       - name: Run SFDX Scanner on Modified Files
         if: success()
         run: |
-          files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
+          files=$(ls modified_files | grep -E '\.cls$|\.lwc$' || true)
           echo "Files to scan: $files"
           if [ -n "$files" ]; then
-            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
+            sf scanner:run --target "modified_files/*" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
           else
             echo "No relevant files changed."
             touch scanner-report.csv

@@ -15,7 +15,8 @@ public with sharing class Talent_Bench_Data {
                 WHERE Talent_Bench_ID__c = :talentBenchId];
         
         System.debug('Job Submission Data::' + jobSubmissionList);
+        System.debug('Job');
         return jobSubmissionList;
     }
-
+    
 }
