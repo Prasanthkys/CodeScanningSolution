@@ -76,6 +76,7 @@ jobs:
 
           # Check if the file exists
           file_exists=$(echo $response | jq -r '.records | length')
+          echo "Number of records found: $file_exists"
 
           if [ "$file_exists" -gt 0 ]; then
             echo "File with title '${{ env.FILE_TITLE }}' already exists in Salesforce."
