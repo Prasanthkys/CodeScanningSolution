@@ -10,11 +10,15 @@ jobs:
   check-run-once:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Fetch the entire history to ensure Git commands work
+
       - name: Check for Flag File
         id: check_flag
         run: |
-          git fetch --depth=1
-          if git ls-files --error-unmatch .github/flag.txt > /dev/null 2>&1; then
+          if [ -f .github/flag.txt ]; then
             echo "Flag file exists. Skipping workflow."
             exit 1
           else
@@ -22,7 +26,7 @@ jobs:
           fi
 
       - name: Create Flag File
-        if: success()
+        if: success()  # Run this step only if the check_flag step succeeded
         run: |
           echo "This file indicates that the workflow has run on this branch." > .github/flag.txt
           git config user.name "github-actions"
@@ -39,7 +43,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # Fetch the entire history
+
       - name: Use Node.js
         uses: actions/setup-node@v3
         with:
