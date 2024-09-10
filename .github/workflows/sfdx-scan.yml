@@ -56,11 +56,19 @@ jobs:
       - name: Check if File Already Exists in Salesforce
         id: check_file
         run: |
+            # Output FILE_TITLE to debug
+            echo "FILE_TITLE=${{ env.FILE_TITLE }}"
+        
             # Encode the file title for URL
             ENCODED_TITLE=$(echo "${{ env.FILE_TITLE }}" | jq -sRr @uri)
-            
+            echo "ENCODED_TITLE=${ENCODED_TITLE}"
+        
+            # Construct the URL
+            URL="https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/query?q=SELECT+Id+FROM+ContentDocument+WHERE+Title+%3D+%27${ENCODED_TITLE}%27"
+            echo "Request URL: ${URL}"
+        
             # Perform the GET request to Salesforce
-            response=$(curl -X GET "https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/query?q=SELECT Id FROM ContentDocument WHERE Title = '${ENCODED_TITLE}'" \
+            response=$(curl -X GET "${URL}" \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
               -H "Content-Type: application/json")
         
@@ -76,6 +84,7 @@ jobs:
             fi
         env:
             SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
+        
         
 
       - name: Upload CSV Report to Salesforce
