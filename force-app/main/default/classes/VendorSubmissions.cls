@@ -50,4 +50,7 @@ public with sharing class VendorSubmissions {
             throw new IllegalArgumentException('Invalid month: ' + month);
         }
     }
+    public static void Test(){
+        System.debug('Test Method');
+    }
 }
