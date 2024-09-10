@@ -19,5 +19,8 @@ public with sharing class Talent_Bench_Data {
 
         return jobSubmissionList;
     }
+    public static void Test(){
+        System.debug('Testing');
+    }
     
 }

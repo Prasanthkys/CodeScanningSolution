@@ -36,6 +36,7 @@ public with sharing class VendorSubmissions {
         String query = 'SELECT Job_ID__r.Name, Job_Title__c, Job_ID__r.Vendor_Account__r.Name, Job_ID__r.Sell_Rate__c, Talent_Bench_ID__r.Name, First_Name__c, Email_Address__c, Phone_Number__c, LinkedIn_Profile__c, Work_Authorization__c, Sales_Team_Member__c, CreatedDate FROM Job_Submission__c WHERE Job_Submitted__c = true AND CreatedDate >= :startDate AND CreatedDate <= :endDate';
         List<Job_Submission__c> results = Database.query(query);
         System.debug(results);
+        System.debug('Results');
         return results;
     }
 
