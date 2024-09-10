@@ -17,30 +17,28 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check for Flag File
+      - name: Check for Existing Run
         id: check_flag
         run: |
           BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
-          FLAG_FILE=".github/flags/${BRANCH_NAME}_flag.txt"
-          if [ -f "$FLAG_FILE" ]; then
-            echo "Flag file exists. Skipping workflow."
+          ISSUE_TITLE="Workflow Run - ${BRANCH_NAME}"
+          ISSUE_EXISTS=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/issues?state=open&title=${ISSUE_TITLE}" | jq '. | length')
+          if [ "$ISSUE_EXISTS" -gt 0 ]; then
+            echo "Issue exists. Skipping workflow."
             exit 1
           else
-            echo "Flag file does not exist. Proceeding with workflow."
+            echo "No issue found. Proceeding with workflow."
           fi
 
-      - name: Create Flag File
+      - name: Create Flag Issue
         if: success()
         run: |
           BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
-          FLAG_FILE=".github/flags/${BRANCH_NAME}_flag.txt"
-          mkdir -p .github/flags
-          echo "This file indicates that the workflow has run on this branch." > "$FLAG_FILE"
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git add "$FLAG_FILE"
-          git commit -m "Add flag file to indicate that the workflow has run on branch ${BRANCH_NAME}"
-          git push
+          ISSUE_TITLE="Workflow Run - ${BRANCH_NAME}"
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -X POST -d '{"title":"'"${ISSUE_TITLE}"'","body":"This issue indicates that the workflow has run for this branch."}' \
+            "https://api.github.com/repos/${{ github.repository }}/issues"
 
   installcli:
     runs-on: ubuntu-latest
