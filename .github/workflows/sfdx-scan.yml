@@ -50,7 +50,7 @@ jobs:
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
           echo "File Title=${FILE_TITLE}"
 
-          
+
 
       - name: Upload Scanner Report as Artifact
         uses: actions/upload-artifact@v3
@@ -63,10 +63,13 @@ jobs:
         run: |
           # URL encode the file title
           ENCODED_TITLE=$(echo "${{ env.FILE_TITLE }}" | jq -sRr @uri)
+          ENC_TITLE=$(echo "${{ env.FILE_TITLE }}")
+
           echo "ENCODED_TITLE=${ENCODED_TITLE}"
+          echo "ENC_TITLE=${ENC_TITLE}"
 
           # Construct the URL for the query
-          QUERY_URL="https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/query?q=SELECT+Title+FROM+ContentVersion+WHERE+Title+%3D+%27${ENCODED_TITLE}%27"
+          QUERY_URL="https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/query?q=SELECT+Title+FROM+ContentVersion+WHERE+Title+%3D+%27${ENC_TITLE}%27"
           echo "Query URL: ${QUERY_URL}"
 
           # Perform the GET request to Salesforce
