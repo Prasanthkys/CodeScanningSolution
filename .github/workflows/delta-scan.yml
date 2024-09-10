@@ -33,8 +33,9 @@ jobs:
 
       - name: Install diffc
         run: |
-          # Download and install diffc if it is available via URL or package
-          wget https://example.com/path/to/diffc.tar.gz  # Replace with actual URL if necessary
+          # Update this with the correct installation method for diffc
+          # Example for using wget and tar if diffc is available as a tarball
+          wget https://example.com/path/to/diffc.tar.gz  # Replace with the actual URL
           tar -xf diffc.tar.gz
           cd diffc
           ./configure
