@@ -1,6 +1,5 @@
 name: SFDX Scan Code
 
-# sfdx
 on:
   push:
     branches:
@@ -8,8 +7,35 @@ on:
       - '**'
 
 jobs:
+  check-run-once:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for Flag File
+        id: check_flag
+        run: |
+          git fetch --depth=1
+          if git ls-files --error-unmatch .github/flag.txt > /dev/null 2>&1; then
+            echo "Flag file exists. Skipping workflow."
+            exit 1
+          else
+            echo "Flag file does not exist. Proceeding with workflow."
+          fi
+
+      - name: Create Flag File
+        if: success()
+        run: |
+          echo "This file indicates that the workflow has run on this branch." > .github/flag.txt
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add .github/flag.txt
+          git commit -m "Add flag file to indicate that the workflow has run"
+          git push
+
   installcli:
     runs-on: ubuntu-latest
+    needs: check-run-once
+    if: success()  # Run this job only if the check-run-once job succeeds
+
     steps:
       - uses: actions/checkout@v3
         with:
@@ -33,7 +59,6 @@ jobs:
           SF_LAZY_LOAD_MODULES: 'true'
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
-          
       - name: Encode CSV file to Base64
         id: encode_file
         run: |
@@ -48,13 +73,11 @@ jobs:
           COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
           FILE_TITLE="Code Scanner Overall Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
-
       - name: Upload Scanner Report as Artifact
         uses: actions/upload-artifact@v3
         with:
           name: ${{ env.FILE_TITLE }}
           path: scanner-report.csv
-
       - name: Upload CSV Report to Salesforce
         run: |
           contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
@@ -66,18 +89,15 @@ jobs:
               "VersionData": "'"$(cat encoded_report.txt)"'"
             }')
           echo "Response: $contentDocumentResponse"
-          
           contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
           if [ -z "$contentVersionId" ]; then
             echo "Error: Failed to upload file. No ContentVersionId found."
             exit 1
           fi
           echo "ContentVersionId: $contentVersionId"
-          
           contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
             -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
           echo "ContentDocument Response: $contentDocumentResponse"
-          
           contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
           if [ -z "$contentDocumentId" ]; then
             echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
