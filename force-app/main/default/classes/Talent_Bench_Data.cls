@@ -20,10 +20,5 @@ public with sharing class Talent_Bench_Data {
         //Sample changes
         return jobSubmissionList;
     }
-    @AuraEnabled(cacheable=true)
-    public static void Test(){
-        System.debug('Testing');
-        System.debug('Test');
-    }
     
 }

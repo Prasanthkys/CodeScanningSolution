@@ -4,8 +4,6 @@ public with sharing class VendorSubmissions {
         Date today = Date.today();
         Date startDate;
         Date endDate;
-
-        System.debug('Calendar');
         if (filter == 'daily') {
             startDate = today;
             endDate = today;
@@ -51,5 +49,9 @@ public with sharing class VendorSubmissions {
         } else {
             throw new IllegalArgumentException('Invalid month: ' + month);
         }
+    }
+
+    public static void SampleTest(){
+        System.debug('Sample Test');
     }
 }
