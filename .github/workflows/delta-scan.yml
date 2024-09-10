@@ -31,7 +31,7 @@ jobs:
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
 
-      - name: Get Changed Lines
+      - name: Get Changed Files and Lines
         id: get-changed-lines
         run: |
           git fetch --unshallow || true
@@ -47,20 +47,20 @@ jobs:
           cat changes.diff
           cat changed_files.txt
 
-      - name: Create Modified Files with Changed Lines Only
-        id: create-modified-files
+      - name: Apply Changes to Files
+        id: apply-changes
         run: |
           mkdir -p modified_files
           while read -r file; do
             if [ -f "$file" ]; then
-              # Create a modified copy of the file with only changed lines
               cp "$file" "modified_files/$(basename $file)"
-              grep -E '^@@ ' changes.diff | sed -e 's/^@@ -[0-9]*,[0-9]* @@ //' -e 's/\\ No newline at end of file//' > temp_lines.txt
-              while read -r line; do
-                # Extract line numbers from diff and update the file accordingly
-                line_number=$(echo $line | awk '{print $1}' | sed 's/-//')
-                sed -n "${line_number}p" "modified_files/$(basename $file)" >> "modified_files/$(basename $file)"
-              done < temp_lines.txt
+              grep -E '^@@ ' changes.diff | while read -r line; do
+                if [[ "$line" == *"$(basename $file)"* ]]; then
+                  start_line=$(echo $line | awk '{print $2}' | sed 's/^-\([0-9]*\).*/\1/')
+                  end_line=$(echo $line | awk '{print $3}' | sed 's/^+\([0-9]*\).*/\1/')
+                  sed -n "${start_line},${end_line}p" "modified_files/$(basename $file)" >> "modified_files/$(basename $file)"
+                fi
+              done
             fi
           done < changed_files.txt
 
