@@ -21,6 +21,7 @@ public with sharing class Talent_Bench_Data {
     }
     public static void Test(){
         System.debug('Testing');
+        System.debug('Test');
     }
     
 }
