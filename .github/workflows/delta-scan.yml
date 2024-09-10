@@ -1,4 +1,4 @@
-name: SFDX Code Scan Delta
+name: Graph-Based Code Analysis on Changed Lines
 
 on:
   push:
@@ -7,99 +7,54 @@ on:
       - '**'
 
 jobs:
-  installcli:
+  setup:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
-      - name: Use Node.js
-        uses: actions/setup-node@v3
+      - name: Set Up Python
+        uses: actions/setup-python@v4
         with:
-          node-version: 20.x
+          python-version: '3.x'
 
-      - name: Install CLI
-        run: npm install @salesforce/cli --global
-
-      - name: Install Scanner Plugin
-        run: sf plugins install @salesforce/sfdx-scanner
-
-      - name: Verify SFDX CLI Installation
-        run: sf --version
-
-      - name: Verify SFDX Scanner Plugin Installation
-        run: sf plugins --core
-
-      - name: Install diffc
+      - name: Install Dependencies
         run: |
-          # Update this with the correct installation method for diffc
-          # Example for using wget and tar if diffc is available as a tarball
-          wget https://example.com/path/to/diffc.tar.gz  # Replace with the actual URL
-          tar -xf diffc.tar.gz
-          cd diffc
-          ./configure
-          make
-          sudo make install
+          python -m pip install --upgrade pip
+          pip install networkx matplotlib  # Example packages for graph analysis
 
-      - name: Verify diffc Installation
-        run: diffc --version
-
-      - name: Get Changed Files and Lines
-        id: get-changed-lines
+      - name: Get Changed Lines
+        id: get-changes
         run: |
           git fetch --unshallow || true
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-            echo "Fetching changed files and lines between HEAD~1 and HEAD"
-            diffc --unified=0 HEAD~1 HEAD > changes.diff
-
-            # Extract filenames and line numbers from diffc output
-            grep '^diff --git' changes.diff | sed 's/^diff --git a\//\n/g' | sed 's/ b\//\n/g' | awk '{print $1}' | sort -u > changed_files.txt
-            awk '/^@@/ {flag=1; next} /^diff/ {flag=0} flag' changes.diff > temp_changes.txt
+            echo "Fetching changes between HEAD~1 and HEAD"
+            git diff HEAD~1 HEAD --unified=0 > changed_lines.diff
           else
-            echo "No previous commit to compare to." > changes.diff
-            echo "No previous commit to compare to." > changed_files.txt
-            echo "No previous commit to compare to." > temp_changes.txt
+            echo "No previous commit to compare to." > changed_lines.diff
           fi
-          echo "Changes Diff:"
-          cat changes.diff
-          echo "Changed Files:"
-          cat changed_files.txt
+          cat changed_lines.diff
 
-      - name: Run SFDX Scanner on Entire Codebase
+      - name: Run Graph Analysis on Changed Lines
         if: success()
         run: |
-          sf scanner:run --target "." --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
-          echo "SFDX Scanner Report:"
-          cat scanner-report.csv
-
-      - name: Filter Report for Committed Lines
-        if: success()
-        run: |
-          # Create a file to store filtered report
-          touch filtered-report.csv
-          echo "File,Line,Column,Severity,Message" > filtered-report.csv
-
-          # Read the original report and filter lines based on changes
-          while IFS=, read -r file line column severity message; do
-            if grep -q "$file" temp_changes.txt; then
-              if grep -q "$line" temp_changes.txt; then
-                echo "$file,$line,$column,$severity,$message" >> filtered-report.csv
-              fi
-            fi
-          done < <(tail -n +2 scanner-report.csv) # Skip header line
-
-          echo "Filtered Report:"
-          cat filtered-report.csv
+          if [ -s changed_lines.diff ]; then
+            echo "Running graph-based analysis on changed lines."
+            python graph-analysis.py --diff-file "changed_lines.diff" --output "graph-analysis-report.csv" || { echo "Graph analysis failed"; exit 1; }
+          else
+            echo "No relevant changes detected."
+            touch graph-analysis-report.csv
+          fi
 
       - name: Encode CSV file to Base64
         if: success()
         id: encode_file
         run: |
-          if [ -f filtered-report.csv ]; then
-            base64 filtered-report.csv | tr -d '\n' > encoded_report.txt
+          if [ -f graph-analysis-report.csv ]; then
+            base64 graph-analysis-report.csv | tr -d '\n' > encoded_report.txt
           else
-            echo "Filtered report CSV file not found."
+            echo "Graph analysis report CSV file not found."
             exit 1
           fi
 
@@ -112,14 +67,14 @@ jobs:
           REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
           BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
           COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
-          FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
+          FILE_TITLE="Graph-Based Code Analysis Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
 
-      - name: Upload Scanner Report as Artifact
+      - name: Upload Report as Artifact
         uses: actions/upload-artifact@v3
         with:
           name: ${{ env.FILE_TITLE }}
-          path: filtered-report.csv
+          path: graph-analysis-report.csv
 
       - name: Get Pusher's Email
         id: get-pusher-email
@@ -139,7 +94,7 @@ jobs:
               -H "Content-Type: application/json" \
               -d '{
                 "Title": "'"${{ env.FILE_TITLE }}"'",
-                "PathOnClient": "filtered-report.csv",
+                "PathOnClient": "graph-analysis-report.csv",
                 "VersionData": "'"$(cat encoded_report.txt)"'"
               }')
             echo "Response: $contentDocumentResponse"
@@ -162,7 +117,7 @@ jobs:
             fi
             echo "ContentDocumentId: $contentDocumentId"
           else
-            echo "No filtered report generated, skipping upload."
+            echo "No graph analysis report generated, skipping upload."
           fi
         env:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
@@ -176,7 +131,7 @@ jobs:
           username: ${{ secrets.GMAIL_EMAIL }}
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
           from: ${{ secrets.GMAIL_EMAIL }}
-          subject: 'SFDX Code Scan Delta Report'
-          body: 'Please find the attached SFDX Code Scan Delta Report.'
+          subject: 'Graph-Based Code Analysis Report'
+          body: 'Please find the attached Graph-Based Code Analysis Report.'
           to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
-          attachments: filtered-report.csv
+          attachments: graph-analysis-report.csv
