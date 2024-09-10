@@ -56,19 +56,27 @@ jobs:
       - name: Check if File Already Exists in Salesforce
         id: check_file
         run: |
-          response=$(curl -X GET "https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/query?q=SELECT Id FROM ContentDocument WHERE Title = '${{ env.FILE_TITLE }}'" \
-            -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
-          file_exists=$(echo $response | jq -r '.records | length')
-
-          if [ "$file_exists" -gt 0 ]; then
-            echo "File with title '${{ env.FILE_TITLE }}' already exists in Salesforce."
-            echo "EXISTING_FILE=true" >> $GITHUB_ENV
-          else
-            echo "File with title '${{ env.FILE_TITLE }}' does not exist in Salesforce."
-            echo "EXISTING_FILE=false" >> $GITHUB_ENV
-          fi
+            # Encode the file title for URL
+            ENCODED_TITLE=$(echo "${{ env.FILE_TITLE }}" | jq -sRr @uri)
+            
+            # Perform the GET request to Salesforce
+            response=$(curl -X GET "https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/query?q=SELECT Id FROM ContentDocument WHERE Title = '${ENCODED_TITLE}'" \
+              -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
+              -H "Content-Type: application/json")
+        
+            # Check if the file exists
+            file_exists=$(echo $response | jq -r '.records | length')
+        
+            if [ "$file_exists" -gt 0 ]; then
+              echo "File with title '${{ env.FILE_TITLE }}' already exists in Salesforce."
+              echo "EXISTING_FILE=true" >> $GITHUB_ENV
+            else
+              echo "File with title '${{ env.FILE_TITLE }}' does not exist in Salesforce."
+              echo "EXISTING_FILE=false" >> $GITHUB_ENV
+            fi
         env:
-          SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
+            SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
+        
 
       - name: Upload CSV Report to Salesforce
         if: env.EXISTING_FILE == 'false'
