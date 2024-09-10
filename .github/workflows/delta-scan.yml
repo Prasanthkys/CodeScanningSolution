@@ -31,38 +31,65 @@ jobs:
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
 
+      - name: Install diffc
+        run: |
+          # Download and install diffc if it is available via URL or package
+          wget https://example.com/path/to/diffc.tar.gz  # Replace with actual URL if necessary
+          tar -xf diffc.tar.gz
+          cd diffc
+          ./configure
+          make
+          sudo make install
+
+      - name: Verify diffc Installation
+        run: diffc --version
+
       - name: Get Changed Files and Lines
         id: get-changed-lines
         run: |
           git fetch --unshallow || true
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files and lines between HEAD~1 and HEAD"
-            git diff --unified=0 HEAD~1 HEAD > changes.diff
+            diffc --unified=0 HEAD~1 HEAD > changes.diff
+
+            # Extract filenames and line numbers from diffc output
             grep '^diff --git' changes.diff | sed 's/^diff --git a\//\n/g' | sed 's/ b\//\n/g' | awk '{print $1}' | sort -u > changed_files.txt
+            awk '/^@@/ {flag=1; next} /^diff/ {flag=0} flag' changes.diff > temp_changes.txt
           else
             echo "No previous commit to compare to." > changes.diff
             echo "No previous commit to compare to." > changed_files.txt
+            echo "No previous commit to compare to." > temp_changes.txt
           fi
+          echo "Changes Diff:"
           cat changes.diff
+          echo "Changed Files:"
           cat changed_files.txt
 
       - name: Run SFDX Scanner on Entire Codebase
         if: success()
         run: |
           sf scanner:run --target "." --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
+          echo "SFDX Scanner Report:"
+          cat scanner-report.csv
 
-      - name: Filter Scanner Report for Committed Lines
+      - name: Filter Report for Committed Lines
         if: success()
         run: |
-          # Extract changed lines from the diff file
-          awk '/^@@/ {flag=1; next} /^diff/ {flag=0} flag' changes.diff > temp_changes.txt
           # Create a file to store filtered report
           touch filtered-report.csv
+          echo "File,Line,Column,Severity,Message" > filtered-report.csv
+
+          # Read the original report and filter lines based on changes
           while IFS=, read -r file line column severity message; do
-            if grep -q "$file" temp_changes.txt && grep -q "$line" temp_changes.txt; then
-              echo "$file,$line,$column,$severity,$message" >> filtered-report.csv
+            if grep -q "$file" temp_changes.txt; then
+              if grep -q "$line" temp_changes.txt; then
+                echo "$file,$line,$column,$severity,$message" >> filtered-report.csv
+              fi
             fi
           done < <(tail -n +2 scanner-report.csv) # Skip header line
+
+          echo "Filtered Report:"
+          cat filtered-report.csv
 
       - name: Encode CSV file to Base64
         if: success()
