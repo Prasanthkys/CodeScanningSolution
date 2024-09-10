@@ -112,7 +112,7 @@ jobs:
         with:
           name: ${{ env.FILE_TITLE }}
           path: |
-            scanner-report.csv
+            # scanner-report.csv
             changed_lines.csv
 
       - name: Get Pusher's Email

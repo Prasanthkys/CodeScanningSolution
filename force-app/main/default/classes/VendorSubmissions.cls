@@ -54,5 +54,6 @@ public with sharing class VendorSubmissions {
     public static void SampleTest(){
         System.debug('Sample Test');
         System.debug('Testing Method');
+        System.debug('Sample Methods');
     }
 }
