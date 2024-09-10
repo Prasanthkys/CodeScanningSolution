@@ -1,3 +1,5 @@
+name: sfdx scan code
+
 # sfdx
 on:
   push:
@@ -56,36 +58,34 @@ jobs:
       - name: Check if File Already Exists in Salesforce
         id: check_file
         run: |
-            # Output FILE_TITLE to debug
-            echo "FILE_TITLE=${{ env.FILE_TITLE }}"
-        
-            # Encode the file title for URL
-            ENCODED_TITLE=$(echo "${{ env.FILE_TITLE }}" | jq -sRr @uri)
-            echo "ENCODED_TITLE=${ENCODED_TITLE}"
-        
-            # Construct the URL
-            URL="https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/query?q=SELECT+Id+FROM+ContentDocument+WHERE+Title+%3D+%27${ENCODED_TITLE}%27"
-            echo "Request URL: ${URL}"
-        
-            # Perform the GET request to Salesforce
-            response=$(curl -X GET "${URL}" \
-              -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
-              -H "Content-Type: application/json")
-        
-            # Check if the file exists
-            file_exists=$(echo $response | jq -r '.records | length')
-        
-            if [ "$file_exists" -gt 0 ]; then
-              echo "File with title '${{ env.FILE_TITLE }}' already exists in Salesforce."
-              echo "EXISTING_FILE=true" >> $GITHUB_ENV
-            else
-              echo "File with title '${{ env.FILE_TITLE }}' does not exist in Salesforce."
-              echo "EXISTING_FILE=false" >> $GITHUB_ENV
-            fi
+          # URL encode the file title
+          ENCODED_TITLE=$(echo "${{ env.FILE_TITLE }}" | jq -sRr @uri)
+          echo "ENCODED_TITLE=${ENCODED_TITLE}"
+
+          # Construct the URL for the query
+          QUERY_URL="https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/query?q=SELECT+Id+FROM+ContentDocument+WHERE+Title+%3D+%27${ENCODED_TITLE}%27"
+          echo "Query URL: ${QUERY_URL}"
+
+          # Perform the GET request to Salesforce
+          response=$(curl -X GET "${QUERY_URL}" \
+            -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json")
+
+          # Output the response for debugging
+          echo "Response: $response"
+
+          # Check if the file exists
+          file_exists=$(echo $response | jq -r '.records | length')
+
+          if [ "$file_exists" -gt 0 ]; then
+            echo "File with title '${{ env.FILE_TITLE }}' already exists in Salesforce."
+            echo "EXISTING_FILE=true" >> $GITHUB_ENV
+          else
+            echo "File with title '${{ env.FILE_TITLE }}' does not exist in Salesforce."
+            echo "EXISTING_FILE=false" >> $GITHUB_ENV
+          fi
         env:
-            SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
-        
-        
+          SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
 
       - name: Upload CSV Report to Salesforce
         if: env.EXISTING_FILE == 'false'
