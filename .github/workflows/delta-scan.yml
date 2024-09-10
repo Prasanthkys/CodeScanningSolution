@@ -39,7 +39,7 @@ jobs:
             echo "Fetching changed files between HEAD~1 and HEAD"
             git diff --name-only HEAD~1 HEAD > changed_files.txt
             git diff HEAD~1 HEAD > changes.diff
-            print changes.diff
+            echo changes.diff
           else
             echo "No previous commit to compare to." > changed_files.txt
             echo "No previous commit to compare to." > changes.diff
