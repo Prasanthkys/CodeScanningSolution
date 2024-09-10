@@ -49,6 +49,5 @@ public with sharing class VendorSubmissions {
         } else {
             throw new IllegalArgumentException('Invalid month: ' + month);
         }
-        System.debug('Month');
     }
 }
