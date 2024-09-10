@@ -39,6 +39,7 @@ jobs:
             echo "Fetching changed files between HEAD~1 and HEAD"
             git diff --name-only HEAD~1 HEAD > changed_files.txt
             git diff HEAD~1 HEAD > changes.diff
+            print changes.diff
           else
             echo "No previous commit to compare to." > changed_files.txt
             echo "No previous commit to compare to." > changes.diff
@@ -56,6 +57,7 @@ jobs:
             
             if [ -f "$file" ]; then
               # Extract changed line numbers from diff
+              print "$file";
               grep -E "^\+\s" changes.diff | grep -E "^\+\s[0-9]+(,[0-9]+)?" | awk -v file="$file" '
               {
                 if (match($0, /^(\+\s)[0-9]+(,[0-9]+)?/)) {
