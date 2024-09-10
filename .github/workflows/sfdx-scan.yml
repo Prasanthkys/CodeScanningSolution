@@ -48,6 +48,9 @@ jobs:
           COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
           FILE_TITLE="Code Scanner Overall Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
+          echo "File Title=${FILE_TITLE}"
+
+          
 
       - name: Upload Scanner Report as Artifact
         uses: actions/upload-artifact@v3
