@@ -1,6 +1,3 @@
-name: SFDX Delta Scan Dev3Mnr
-
-
 on:
   push:
     branches:
@@ -31,9 +28,8 @@ jobs:
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
 
-      - name: Retrieve Default Ruleset
-        run: |
-          sf scanner:rulesets:retrieve --ruleset default --output ruleset.xml
+      - name: Download Default Ruleset
+        run: curl -L -o ruleset.xml https://example.com/path/to/default-ruleset.xml
 
       - name: Get changed files
         id: get-changes
