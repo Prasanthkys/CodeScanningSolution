@@ -1,6 +1,17 @@
 public class FileComparison {
+
+
+    // Static variable to prevent recursion
+    public static Boolean isProcessing = false;
+    
     
     public static void compareFilesAndGenerateReport() {
+
+        if (isProcessing) {
+            return; // Prevent recursive execution
+        }
+        isProcessing = true;
+
         // 1. Retrieve the latest two files
         List<ContentDocument> documents = [
             SELECT Id, Title
@@ -12,6 +23,7 @@ public class FileComparison {
         
         if (documents.size() < 2) {
             System.debug('Not enough files found.');
+            isProcessing = false;
             return;
         }
 
@@ -64,6 +76,7 @@ public class FileComparison {
         insert newFile;
         
         System.debug('New file created with unique rows.');
+        isProcessing = false; // Reset after processing
     }
     
     private static List<String[]> parseCSV(String csvContent) {
