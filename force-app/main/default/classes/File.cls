@@ -326,4 +326,8 @@ public static void Sample(){
     System.debug('Sample Testing method');
 }
 
+public static void Testing(){
+    System.debug('Sample Testing method');
+}
+
 }
