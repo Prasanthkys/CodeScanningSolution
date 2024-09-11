@@ -28,7 +28,7 @@ jobs:
         run: sf plugins --core
       - name: Run SFDX Scanner
         run: |
-          sf scanner:run --target "force-app/main/default/classes/**/*.cls,force-app/main/default/lwc" --format "csv" --outfile "scanner-report.csv"
+          sf scanner:run --target "force-app/main/default/classes/**/*.cls,force-app/main/default/lwc,force-app/main/default/triggers" --format "csv" --outfile "scanner-report.csv"
         env:
           SF_LAZY_LOAD_MODULES: 'true'
           SF_AUTOUPDATE_DISABLE: 'true'
