@@ -90,4 +90,8 @@ public class FileComparison {
         }
         return false;
     }
+
+    public static void Test(){
+        System.debug('Test');
+    }
 }
