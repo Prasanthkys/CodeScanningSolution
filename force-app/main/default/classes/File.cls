@@ -25,8 +25,6 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     ContentVersion file = [SELECT VersionData FROM ContentVersion WHERE ContentDocumentId = :fileId LIMIT 1];
     String csvContent = file.VersionData.toString();  // Convert Blob to String
     System.debug('Original CSV Content: ' + csvContent);
-    System.debug('Report');
-    System.debug('Report');
 
     
     List<String> foundLines = new List<String>();
@@ -109,8 +107,6 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     // Convert the found content to Blob and then encode to Base64
     Blob contentBlob = Blob.valueOf(foundContent);
     String encodedContent = EncodingUtil.base64Encode(contentBlob);
-    System.debug('Encoded Content');
-    System.debug('Content');
     
     return encodedContent;
 }
@@ -325,6 +321,9 @@ public static Map<String, Integer> getSeverityCounts(Id fileId) {
     }
 
     return severityCounts;
+}
+public static void Sample(){
+    System.debug('Sample Testing method');
 }
 
 }
