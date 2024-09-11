@@ -22,8 +22,23 @@ jobs:
       - name: Install CLI
         run: npm install @salesforce/cli --global
 
-      - name: Install Scanner Plugin
-        run: sf plugins install @salesforce/sfdx-scanner
+      - name: Configure npm
+        run: |
+          npm config set fetch-retry-mintimeout 20000
+          npm config set fetch-retry-maxtimeout 120000
+
+      - name: Retry Install Scanner Plugin
+        run: |
+          for i in {1..3}; do
+            echo "Attempt $i: Installing scanner plugin..."
+            if sf plugins install @salesforce/sfdx-scanner; then
+              echo "Plugin installed successfully."
+              break
+            else
+              echo "Attempt $i failed, retrying..."
+              sleep 10
+            fi
+          done
 
       - name: Verify SFDX CLI Installation
         run: sf --version
