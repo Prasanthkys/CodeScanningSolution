@@ -87,12 +87,7 @@ public class FileComparison {
         }
         return false;
     }
-
-    public static void Testmethod(){
-        System.debug('Test Method');
-    }
-
-    public static void Testmethod(){
-        System.debug('Test Method');
+    public static void Test(){
+        System.debug('test');
     }
 }
