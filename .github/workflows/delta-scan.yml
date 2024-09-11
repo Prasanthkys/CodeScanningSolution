@@ -1,6 +1,4 @@
 name: SFDX Code Scan Delta
-
-#delta
 on:
   push:
     branches:

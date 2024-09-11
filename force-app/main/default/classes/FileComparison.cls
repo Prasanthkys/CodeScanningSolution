@@ -87,4 +87,8 @@ public class FileComparison {
         }
         return false;
     }
+
+    public static void Testmethod(){
+        System.debug('Test Method');
+    }
 }

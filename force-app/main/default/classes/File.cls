@@ -322,16 +322,5 @@ public static Map<String, Integer> getSeverityCounts(Id fileId) {
 
     return severityCounts;
 }
-public static void Sample(){
-    System.debug('Sample Testing method');
-}
-
-public static void Testing(){
-    System.debug('Sample Testing method');
-}
-
-public static void Testing(){
-    System.debug('Sample Testing method');
-}
 
 }
