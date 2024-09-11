@@ -87,15 +87,5 @@ public class FileComparison {
         }
         return false;
     }
-    public static void Test(){
-        System.debug('test');
-    }
-
-
-
-    public static void Test1(){
-        System.debug('test');
-    }
-
     
 }
