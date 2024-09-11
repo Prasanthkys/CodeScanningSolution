@@ -6,7 +6,7 @@ public class FileComparison {
     };
 
     public static void compareFiles() {
-        String filePattern = 'Code Scanner overall Report_CodeScanningSolution_main_Jira Story1';
+        String filePattern = 'Code Scanner Delta Report_CodeScanningSolution_main_Jira Story1';
         
         // Fetch the two latest ContentVersions that match the file pattern
         List<ContentVersion> contentVersions = [
@@ -158,11 +158,19 @@ public class FileComparison {
     }
 
     private static void storeDeltaReport(String content) {
-        ContentVersion newFile = new ContentVersion();
-        newFile.Title = 'Code Scanner Delta Report_main';
-        newFile.PathOnClient = 'CodeScannerDeltaReport.csv';
-        newFile.VersionData = Blob.valueOf(content);
-        
-        insert newFile;
+        try {
+            ContentVersion newFile = new ContentVersion();
+            newFile.Title = 'Code Scanner Delta Report_main';
+            newFile.PathOnClient = 'CodeScannerDeltaReport.csv';
+            newFile.VersionData = Blob.valueOf(content);
+            
+            // Insert ContentVersion record
+            insert newFile;
+            
+            System.debug('Delta report successfully stored in Salesforce.');
+        } catch (DmlException e) {
+            System.debug('Error storing delta report: ' + e.getMessage());
+            // Optionally log more details or take additional actions
+        }
     }
 }
