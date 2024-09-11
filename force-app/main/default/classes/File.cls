@@ -110,6 +110,7 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     Blob contentBlob = Blob.valueOf(foundContent);
     String encodedContent = EncodingUtil.base64Encode(contentBlob);
     System.debug('Encoded Content');
+    System.debug('Content');
     
     return encodedContent;
 }
