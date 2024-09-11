@@ -91,4 +91,8 @@ public class FileComparison {
     public static void Testmethod(){
         System.debug('Test Method');
     }
+
+    public static void Testmethod(){
+        System.debug('Test Method');
+    }
 }
