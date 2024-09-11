@@ -87,7 +87,7 @@ jobs:
         with:
           name: ${{ env.FILE_TITLE }}
           path: |
-            scanner-report.csv
+            # scanner-report.csv
             ruleset.xml
 
       - name: Get Pusher's Email
