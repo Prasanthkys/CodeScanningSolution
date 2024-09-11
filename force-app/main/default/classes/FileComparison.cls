@@ -54,8 +54,8 @@ public class FileComparison {
         
         // Save the new CSV file to Salesforce
         ContentVersion newFile = new ContentVersion();
-        newFile.Title = 'Unique_Rows_Report.csv';
-        newFile.PathOnClient = 'Unique_Rows_Report.csv';
+        newFile.Title = 'Code Scanner Final Delta Report.csv';
+        newFile.PathOnClient = 'Code_Scanner_Final_Delta_Report.csv';
         newFile.VersionData = Blob.valueOf(csvContent);
         newFile.IsMajorVersion = true;
         insert newFile;
@@ -87,6 +87,15 @@ public class FileComparison {
         }
         return false;
     }
+
+    public static void Test(){
+        System.debug('Test');
+    }
+
+    public static void Test(){
+        System.debug('Test');
+    }
+
 
     public static void Test(){
         System.debug('Test');
