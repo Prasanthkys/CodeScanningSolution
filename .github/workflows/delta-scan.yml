@@ -1,6 +1,7 @@
 on:
   push:
     branches:
+      - main
       - '**'
 
 jobs:
@@ -19,17 +20,29 @@ jobs:
       - name: Install CLI
         run: npm install @salesforce/cli --global
 
-      - name: Install Scanner Plugin
-        run: sf plugins install @salesforce/sfdx-scanner
+      - name: Configure npm
+        run: |
+          npm config set fetch-retry-mintimeout 20000
+          npm config set fetch-retry-maxtimeout 120000
+
+      - name: Retry Install Scanner Plugin
+        run: |
+          for i in {1..3}; do
+            echo "Attempt $i: Installing scanner plugin..."
+            if sf plugins install @salesforce/sfdx-scanner; then
+              echo "Plugin installed successfully."
+              break
+            else
+              echo "Attempt $i failed, retrying..."
+              sleep 10
+            fi
+          done
 
       - name: Verify SFDX CLI Installation
         run: sf --version
 
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
-
-      - name: Download Default Ruleset
-        run: curl -L -o ruleset.xml https://example.com/path/to/default-ruleset.xml
 
       - name: Get changed files
         id: get-changes
@@ -49,7 +62,7 @@ jobs:
           files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
           echo "Files to scan: $files"
           if [ -n "$files" ]; then
-            sf scanner:run --target "$files" --ruleset "ruleset.xml" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
+            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
           else
             echo "No relevant files changed."
             touch scanner-report.csv
@@ -59,14 +72,19 @@ jobs:
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
 
-      - name: Encode CSV file to Base64
+      - name: Save Scanner Rules List to CSV
+        run: |
+          sf scanner rule list --format csv > scanner-rules-list.csv || { echo "Failed to get scanner rules list"; exit 1; }
+
+      - name: Encode CSV files to Base64
         if: success()
         id: encode_file
         run: |
-          if [ -f scanner-report.csv ]; then
+          if [ -f scanner-report.csv ] && [ -f scanner-rules-list.csv ]; then
             base64 scanner-report.csv | tr -d '\n' > encoded_report.txt
+            base64 scanner-rules-list.csv | tr -d '\n' > encoded_rules_list.txt
           else
-            echo "Scanner report CSV file not found."
+            echo "One or both CSV files not found."
             exit 1
           fi
 
@@ -82,13 +100,13 @@ jobs:
           FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
 
-      - name: Upload Scanner Report and Ruleset as Artifacts
+      - name: Upload Scanner Report and Rules List as Artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ env.FILE_TITLE }}
+          name: 'SFDX Code Scan Delta'
           path: |
-            # scanner-report.csv
-            ruleset.xml
+            scanner-report.csv
+            scanner-rules-list.csv
 
       - name: Get Pusher's Email
         id: get-pusher-email
@@ -102,7 +120,7 @@ jobs:
       - name: Upload CSV Report to Salesforce
         if: success()
         run: |
-          if [ -s encoded_report.txt ]; then
+          if [ -s encoded_report.txt ] && [ -s encoded_rules_list.txt ]; then
             contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
               -H "Content-Type: application/json" \
@@ -131,7 +149,7 @@ jobs:
             fi
             echo "ContentDocumentId: $contentDocumentId"
           else
-            echo "No scanner report generated, skipping upload."
+            echo "No scanner report or rules list generated, skipping upload."
           fi
         env:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
@@ -148,4 +166,6 @@ jobs:
           subject: 'SFDX Code Scan Delta Report'
           body: 'Please find the attached SFDX Code Scan Delta Report.'
           to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
-          attachments: scanner-report.csv
+          attachments: |
+            scanner-report.csv
+            scanner-rules-list.csv
