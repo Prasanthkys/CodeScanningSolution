@@ -98,7 +98,9 @@ public class FileComparison {
     public static Boolean isProcessing = false;
 
     public static void compareFilesAndGenerateReport() {
-        if (isProcessing) {
+        System.debug('Calling from Trigger');
+        if (!isProcessing) {
+            System.debug('Processing::'+isProcessing);
             return; // Prevent recursive execution
         }
         isProcessing = true;
@@ -112,6 +114,8 @@ public class FileComparison {
                 ORDER BY CreatedDate DESC
                 LIMIT 2
             ];
+
+            System.debug('Files::'+documents);
 
             if (documents.size() < 2) {
                 System.debug('Not enough files found for comparison.');
@@ -194,28 +198,8 @@ public class FileComparison {
         return false;
     }
 
-    public static void Test() {
-        System.debug('Test');
-    }
-
-    public static void Test1() {
-        System.debug('Test1');
-    }
-
-    public static void Test1() {
-        System.debug('Test1');
-    }
-
-    public static void Test1() {
-        System.debug('Test1');
-    }
-
-    public static void Test1() {
-        System.debug('Test1');
-    }
-
-    public static void Test1() {
-        System.debug('Test1');
+    public static void Test(){
+        System.debug('Testing');
     }
 
 }
