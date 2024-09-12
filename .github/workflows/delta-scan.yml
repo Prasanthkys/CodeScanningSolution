@@ -56,14 +56,18 @@ jobs:
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
 
-      - name: Generate Scanner Rule List
+      - name: Generate and Process Scanner Rule List
         if: success()
         run: |
           # Run the command without --format
           sf scanner:rule:list > scanner-rules.txt || { echo "Failed to generate rule list"; exit 1; }
-          # Optionally process `scanner-rules.txt` to convert to CSV if necessary
-          # Example processing step (customize based on actual output):
-          cat scanner-rules.txt > scanner-rules.csv
+
+          # Process the output into CSV format
+          echo "name,languages,categories,rulesets [dep] engine,is dfa,is pilot" > scanner-rules.csv
+          tail -n +3 scanner-rules.txt | while IFS= read -r line; do
+            # Replace multiple spaces with commas
+            echo "$line" | sed -E 's/\s+/,/g' >> scanner-rules.csv
+          done
         env:
           SF_LAZY_LOAD_MODULES: 'true'
           SF_AUTOUPDATE_DISABLE: 'true'
