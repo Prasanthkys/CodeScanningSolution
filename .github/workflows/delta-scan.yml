@@ -72,9 +72,18 @@ jobs:
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
 
-      - name: Save Scanner Rules List to CSV
+      - name: Save Scanner Rules List to JSON
         run: |
-          sf scanner rule list --format csv > scanner-rules-list.csv || { echo "Failed to get scanner rules list"; exit 1; }
+          sf scanner rule list > scanner-rules-list.json || { echo "Failed to get scanner rules list"; exit 1; }
+
+      - name: Convert JSON to CSV
+        run: |
+          if [ -f scanner-rules-list.json ]; then
+            jq -r '[.[] | {name: .name, description: .description}] | (first | keys_unsorted) as $keys | [$keys] + map([$keys[]] | @csv) | .[]' scanner-rules-list.json > scanner-rules-list.csv
+          else
+            echo "Scanner rules list JSON file not found."
+            exit 1
+          fi
 
       - name: Encode CSV files to Base64
         if: success()
