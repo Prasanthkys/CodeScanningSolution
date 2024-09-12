@@ -56,10 +56,14 @@ jobs:
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
 
-      - name: Generate Scanner Rule List CSV
+      - name: Generate Scanner Rule List
         if: success()
         run: |
-          sf scanner:rule:list --format csv > scanner-rules.csv || { echo "Failed to generate rule list"; exit 1; }
+          # Run the command without --format
+          sf scanner:rule:list > scanner-rules.txt || { echo "Failed to generate rule list"; exit 1; }
+          # Optionally process `scanner-rules.txt` to convert to CSV if necessary
+          # Example processing step (customize based on actual output):
+          cat scanner-rules.txt > scanner-rules.csv
         env:
           SF_LAZY_LOAD_MODULES: 'true'
           SF_AUTOUPDATE_DISABLE: 'true'
