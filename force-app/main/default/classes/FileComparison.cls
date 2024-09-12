@@ -210,4 +210,12 @@ public class FileComparison {
         System.debug('Test1');
     }
 
+    public static void Test1() {
+        System.debug('Test1');
+    }
+
+    public static void Test1() {
+        System.debug('Test1');
+    }
+
 }

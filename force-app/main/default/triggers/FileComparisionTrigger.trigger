@@ -11,7 +11,7 @@ trigger FileComparisionTrigger on ContentVersion (after insert) {
 
         // Collect ContentVersion records with the specific title pattern
         for (ContentVersion cv : Trigger.new) {
-            if (cv.Title.contains('Code Scanner Delta Report')) {
+            if (cv.Title.contains('Code Scanner Delta Report_CodeScanningSolution_main_Jira Story')) {
                 relevantFiles.add(cv);
             }
         }
