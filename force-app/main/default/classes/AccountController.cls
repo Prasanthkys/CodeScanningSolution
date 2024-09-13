@@ -1,6 +1,8 @@
 public with sharing class AccountController {
     public static void insertAccount(List<Account> accList){
         for(Account acc:accList){
+            System.debug('AccountController');
+            System.debug('Account');
             acc.Description='Happy Welcome';
         }
     }
