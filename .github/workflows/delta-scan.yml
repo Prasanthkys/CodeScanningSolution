@@ -93,57 +93,97 @@ jobs:
       - name: Get Repository and Branch Info
         id: get-info
         run: |
-            REPO_NAME=$(echo "${GITHUB_REPOSITORY}" | cut -d'/' -f2)
-            BRANCH_NAME=$(echo "${GITHUB_REF}" | sed 's/refs\/heads\///')
-            COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
-            FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
-            echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV        
+          REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
+          BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
+          COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
+          FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
+          echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
+
+      - name: Upload Scanner Report as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.FILE_TITLE }}
+          path: scanner-report.csv
 
       - name: Get Pusher's Email
         id: get-pusher-email
         run: |
-            COMMIT_SHA=${{ github.sha }}
-            REPO=${{ github.repository }}
-            PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
-              "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
-            echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
-        
+          COMMIT_SHA=${{ github.sha }}
+          REPO=${{ github.repository }}
+          PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
+            "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
+          echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
+
+      - name: Upload CSV Report to Salesforce
+        if: success()
+        run: |
+          if [ -s encoded_report.txt ]; then
+            contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
+              -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "Title": "'"${{ env.FILE_TITLE }}"'",
+                "PathOnClient": "scanner-report.csv",
+                "VersionData": "'"$(cat encoded_report.txt)"'"
+              }')
+            echo "Response: $contentDocumentResponse"
+            
+            contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
+            if [ -z "$contentVersionId" ]; then
+              echo "Error: Failed to upload file. No ContentVersionId found."
+              exit 1
+            fi
+            echo "ContentVersionId: $contentVersionId"
+            
+            contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
+              -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
+            echo "ContentDocument Response: $contentDocumentResponse"
+            
+            contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
+            if [ -z "$contentDocumentId" ]; then
+              echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
+              exit 1
+            fi
+            echo "ContentDocumentId: $contentDocumentId"
+          else
+            echo "No scanner report generated, skipping upload."
+          fi
+        env:
+          SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
+        shell: bash
+
+      - name: Construct Email Body
+        id: construct_email_body
+        run: |
+          QUALITY_GATE_STATUS=$(echo ${{ env.QUALITY_GATE_STATUS }})
+
+          EMAIL_BODY=$(cat <<EOF
+            <html>
+            <body>
+              <p>Dear Team,</p>
+              <p>The SFDX Code Scan Delta Report has been generated. Please review the details below:</p>
+              <p><strong>Quality Gate Status:</strong> $QUALITY_GATE_STATUS</p>
+              <p>Please find the attached SFDX Code Scan Delta Report.</p>
+              <p>
+                <a href="mailto:${{ env.PUSHER_EMAIL }}?subject=ACCEPT%20the%20Report" style="padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">ACCEPT</a>
+                <a href="mailto:${{ env.PUSHER_EMAIL }}?subject=REJECT%20the%20Report" style="padding: 10px 20px; background-color: #f44336; color: white; text-decoration: none; border-radius: 5px;">REJECT</a>
+              </p>
+              <p>Best regards,<br>Your CI/CD System</p>
+            </body>
+            </html>
+          EOF
+          )
+          echo "EMAIL_BODY=${EMAIL_BODY}" >> $GITHUB_ENV
+
       - name: Send Email with actions-send-mail
         uses: dawidd6/action-send-mail@v3
         with:
-            server_address: 'smtp.gmail.com'
-            server_port: '587'
-            username: ${{ secrets.GMAIL_EMAIL }}
-            password: ${{ secrets.GMAIL_APP_PASSWORD }}
-            from: ${{ secrets.GMAIL_EMAIL }}
-            subject: 'SFDX Code Scan Delta Report'
-            body: |
-              <html>
-              <body>
-                <p>The SFDX Code Scan Delta Report has been generated.</p>
-                <p>Status: ${{ env.QUALITY_GATE_STATUS }}</p>
-                <p>Click below to take action:</p>
-                <p>
-                  <a href="https://api.github.com/repos/${{ github.repository }}/dispatches" 
-                     style="background-color: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;" 
-                     target="_blank" 
-                     onclick="event.preventDefault(); fetch('https://api.github.com/repos/${{ github.repository }}/dispatches', { 
-                       method: 'POST', 
-                       headers: { 'Accept': 'application/vnd.github.v3+json', 'Authorization': 'token ${{ secrets.GIT_TOKEN }}' }, 
-                       body: JSON.stringify({ event_type: 'accept', client_payload: { branch: '${{ env.BRANCH_NAME }}' } }) 
-                     });">Accept</a>
-                </p>
-                <p>
-                  <a href="https://api.github.com/repos/${{ github.repository }}/dispatches" 
-                     style="background-color: #dc3545; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;" 
-                     target="_blank" 
-                     onclick="event.preventDefault(); fetch('https://api.github.com/repos/${{ github.repository }}/dispatches', { 
-                       method: 'POST', 
-                       headers: { 'Accept': 'application/vnd.github.v3+json', 'Authorization': 'token ${{ secrets.GIT_TOKEN }}' }, 
-                       body: JSON.stringify({ event_type: 'reject', client_payload: { branch: '${{ env.BRANCH_NAME }}' } }) 
-                     });">Reject</a>
-                </p>
-              </body>
-              </html>
-            to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
-            attachments: scanner-report.csv
+          server_address: 'smtp.gmail.com'
+          server_port: '587'
+          username: ${{ secrets.GMAIL_EMAIL }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          from: ${{ secrets.GMAIL_EMAIL }}
+          subject: 'SFDX Code Scan Delta Report'
+          body: ${{ env.EMAIL_BODY }}
+          to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
+          attachments: scanner-report.csv
