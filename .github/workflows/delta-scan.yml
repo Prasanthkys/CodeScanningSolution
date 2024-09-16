@@ -93,15 +93,15 @@ jobs:
       - name: Get Repository and Branch Info
         id: get-info
         run: |
-          REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
-          BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
-          COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
-          FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
-          echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
+            REPO_NAME=$(echo "${GITHUB_REPOSITORY}" | cut -d'/' -f2)
+            BRANCH_NAME=$(echo "${GITHUB_REF}" | sed 's/refs\/heads\///')
+            COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
+            FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
+            echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV        
 
-          - name: Get Pusher's Email
-          id: get-pusher-email
-          run: |
+      - name: Get Pusher's Email
+        id: get-pusher-email
+        run: |
             COMMIT_SHA=${{ github.sha }}
             REPO=${{ github.repository }}
             PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
