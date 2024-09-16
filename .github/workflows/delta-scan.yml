@@ -108,15 +108,15 @@ jobs:
       - name: Get Pusher's Email
         id: get-pusher-email
         run: |
-          COMMIT_SHA=${{ github.sha }}
-          REPO=${{ github.repository }}
-          PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
-            "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
-          echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
-
-          - name: Send Email with actions-send-mail
-          uses: dawidd6/action-send-mail@v3
-          with:
+            COMMIT_SHA=${{ github.sha }}
+            REPO=${{ github.repository }}
+            PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
+              "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
+            echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
+        
+      - name: Send Email with actions-send-mail
+        uses: dawidd6/action-send-mail@v3
+        with:
             server_address: 'smtp.gmail.com'
             server_port: '587'
             username: ${{ secrets.GMAIL_EMAIL }}
