@@ -5,7 +5,8 @@ public with sharing class Sampleclass {
     }
     public static void Test(){
         System.debug('Sample method');
-        System.debug('Sample class');
-        System.debug('Sample');
+    }
+    public static void Test1(){
+        System.debug('Sample method2');
     }
 }
