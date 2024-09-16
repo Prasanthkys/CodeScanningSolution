@@ -114,53 +114,20 @@ jobs:
             "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
           echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
 
-      - name: Upload CSV Report to Salesforce
-        if: success()
-        run: |
-          if [ -s encoded_report.txt ]; then
-            contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
-              -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
-              -H "Content-Type: application/json" \
-              -d '{
-                "Title": "'"${{ env.FILE_TITLE }}"'",
-                "PathOnClient": "scanner-report.csv",
-                "VersionData": "'"$(cat encoded_report.txt)"'"
-              }')
-            echo "Response: $contentDocumentResponse"
-            
-            contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
-            if [ -z "$contentVersionId" ]; then
-              echo "Error: Failed to upload file. No ContentVersionId found."
-              exit 1
-            fi
-            echo "ContentVersionId: $contentVersionId"
-            
-            contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
-              -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
-            echo "ContentDocument Response: $contentDocumentResponse"
-            
-            contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
-            if [ -z "$contentDocumentId" ]; then
-              echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
-              exit 1
-            fi
-            echo "ContentDocumentId: $contentDocumentId"
-          else
-            echo "No scanner report generated, skipping upload."
-          fi
-        env:
-          SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
-        shell: bash
-
-      - name: Send Email with actions-send-mail
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: 'smtp.gmail.com'
-          server_port: '587'
-          username: ${{ secrets.GMAIL_EMAIL }}
-          password: ${{ secrets.GMAIL_APP_PASSWORD }}
-          from: ${{ secrets.GMAIL_EMAIL }}
-          subject: 'SFDX Code Scan Delta Report'
-          body: 'Please find the attached SFDX Code Scan Delta Report.'
-          to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
-          attachments: scanner-report.csv
+          - name: Send Email with actions-send-mail
+          uses: dawidd6/action-send-mail@v3
+          with:
+            server_address: 'smtp.gmail.com'
+            server_port: '587'
+            username: ${{ secrets.GMAIL_EMAIL }}
+            password: ${{ secrets.GMAIL_APP_PASSWORD }}
+            from: ${{ secrets.GMAIL_EMAIL }}
+            subject: 'SFDX Code Scan Delta Report'
+            body: |
+              <p>The SFDX Code Scan Delta Report has been generated.</p>
+              <p>Status: ${{ env.QUALITY_GATE_STATUS }}</p>
+              <p>Click below to take action:</p>
+              <a href="https://api.github.com/repos/${{ github.repository }}/dispatches" target="_blank" onclick="fetch('https://api.github.com/repos/${{ github.repository }}/dispatches', {method: 'POST', headers: {'Accept': 'application/vnd.github.v3+json', 'Authorization': 'token ${{ secrets.GIT_TOKEN }}'}, body: JSON.stringify({event_type: 'accept', client_payload: {branch: '${{ env.BRANCH_NAME }}'}})});">Accept</a>
+              <a href="https://api.github.com/repos/${{ github.repository }}/dispatches" target="_blank" onclick="fetch('https://api.github.com/repos/${{ github.repository }}/dispatches', {method: 'POST', headers: {'Accept': 'application/vnd.github.v3+json', 'Authorization': 'token ${{ secrets.GIT_TOKEN }}'}, body: JSON.stringify({event_type: 'reject', client_payload: {branch: '${{ env.BRANCH_NAME }}'}})});">Reject</a>
+            to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
+            attachments: scanner-report.csv        

@@ -3,5 +3,7 @@ public with sharing class Sampleclass {
             System.debug('Sample Class');
             System.debug('Sample');
             System.debug('Sample Class');
+
+            System.debug('Class');
     }
 }
