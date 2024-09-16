@@ -99,57 +99,51 @@ jobs:
           FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
 
-      - name: Upload Scanner Report as Artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ env.FILE_TITLE }}
-          path: scanner-report.csv
-
-      - name: Get Pusher's Email
-        id: get-pusher-email
-        run: |
+          - name: Get Pusher's Email
+          id: get-pusher-email
+          run: |
             COMMIT_SHA=${{ github.sha }}
             REPO=${{ github.repository }}
             PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
               "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
             echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
         
-            - name: Send Email with actions-send-mail
-            uses: dawidd6/action-send-mail@v3
-            with:
-              server_address: 'smtp.gmail.com'
-              server_port: '587'
-              username: ${{ secrets.GMAIL_EMAIL }}
-              password: ${{ secrets.GMAIL_APP_PASSWORD }}
-              from: ${{ secrets.GMAIL_EMAIL }}
-              subject: 'SFDX Code Scan Delta Report'
-              body: |
-                <html>
-                <body>
-                  <p>The SFDX Code Scan Delta Report has been generated.</p>
-                  <p>Status: ${{ env.QUALITY_GATE_STATUS }}</p>
-                  <p>Click below to take action:</p>
-                  <p>
-                    <a href="https://api.github.com/repos/${{ github.repository }}/dispatches" 
-                       style="background-color: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;" 
-                       target="_blank" 
-                       onclick="event.preventDefault(); fetch('https://api.github.com/repos/${{ github.repository }}/dispatches', { 
-                         method: 'POST', 
-                         headers: { 'Accept': 'application/vnd.github.v3+json', 'Authorization': 'token ${{ secrets.GIT_TOKEN }}' }, 
-                         body: JSON.stringify({ event_type: 'accept' }) 
-                       });">Accept</a>
-                  </p>
-                  <p>
-                    <a href="https://api.github.com/repos/${{ github.repository }}/dispatches" 
-                       style="background-color: #dc3545; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;" 
-                       target="_blank" 
-                       onclick="event.preventDefault(); fetch('https://api.github.com/repos/${{ github.repository }}/dispatches', { 
-                         method: 'POST', 
-                         headers: { 'Accept': 'application/vnd.github.v3+json', 'Authorization': 'token ${{ secrets.GIT_TOKEN }}' }, 
-                         body: JSON.stringify({ event_type: 'reject' }) 
-                       });">Reject</a>
-                  </p>
-                </body>
-                </html>
-              to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
-              attachments: scanner-report.csv          
+      - name: Send Email with actions-send-mail
+        uses: dawidd6/action-send-mail@v3
+        with:
+            server_address: 'smtp.gmail.com'
+            server_port: '587'
+            username: ${{ secrets.GMAIL_EMAIL }}
+            password: ${{ secrets.GMAIL_APP_PASSWORD }}
+            from: ${{ secrets.GMAIL_EMAIL }}
+            subject: 'SFDX Code Scan Delta Report'
+            body: |
+              <html>
+              <body>
+                <p>The SFDX Code Scan Delta Report has been generated.</p>
+                <p>Status: ${{ env.QUALITY_GATE_STATUS }}</p>
+                <p>Click below to take action:</p>
+                <p>
+                  <a href="https://api.github.com/repos/${{ github.repository }}/dispatches" 
+                     style="background-color: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;" 
+                     target="_blank" 
+                     onclick="event.preventDefault(); fetch('https://api.github.com/repos/${{ github.repository }}/dispatches', { 
+                       method: 'POST', 
+                       headers: { 'Accept': 'application/vnd.github.v3+json', 'Authorization': 'token ${{ secrets.GIT_TOKEN }}' }, 
+                       body: JSON.stringify({ event_type: 'accept', client_payload: { branch: '${{ env.BRANCH_NAME }}' } }) 
+                     });">Accept</a>
+                </p>
+                <p>
+                  <a href="https://api.github.com/repos/${{ github.repository }}/dispatches" 
+                     style="background-color: #dc3545; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;" 
+                     target="_blank" 
+                     onclick="event.preventDefault(); fetch('https://api.github.com/repos/${{ github.repository }}/dispatches', { 
+                       method: 'POST', 
+                       headers: { 'Accept': 'application/vnd.github.v3+json', 'Authorization': 'token ${{ secrets.GIT_TOKEN }}' }, 
+                       body: JSON.stringify({ event_type: 'reject', client_payload: { branch: '${{ env.BRANCH_NAME }}' } }) 
+                     });">Reject</a>
+                </p>
+              </body>
+              </html>
+            to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
+            attachments: scanner-report.csv

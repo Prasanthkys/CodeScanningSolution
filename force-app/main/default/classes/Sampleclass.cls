@@ -1,14 +1,8 @@
 public with sharing class Sampleclass {
     public Sampleclass() {
-            System.debug('Sample Class');
-            System.debug('Sample');
-            System.debug('Sample Class');
-            System.debug('Class');
-            System.debug('Sample-Class');
-            System.debug('Class');
-            System.debug('Sample');
-            System.debug('Sample Class');
-            System.debug('Class');
-
+            System.debug('Sample class constructor');
+    }
+    public static void Test(){
+        System.debug('Sample method');
     }
 }
