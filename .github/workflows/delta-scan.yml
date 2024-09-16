@@ -156,6 +156,7 @@ jobs:
         id: construct_email_body
         run: |
           QUALITY_GATE_STATUS=${{ env.QUALITY_GATE_STATUS }}
+          PUSHER_EMAIL=${{ env.PUSHER_EMAIL }}
           
           cat <<EOF > email_body.html
           <html>
@@ -165,14 +166,14 @@ jobs:
             <p><strong>Quality Gate Status:</strong> $QUALITY_GATE_STATUS</p>
             <p>Please find the attached SFDX Code Scan Delta Report.</p>
             <p>
-              <a href="mailto:${{ env.PUSHER_EMAIL }}?subject=ACCEPT%20the%20Report" style="padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">ACCEPT</a>
-              <a href="mailto:${{ env.PUSHER_EMAIL }}?subject=REJECT%20the%20Report" style="padding: 10px 20px; background-color: #f44336; color: white; text-decoration: none; border-radius: 5px;">REJECT</a>
+              <a href="mailto:${PUSHER_EMAIL}?subject=ACCEPT%20the%20Report" style="padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">ACCEPT</a>
+              <a href="mailto:${PUSHER_EMAIL}?subject=REJECT%20the%20Report" style="padding: 10px 20px; background-color: #f44336; color: white; text-decoration: none; border-radius: 5px;">REJECT</a>
             </p>
             <p>Best regards,<br>Your CI/CD System</p>
           </body>
           </html>
           EOF
-          
+
       - name: Send Email with actions-send-mail
         uses: dawidd6/action-send-mail@v3
         with:
@@ -182,6 +183,6 @@ jobs:
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
           from: ${{ secrets.GMAIL_EMAIL }}
           subject: 'SFDX Code Scan Delta Report'
-          body: ${{ steps.construct_email_body.outputs.body }}
+          body: ${{ steps.construct_email_body.outputs.email_body }}
           to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
           attachments: scanner-report.csv

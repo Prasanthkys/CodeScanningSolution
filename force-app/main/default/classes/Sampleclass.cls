@@ -9,4 +9,7 @@ public with sharing class Sampleclass {
     public static void Test1(){
         System.debug('Sample method2');
     }
+    public static void Test2(){
+        System.debug('Sample method3');
+    }
 }
