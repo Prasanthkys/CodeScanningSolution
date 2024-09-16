@@ -12,4 +12,7 @@ public with sharing class Sampleclass {
     public static void Test2(){
         System.debug('Sample method3');
     }
+    public static void Test3(){
+        System.debug('Sample method4');
+    }
 }
