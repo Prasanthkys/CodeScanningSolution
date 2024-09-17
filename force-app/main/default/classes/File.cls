@@ -7,9 +7,6 @@ public with sharing class File {
             WHERE Title LIKE 'Scanner Report%' 
             ORDER BY CreatedDate DESC
         ];
-        System.debug('getAllScannerReportFiles');
-        System.debug('getAllScannerReport');
-
         List<Map<String, String>> files = new List<Map<String, String>>();
         for (ContentVersion cv : contentVersions) {
             Map<String, String> fileData = new Map<String, String>();
@@ -324,6 +321,7 @@ public static Map<String, Integer> getSeverityCounts(Id fileId) {
             }
         }
     }
+    System.debug('severitycounts');
 
     return severityCounts;
 }

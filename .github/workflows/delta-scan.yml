@@ -23,7 +23,7 @@ jobs:
           npm install
           npm install @salesforce/cli --global
           npm install @salesforce/sfdx-scanner
-          npm install @lwc/eslint-plugin --save-dev # Ensure the required ESLint plugin is installed
+          npm install eslint-plugin-lwc --save-dev # Replace with the correct plugin if needed
 
       - name: Verify Node.js and NPM
         run: |
@@ -202,4 +202,6 @@ jobs:
             </body>
             </html>
           to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
-          attachments: scanner-report.csv, eslint-report.json
+          attachments: |
+            scanner-report.csv
+            eslint-report.json
