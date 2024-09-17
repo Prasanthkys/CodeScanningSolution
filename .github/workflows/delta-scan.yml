@@ -18,11 +18,16 @@ jobs:
         with:
           node-version: 20.x
 
-      - name: Install CLI
-        run: npm install @salesforce/cli --global
+      - name: Install Dependencies
+        run: |
+          npm install
+          npm install @salesforce/cli --global
+          npm install @salesforce/sfdx-scanner
 
-      - name: Install Scanner Plugin
-        run: sf plugins install @salesforce/sfdx-scanner
+      - name: Verify Node.js and NPM
+        run: |
+          node --version
+          npm --version
 
       - name: Verify SFDX CLI Installation
         run: sf --version
@@ -30,7 +35,21 @@ jobs:
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
 
-      - name: Get changed files
+      - name: Run ESLint
+        id: eslint
+        run: |
+          echo "Running ESLint..."
+          npx eslint . --ext .js,.ts,.html --output-file eslint-report.json || true
+          cat eslint-report.json
+        continue-on-error: true
+
+      - name: Run TypeScript Compiler
+        id: tsc
+        run: |
+          echo "Running TypeScript Compiler..."
+          npx tsc --noEmit --pretty || true
+
+      - name: Get Changed Files
         id: get-changes
         run: |
           git fetch --unshallow || true
@@ -48,7 +67,7 @@ jobs:
           files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
           echo "Files to scan: $files"
           if [ -n "$files" ]; then
-            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
+            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" --ruleset "config/pmd/ruleset.xml" || { echo "Scanner run failed"; exit 1; }
           else
             echo "No relevant files changed."
             touch scanner-report.csv
@@ -58,7 +77,7 @@ jobs:
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
 
-      - name: Encode CSV file to Base64
+      - name: Encode CSV File to Base64
         if: success()
         id: encode_file
         run: |
@@ -104,6 +123,13 @@ jobs:
         with:
           name: ${{ env.FILE_TITLE }}
           path: scanner-report.csv
+
+      - name: Upload ESLint Report as Artifact
+        if: success()
+        uses: actions/upload-artifact@v3
+        with:
+          name: eslint-report
+          path: eslint-report.json
 
       - name: Get Pusher's Email
         id: get-pusher-email
@@ -167,7 +193,7 @@ jobs:
               <p>Dear Team,</p>
               <p>The SFDX Code Scan Delta Report has been generated. Please review the details below:</p>
               <p><strong>Quality Gate Status:</strong> ${{ env.QUALITY_GATE_STATUS }}</p>
-              <p>Please find the attached SFDX Code Scan Delta Report.</p>
+              <p>Please find the attached SFDX Code Scan Delta Report and ESLint Report.</p>
               <p>
                 <a href="mailto:${{ env.PUSHER_EMAIL }}?subject=ACCEPT%20the%20Report" style="padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">ACCEPT</a>
                 <a href="mailto:${{ env.PUSHER_EMAIL }}?subject=REJECT%20the%20Report" style="padding: 10px 20px; background-color: #f44336; color: white; text-decoration: none; border-radius: 5px;">REJECT</a>
@@ -176,4 +202,4 @@ jobs:
             </body>
             </html>
           to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
-          attachments: scanner-report.csv
+          attachments: scanner-report.csv, eslint-report.json

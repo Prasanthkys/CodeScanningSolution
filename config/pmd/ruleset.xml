@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<ruleset name="OpinionatedSalesforce" xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+
+    <!-- Rulesets for general code quality and best practices -->
+    <description>
+        This ruleset contains rules to check for common vulnerabilities, code smells, and best practices in Apex code.
+    </description>
+
+    <!-- Basic rules for code quality -->
+    <rule ref="rulesets/apex/basic.xml"/>
+    <rule ref="rulesets/apex/unusedcode.xml"/>
+    <rule ref="rulesets/apex/design.xml"/>
+
+    <!-- Security-related rules -->
+    <rule ref="rulesets/apex/security.xml">
+        <description>
+            Rules to detect potential security vulnerabilities in Apex code.
+        </description>
+    </rule>
+
+    <!-- Custom rules for specific patterns or practices -->
+    <rule name="AvoidDebugStatements" message="Avoid using debug statements in production code." class="net.sourceforge.pmd.lang.apex.rule.security.AvoidDebugStatements"/>
+    <rule name="AvoidHardcodedPasswords" message="Avoid hardcoding passwords or sensitive information in the code." class="net.sourceforge.pmd.lang.apex.rule.security.AvoidHardcodedPasswords"/>
+
+    <!-- Specific rules for Apex -->
+    <rule ref="rulesets/apex/performance.xml"/>
+    <rule ref="rulesets/apex/bestpractices.xml"/>
+    
+    <!-- You can add additional rules or exclude specific rules as needed -->
+</ruleset>

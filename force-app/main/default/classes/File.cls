@@ -7,6 +7,7 @@ public with sharing class File {
             WHERE Title LIKE 'Scanner Report%' 
             ORDER BY CreatedDate DESC
         ];
+        System.debug('getAllScannerReportFiles');
 
         List<Map<String, String>> files = new List<Map<String, String>>();
         for (ContentVersion cv : contentVersions) {

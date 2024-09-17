@@ -1,0 +1,31 @@
+{
+    "compilerOptions": {
+      "target": "es2017",
+      "module": "esnext",
+      "moduleResolution": "node",
+      "experimentalDecorators": true,
+      "emitDecoratorMetadata": true,
+      "lib": ["es2017", "dom"],
+      "outDir": "./dist",
+      "sourceMap": true,
+      "skipLibCheck": true,
+      "strict": true,
+      "baseUrl": ".",
+      "paths": {
+        "c/*": ["*"]
+      }
+    },
+    "include": [
+      "**/*",
+      "../../../../.sfdx/typings/lwc/**/*.d.ts"
+    ],
+    "exclude": [
+      "node_modules",
+      "dist"
+    ],
+    "typeAcquisition": {
+      "include": [
+        "jest"
+      ]
+    }
+  }  
