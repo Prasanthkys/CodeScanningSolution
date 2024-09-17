@@ -8,6 +8,7 @@ public with sharing class File {
             ORDER BY CreatedDate DESC
         ];
         System.debug('getAllScannerReportFiles');
+        System.debug('getAllScannerReport');
 
         List<Map<String, String>> files = new List<Map<String, String>>();
         for (ContentVersion cv : contentVersions) {

@@ -23,6 +23,7 @@ jobs:
           npm install
           npm install @salesforce/cli --global
           npm install @salesforce/sfdx-scanner
+          npm install @lwc/eslint-plugin --save-dev # Ensure the required ESLint plugin is installed
 
       - name: Verify Node.js and NPM
         run: |
@@ -40,8 +41,7 @@ jobs:
         run: |
           echo "Running ESLint..."
           npx eslint . --ext .js,.ts,.html --output-file eslint-report.json || true
-          cat eslint-report.json
-        continue-on-error: true
+          cat eslint-report.json || true # Ensure the file is created even if ESLint has warnings/errors
 
       - name: Run TypeScript Compiler
         id: tsc
