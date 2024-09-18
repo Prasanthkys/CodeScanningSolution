@@ -28,6 +28,8 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     String csvContent = file.VersionData.toString();  // Convert Blob to String
     System.debug('Original CSV Content: ' + csvContent);
     
+
+    System.debug('Hello World');
     List<String> foundLines = new List<String>();
     List<String> lines = csvContent.split('\n');
     
