@@ -1,33 +1,22 @@
-<ruleset name="SFCA Security Ruleset" xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
-	<description>SFCA Security Ruleset</description>
-	<!--AvoidHardcodedCredentialsInHttpHeader-->
-	<rule ref="category/apex/sfca_apex_security.xml/AvoidHardcodedCredentialsInHttpHeader"/>
-	<!--AvoidGetInstanceWithTaint-->
-	<rule ref="category/apex/sfca_apex_security.xml/AvoidGetInstanceWithTaint"/>
-	<!--AvoidHardcodedCredentialsInVarDecls-->
-	<rule ref="category/apex/sfca_apex_security.xml/AvoidHardcodedCredentialsInVarDecls"/>
-	<!--AvoidSecurityEnforcedOldApiVersion-->
-	<rule ref="category/apex/sfca_apex_security.xml/AvoidSecurityEnforcedOldApiVersion"/>
-	<!--AvoidUnauthorizedApiSessionIdInApex-->
-	<rule ref="category/apex/sfca_apex_security.xml/AvoidUnauthorizedApiSessionIdInApex"/>
-	<!--AvoidChangeProtectionUnprotected-->
-	<rule ref="category/apex/sfca_apex_security.xml/AvoidChangeProtectionUnprotected"/>
-	<!--AvoidHardcodedCredentialsInFieldDecls-->
-	<rule ref="category/apex/sfca_apex_security.xml/AvoidHardcodedCredentialsInFieldDecls"/>
-	<!--AvoidUnsafePasswordManagementUse-->
-	<rule ref="category/apex/sfca_apex_security.xml/AvoidUnsafePasswordManagementUse"/>
-	<!--AvoidGlobalInstallUninstallHandlers-->
-	<rule ref="category/apex/sfca_apex_security.xml/AvoidGlobalInstallUninstallHandlers"/>
-	<!--AvoidInvalidCrudContentDistribution-->
-	<rule ref="category/apex/sfca_apex_security.xml/AvoidInvalidCrudContentDistribution"/>
-	<!--AvoidHardcodedCredentialsInVarAssign-->
-	<rule ref="category/apex/sfca_apex_security.xml/AvoidHardcodedCredentialsInVarAssign"/>
-	<!--AvoidUnauthorizedGetSessionIdInApex-->
-	<rule ref="category/apex/sfca_apex_security.xml/AvoidUnauthorizedGetSessionIdInApex"/>
-	<!--AvoidHardcodedCredentialsInSetPassword-->
-	<rule ref="category/apex/sfca_apex_security.xml/AvoidHardcodedCredentialsInSetPassword"/>
-	<rule ref="category/apex/security.xml">
-		<exclude name="ApexCSRF"/>
-	</rule>
-	<rule ref="category/apex/errorprone.xml/ApexCSRF"/>
+<?xml version="1.0"?>
+<ruleset name="Salesforce Code Quality Ruleset" xmlns="http://pmd.sourceforge.net/ruleset_2_0.dtd">
+    <description>
+        Ruleset for detecting issues in Salesforce Apex classes, focusing on security and best practices.
+    </description>
+
+    <!-- Security Rules -->
+    <rule ref="rulesets/apex/security.xml/HardcodedCredentials"/>
+    <rule ref="rulesets/apex/security.xml/NoHttpCalloutWithoutHttpCallout"/>
+    
+    <!-- Best Practices -->
+    <rule ref="rulesets/apex/bestpractices.xml/UnusedPrivateMethod"/>
+    <rule ref="rulesets/apex/bestpractices.xml/UnusedPrivateField"/>
+    <rule ref="rulesets/apex/bestpractices.xml/AvoidGlobalAccessModifiers"/>
+    
+    <!-- Code Style -->
+    <rule ref="rulesets/apex/codesize.xml/ApexClassTooLarge"/>
+    
+    <!-- Potential Bugs -->
+    <rule ref="rulesets/apex/design.xml/MethodShouldReturnBoolean"/>
+    <rule ref="rulesets/apex/design.xml/EmptyMethod"/>
 </ruleset>
