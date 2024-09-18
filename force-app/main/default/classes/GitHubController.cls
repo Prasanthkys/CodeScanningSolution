@@ -10,6 +10,7 @@ public with sharing class GitHubController {
         req.setMethod('GET');
         req.setHeader('Authorization', 'Bearer ' + ACCESS_TOKEN);
         req.setHeader('Accept', 'application/vnd.github.v3+json');
+        System.debug('TOKEN');
         
         Http http = new Http();
         HttpResponse res = http.send(req);
