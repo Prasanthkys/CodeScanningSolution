@@ -70,7 +70,7 @@ jobs:
 
             echo "Using ruleset:"
             cat force-app/main/default/pmd/ruleset.xml
-            # sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" --ruleset "force-app/main/default/pmd/ruleset.xml" || { echo "Scanner run failed"; exit 1; }
+            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" --ruleset "force-app/main/default/pmd/ruleset.xml" || { echo "Scanner run failed"; exit 1; }
             #Debugging data of output file
             echo "Scanner report contents:"
             cat scanner-report.csv
