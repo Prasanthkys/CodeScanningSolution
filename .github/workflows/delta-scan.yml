@@ -72,7 +72,7 @@ jobs:
             cat force-app/main/default/pmd/ruleset.xml
             # sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" --ruleset "config/pmd/ruleset.xml" || { echo "Scanner run failed"; exit 1; }
             # sf scanner:run --target "$files" --category "force-app/main/default/pmd/ruleset.xml" --format "csv" --outfile "scanner-report.csv" --verbose || { echo "Scanner run failed"; exit 1; }
-            sf scanner run --target 'force-app/main/default/classes/GitHubController.cls' --category 'security'  --format "csv" --outfile "scanner-report.csv"
+            sf scanner run --target 'force-app/main/default/classes/GitHubController.cls' --format "csv" --outfile "scanner-report.csv"
             #Debugging data of output file
             echo "Scanner report contents:"
             cat scanner-report.csv
