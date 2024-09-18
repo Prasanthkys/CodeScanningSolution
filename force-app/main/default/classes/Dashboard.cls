@@ -5,6 +5,8 @@ public with sharing class Dashboard {
         Date startDate;
         Date endDate;
 
+        System.debug('Dashboard class');
+
         if (filter == 'daily') {
             startDate = today;
             endDate = today;
