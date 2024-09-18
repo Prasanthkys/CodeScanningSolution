@@ -67,6 +67,9 @@ jobs:
           files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
           echo "Files to scan: $files"
           if [ -n "$files" ]; then
+
+            echo "Using ruleset:"
+            cat force-app/main/default/pmd/ruleset.xml
             # sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" --ruleset "config/pmd/ruleset.xml" || { echo "Scanner run failed"; exit 1; }
             sf scanner:run --target "$files" --category "force-app/main/default/pmd/ruleset.xml" --format "csv" --outfile "scanner-report.csv" --verbose || { echo "Scanner run failed"; exit 1; }
             #Debugging data of output file
