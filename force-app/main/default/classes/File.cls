@@ -9,6 +9,7 @@ public with sharing class File {
         ];
 
         System.debug('Scanner Report');
+        System.debug('Scanner Sample debug statement');
         List<Map<String, String>> files = new List<Map<String, String>>();
         for (ContentVersion cv : contentVersions) {
             Map<String, String> fileData = new Map<String, String>();
