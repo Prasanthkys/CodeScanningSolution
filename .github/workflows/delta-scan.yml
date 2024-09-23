@@ -59,10 +59,12 @@ jobs:
           fi
           cat changed_files.txt
 
-      - name: Run PMD Static Code Analysis
-        uses: pmd/pmd-github-action@v2
-        with:
-          rulesets: 'force-app/main/default/pmd/ruleset.xml' # Update the path to your custom ruleset
+          - name: Run PMD Static Code Analysis
+          uses: pmd/pmd-github-action@v2
+          with:
+            rulesets: 'force-app/main/default/pmd/ruleset.xml' 
+            debug: true # Enable debug output
+  
 
       - name: Run SFDX Scanner on Changed Files
         if: success()
