@@ -5,6 +5,7 @@ public with sharing class BenchConsultant {
         Map<String, Date> dateRange = getDateRange(filter, selectedValue, customStartDate, customEndDate);
         Date startDate = dateRange.get('startDate');
         Date endDate = dateRange.get('endDate');
+        System.debug('Bench Consultant');
         
         system.debug('Start Date: ' + startDate + ', End Date: ' + endDate);
 
