@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Enable debugging to trace each command
+set -x
+
 # Get the list of changed Apex (.cls) or LWC files
 changed_files=$(git diff --cached --name-only | grep -E '\.cls$|\.lwc$')
 
@@ -34,6 +37,13 @@ else
 
   # Automatically commit changes (assumes commit message is provided as argument)
   git commit -m "Committing changes after successful scan"
+
+  # Check if we are on the Dev3Mnr branch
+  current_branch=$(git rev-parse --abbrev-ref HEAD)
+  if [ "$current_branch" != "Dev3Mnr" ]; then
+    echo "Not on Dev3Mnr branch. Switching to Dev3Mnr..."
+    git checkout Dev3Mnr
+  fi
 
   # Automatically push changes to Dev3Mnr branch
   echo "Pushing to Dev3Mnr branch..."
