@@ -37,16 +37,35 @@ else
 
   # Automatically commit changes (assumes commit message is provided as argument)
   git commit -m "Committing changes after successful scan"
+  
+  # Check for commit success
+  if [ $? -ne 0 ]; then
+    echo "Commit failed. Exiting."
+    exit 1
+  fi
 
   # Check if we are on the Dev3Mnr branch
   current_branch=$(git rev-parse --abbrev-ref HEAD)
   if [ "$current_branch" != "Dev3Mnr" ]; then
     echo "Not on Dev3Mnr branch. Switching to Dev3Mnr..."
     git checkout Dev3Mnr
+    if [ $? -ne 0 ]; then
+      echo "Failed to switch to Dev3Mnr branch. Exiting."
+      exit 1
+    fi
   fi
 
   # Automatically push changes to Dev3Mnr branch
   echo "Pushing to Dev3Mnr branch..."
   git push origin Dev3Mnr
+  
+  # Check if push was successful
+  if [ $? -ne 0 ]; then
+    echo "Git push failed. Exiting."
+    exit 1
+  else
+    echo "Git push successful."
+  fi
+
   exit 0
 fi
