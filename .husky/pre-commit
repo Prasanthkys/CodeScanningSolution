@@ -1,71 +1,37 @@
 #!/bin/bash
-
-# Enable debugging to trace each command
-set -x
-
+ 
 # Get the list of changed Apex (.cls) or LWC files
 changed_files=$(git diff --cached --name-only | grep -E '\.cls$|\.lwc$')
-
+ 
 # Check if there are any relevant changes
 if [ -z "$changed_files" ]; then
   echo "No relevant changes to scan."
   exit 0
 fi
-
-# Run the SFDX scanner on the changed files
+ 
+# Run the SFDX scanner on the changed files (wrap changed_files in double quotes)
 sf scanner:run --target "$changed_files" --format "json" --outfile "precommit-scanner-report.json"
-
+ 
 # Check if the JSON report exists
 if [ ! -f "precommit-scanner-report.json" ]; then
   echo "Scanner report not found. Please check the scanner command."
   exit 1
 fi
-
-# Manually parse the JSON and check for severity 3 issues
+ 
+# Manually parse the JSON and check for severity 3 issues within violations array
 severity_fail_count=$(grep -oP '"severity":\s*3' precommit-scanner-report.json | wc -l)
-
+ 
 # Output the fail count for debugging
-echo "Severity Fail Count::::::"
+echo "Severity Fail Count:"
 echo "$severity_fail_count"
-
+ 
 # Block commit if there are severity 3 issues
 if [ "$severity_fail_count" -gt 0 ]; then
   echo "Blocking your commit due to vulnerabilities found with severity 3."
+  # Display the report for the user
+  # cat precommit-scanner-report.json
   exit 1
 else
   echo "No vulnerabilities found. Proceeding with commit."
-
-  # Automatically commit changes
-  git commit -m "Committing changes after successful scan"
-  
-  # Check if the commit was successful
-  if [ $? -ne 0 ]; then
-    echo "Commit failed. Exiting."
-    exit 1
-  fi
-
-  # Check if we are on the Dev3Mnr branch
-  current_branch=$(git rev-parse --abbrev-ref HEAD)
-  if [ "$current_branch" != "Dev3Mnr" ]; then
-    echo "Not on Dev3Mnr branch. Switching to Dev3Mnr..."
-    git checkout Dev3Mnr
-    if [ $? -ne 0 ]; then
-      echo "Failed to switch to Dev3Mnr branch. Exiting."
-      exit 1
-    fi
-  fi
-
-  # Push the changes to the Dev3Mnr branch with verbose output
-  echo "Pushing to Dev3Mnr branch..."
-  git push origin Dev3Mnr --verbose
-  
-  # Check if push was successful
-  if [ $? -ne 0 ]; then
-    echo "Git push failed. Exiting."
-    exit 1
-  else
-    echo "Git push successful."
-  fi
-
   exit 0
 fi
