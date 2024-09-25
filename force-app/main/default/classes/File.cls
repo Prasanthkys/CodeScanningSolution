@@ -28,7 +28,7 @@ public static String getCSVFileContent(Id fileId, String categorySearch, String 
     System.debug('Original CSV Content: ' + csvContent);
     
 
-    System.debug('Hello World');
+    System.debug('Hello');
     List<String> foundLines = new List<String>();
     List<String> lines = csvContent.split('\n');
     
