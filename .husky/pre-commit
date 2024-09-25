@@ -12,7 +12,7 @@ if [ -z "$changed_files" ]; then
   exit 0
 fi
 
-# Run the SFDX scanner on the changed files (wrap changed_files in double quotes)
+# Run the SFDX scanner on the changed files
 sf scanner:run --target "$changed_files" --format "json" --outfile "precommit-scanner-report.json"
 
 # Check if the JSON report exists
@@ -21,7 +21,7 @@ if [ ! -f "precommit-scanner-report.json" ]; then
   exit 1
 fi
 
-# Manually parse the JSON and check for severity 3 issues within violations array
+# Manually parse the JSON and check for severity 3 issues
 severity_fail_count=$(grep -oP '"severity":\s*3' precommit-scanner-report.json | wc -l)
 
 # Output the fail count for debugging
@@ -35,7 +35,7 @@ if [ "$severity_fail_count" -gt 0 ]; then
 else
   echo "No vulnerabilities found. Proceeding with commit."
 
-  # Automatically commit changes (assuming commit message is provided as argument)
+  # Automatically commit changes
   git commit -m "Committing changes after successful scan"
   
   # Check if the commit was successful
@@ -55,9 +55,9 @@ else
     fi
   fi
 
-  # Automatically push changes to Dev3Mnr branch
+  # Push the changes to the Dev3Mnr branch with verbose output
   echo "Pushing to Dev3Mnr branch..."
-  git push origin Dev3Mnr
+  git push origin Dev3Mnr --verbose
   
   # Check if push was successful
   if [ $? -ne 0 ]; then
