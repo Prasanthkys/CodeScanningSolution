@@ -34,6 +34,6 @@ else
   
   # Automatically run git push if the scan is successful
   echo "Running git push..."
-  git push
+  git push origin Dev3Mnr
   exit 0
 fi
