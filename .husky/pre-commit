@@ -31,9 +31,12 @@ if [ "$severity_fail_count" -gt 0 ]; then
   exit 1
 else
   echo "No vulnerabilities found. Proceeding with commit."
-  
-  # Automatically run git push if the scan is successful
-  echo "Running git push..."
+
+  # Automatically commit changes (assumes commit message is provided as argument)
+  git commit -m "Committing changes after successful scan"
+
+  # Automatically push changes to Dev3Mnr branch
+  echo "Pushing to Dev3Mnr branch..."
   git push origin Dev3Mnr
   exit 0
 fi
