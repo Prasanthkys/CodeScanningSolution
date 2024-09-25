@@ -35,10 +35,10 @@ if [ "$severity_fail_count" -gt 0 ]; then
 else
   echo "No vulnerabilities found. Proceeding with commit."
 
-  # Automatically commit changes (assumes commit message is provided as argument)
+  # Automatically commit changes (assuming commit message is provided as argument)
   git commit -m "Committing changes after successful scan"
   
-  # Check for commit success
+  # Check if the commit was successful
   if [ $? -ne 0 ]; then
     echo "Commit failed. Exiting."
     exit 1
