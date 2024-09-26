@@ -90,7 +90,7 @@ jobs:
       # Step 11: Parse the CSV file and check if there are violations
       - name: Check for Violations
         run: |
-          if grep -q 'High|Critical' temp_workspace/scanner-report.json; then
+          if grep -q '"severity":\s*3' temp_workspace/scanner-report.json; then
             echo "Code violations found, blocking the commit."
             exit 1
           else
