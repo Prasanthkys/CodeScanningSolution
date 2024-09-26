@@ -87,14 +87,14 @@ jobs:
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
  
-      # Step 11: Parse the CSV file and check if there are violations
+     # Step 11: Parse the JSON report and check if there are violations
       - name: Check for Violations
         run: |
-          if grep -q '"severity":\s*3' temp_workspace/scanner-report.json; then
-            echo "Code violations found, blocking the commit."
-            exit 1
+          if jq -e '.[] | select(.severity == 3)' temp_workspace/scanner-report.json > /dev/null; then
+            echo "Severity 3 code violations found, blocking the commit."
+            exit 1  # This will halt the workflow and prevent the commit
           else
-            echo "No high or critical code violations found."
+            echo "No severity 3 code violations found."
           fi
  
       # Step 12: Encode CSV report to Base64
