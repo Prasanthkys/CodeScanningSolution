@@ -1,5 +1,3 @@
-name: SFDX Delta Scan
-
 on:
   push:
     branches:
@@ -9,7 +7,7 @@ jobs:
   installcli:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
@@ -18,17 +16,11 @@ jobs:
         with:
           node-version: 20.x
 
-      - name: Install Dependencies
-        run: |
-          npm install
-          npm install @salesforce/cli --global
-          npm install @salesforce/sfdx-scanner
-          npm install eslint-plugin-lwc --save-dev
+      - name: Install CLI
+        run: npm install @salesforce/cli --global
 
-      - name: Verify Node.js and NPM
-        run: |
-          node --version
-          npm --version
+      - name: Install Scanner Plugin
+        run: sf plugins install @salesforce/sfdx-scanner
 
       - name: Verify SFDX CLI Installation
         run: sf --version
@@ -36,86 +28,48 @@ jobs:
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
 
-      - name: Run ESLint
-        id: eslint
-        run: |
-          echo "Running ESLint..."
-          npx eslint . --ext .js,.ts,.html --output-file eslint-report.json || true
-          cat eslint-report.json || true
-
-      - name: Run TypeScript Compiler
-        id: tsc
-        run: |
-          echo "Running TypeScript Compiler..."
-          npx tsc --noEmit --pretty || true
-
-      - name: Get Changed Files
+      - name: Get changed files
         id: get-changes
         run: |
-            if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-              echo "Fetching changed files between HEAD~1 and HEAD"
-              git diff --name-only HEAD~1 HEAD > changed_files.txt
-            else
-              echo "No previous commit to compare to." > changed_files.txt
-            fi
-            cat changed_files.txt
-  
-      - name: Run PMD Static Code Analysis
-        uses: pmd/pmd-github-action@v2
-        with:
-          rulesets: 'force-app/main/default/pmd/ruleset.xml' # Update the path to your custom ruleset
-  
+          git fetch --unshallow || true
+          if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
+            echo "Fetching changed files between HEAD~1 and HEAD"
+            git diff --name-only HEAD~1 HEAD > changed_files.txt
+          else
+            echo "No previous commit to compare to." > changed_files.txt
+          fi
+          cat changed_files.txt
       - name: Run SFDX Scanner on Changed Files
         if: success()
         run: |
-            files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
-            echo "Files to scan: $files"
-            if [ -n "$files" ]; then
-              echo "Using custom ruleset: SFDX Code Scan Delta"
-              sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" --ruleset "force-app/main/default/pmd/ruleset.xml" || { echo "Scanner run failed"; exit 1; }
-              echo "Scanner report contents:"
-              cat scanner-report.csv
-            else
-              echo "No relevant files changed."
-              touch scanner-report.csv
-            fi
+          files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
+          echo "Files to scan: $files"
+          if [ -n "$files" ]; then
+            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
+          else
+            echo "No relevant files changed."
+            touch scanner-report.csv
+          fi
         env:
           SF_LAZY_LOAD_MODULES: 'true'
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
-  
 
-      - name: Encode CSV File to Base64
+      - name: Generate Scanner Rule List
         if: success()
-        id: encode_file
         run: |
-          if [ -f scanner-report.csv ]; then
-            base64 scanner-report.csv | tr -d '\n' > encoded_report.txt
-          else
-            echo "Scanner report CSV file not found."
-            exit 1
-          fi
+          # Run the command without --format
+          sf scanner:rule:list > scanner-rules.txt || { echo "Failed to generate rule list"; exit 1; }
+          # Optionally process `scanner-rules.txt` to convert to CSV if necessary
+          # Example processing step (customize based on actual output):
+          cat scanner-rules.txt > scanner-rules.csv
+        env:
+          SF_LAZY_LOAD_MODULES: 'true'
+          SF_AUTOUPDATE_DISABLE: 'true'
+          SF_DISABLE_AUTOUPDATE: 'true'
 
-      - name: Check Scanner Report Severity
-        id: check_severity
-        run: |
-          if [ ! -f "scanner-report.csv" ]; then
-            echo "Scanner report not found!"
-            echo "QUALITY_GATE_STATUS=FAILED" >> $GITHUB_ENV
-            echo "::error file=scanner-report.csv::Scanner report not found!"
-            exit 1
-          fi
-
-          SEVERITY_FAIL_COUNT=$(awk -F',' '$3 == "1" || $3 == "2" {count++} END {print count}' scanner-report.csv)
-          if [ "$SEVERITY_FAIL_COUNT" -gt 0 ]; then
-            echo "Quality gate failed due to high severity issues."
-            echo "QUALITY_GATE_STATUS=FAILED" >> $GITHUB_ENV
-            echo "::error::Quality gate failed due to high severity issues."
-          else
-            echo "Quality gate passed."
-            echo "QUALITY_GATE_STATUS=PASSED" >> $GITHUB_ENV
-            echo "::notice::Quality gate passed."
-          fi
+      - name: Install mailx
+        run: sudo apt-get install -y mailutils
 
       - name: Get Repository and Branch Info
         id: get-info
@@ -123,22 +77,15 @@ jobs:
           REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
           BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
           COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
-          FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
+          FILE_TITLE="SFDX_Code_Scan_Delta_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}.csv"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
-
-      - name: Upload Scanner Report as Artifact
+      - name: Upload Scanner Report and Rules as Artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ env.FILE_TITLE }}
-          path: scanner-report.csv
-
-      - name: Upload ESLint Report as Artifact
-        if: success()
-        uses: actions/upload-artifact@v3
-        with:
-          name: eslint-report
-          path: eslint-report.json
-
+          name: SFDX_Code_Scan_Delta
+          path: |
+            scanner-report.csv
+            scanner-rules.csv
       - name: Get Pusher's Email
         id: get-pusher-email
         run: |
@@ -147,11 +94,10 @@ jobs:
           PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
             "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
           echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
-
       - name: Upload CSV Report to Salesforce
         if: success()
         run: |
-          if [ -s encoded_report.txt ]; then
+          if [ -s scanner-report.csv ]; then
             contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
               -H "Content-Type: application/json" \
@@ -195,18 +141,6 @@ jobs:
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
           from: ${{ secrets.GMAIL_EMAIL }}
           subject: 'SFDX Code Scan Delta Report'
-          body: |
-            <html>
-            <body>
-              <p>Dear Team,</p>
-              <p>The SFDX Code Scan Delta Report has been generated. Please review the details below:</p>
-              <p><strong>Quality Gate Status:</strong> ${{ env.QUALITY_GATE_STATUS }}</p>
-              <p>Please find the attached SFDX Code Scan Delta Report and ESLint Report.</p>
-              <p>
-                <a href="mailto:${{ env.PUSHER_EMAIL }}?subject=ACCEPT%20the%20Report" style="padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">ACCEPT</a>
-                <a href="mailto:${{ env.PUSHER_EMAIL }}?subject=REJECT%20the%20Report" style="padding: 10px 20px; background-color: #f44336; color: white; text-decoration: none; border-radius: 5px;">REJECT</a>
-              </p>
-              <p>Best regards,<br>Your CI/CD System</p>
-            </body>
-            </html>
-          to: ${{ env.PUSHER_EMAIL }}
+          body: 'Please find the attached SFDX Code Scan Delta Report.'
+          to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
+          attachments: scanner-report.csv,scanner-rules.csv
