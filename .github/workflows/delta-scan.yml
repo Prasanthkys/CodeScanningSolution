@@ -97,28 +97,33 @@ jobs:
 
       - name: Encode CSV report to base64
         run: |
-          if [ -s scanner-report.csv ]; then
-            base64 scanner-report.csv > encoded_report.txt
-          else
-            echo "No scanner report found."
-            exit 1
-          fi
-
-  
+            if [ -s scanner-report.csv ]; then
+              base64 scanner-report.csv > encoded_report.txt
+            else
+              echo "No scanner report found."
+              exit 1
+            fi
+        
       - name: Upload CSV Report to Salesforce
         if: success()
         run: |
-            if [ -s scanner-report.csv ]; then
+            if [ -s encoded_report.txt ]; then
+              # Read the base64 content from the file and escape special characters for JSON
+              ENCODED_DATA=$(cat encoded_report.txt | tr -d '\n')
+              
+              # Upload the encoded report to Salesforce
               contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
                 -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
                 -H "Content-Type: application/json" \
                 -d '{
                   "Title": "'"${{ env.FILE_TITLE }}"'",
                   "PathOnClient": "scanner-report.csv",
-                  "VersionData": "'"$(cat encoded_report.txt)"'"
+                  "VersionData": "'"$ENCODED_DATA"'"
                 }')
+                
               echo "Response: $contentDocumentResponse"
               
+              # Extract the ContentVersionId from the response
               contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
               if [ -z "$contentVersionId" ]; then
                 echo "Error: Failed to upload file. No ContentVersionId found."
@@ -126,6 +131,7 @@ jobs:
               fi
               echo "ContentVersionId: $contentVersionId"
               
+              # Get the ContentDocumentId
               contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
                 -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
               echo "ContentDocument Response: $contentDocumentResponse"
@@ -137,7 +143,7 @@ jobs:
               fi
               echo "ContentDocumentId: $contentDocumentId"
             else
-              echo "No scanner report generated, skipping upload."
+              echo "No encoded report found, skipping upload."
             fi
         env:
-          SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}  
+            SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}        
