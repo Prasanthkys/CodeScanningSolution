@@ -37,5 +37,8 @@
     "**/{aura,lwc}/**/*.js": [
       "eslint"
     ]
-  }
+  },
+  "scripts": {
+  "prepare": "husky install"
+}
 }
