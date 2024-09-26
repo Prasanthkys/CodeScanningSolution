@@ -90,13 +90,12 @@ jobs:
       # Step 11: Parse the CSV file and check if there are violations
       - name: Check for Violations
         run: |
-          if grep -q '"severity":\s*3' temp_workspace/scanner-report.json; then
-            echo "Severity 3 code violations found, blocking the commit."
+          if grep -q 'High|Critical' temp_workspace/scanner-report.json; then
+            echo "Code violations found, blocking the commit."
             exit 1
           else
-            echo "No severity 3 code violations found."
+            echo "No high or critical code violations found."
           fi
-    
  
       # Step 12: Encode CSV report to Base64
       - name: Encode CSV File to Base64

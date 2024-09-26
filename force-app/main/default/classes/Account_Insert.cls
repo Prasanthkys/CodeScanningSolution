@@ -17,7 +17,7 @@ public with sharing class AccountInsertClass {
                 if(Schema.sObjectType.Account.fields.Description.isUpdateable()){
                     System.debug('Hello World');
                     acc.Description = 'Happy Thursday';
-                    System.debug('Hello World');
+                    System.debug('Hello');
                 }
             }
             insert accList;
