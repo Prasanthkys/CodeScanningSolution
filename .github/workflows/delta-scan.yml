@@ -70,32 +70,47 @@ jobs:
             echo "No previous commit to compare to." > temp_workspace/changed_files.txt
           fi
           cat temp_workspace/changed_files.txt
- 
-      # Step 10: Run SFDX Scanner only on relevant changed files (.cls and .lwc files)
+        
+      # Step 9: Get list of changed files and stash the changes
+      - name: Stash Changes
+        run: |
+            git stash --include-untracked
+            git stash list
+
+          # Step 10: Run SFDX Scanner only on relevant changed files (.cls and .lwc files)
       - name: Run SFDX Scanner on Changed Files
         run: |
-          files=$(cat temp_workspace/changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
-          echo "Files to scan: $files"
-          if [ -n "$files" ]; then
-            sf scanner:run --target "$files" --format "json" --outfile "temp_workspace/scanner-report.json" || { echo "Scanner run failed"; exit 1; }
-          else
-            echo "No relevant files changed."
-            touch temp_workspace/scanner-report.json
-          fi
+            files=$(git stash show -p | grep -E '\.cls$|\.lwc$' || true)
+            echo "Files to scan: $files"
+            if [ -n "$files" ]; then
+              sf scanner:run --target "$files" --format "json" --outfile "temp_workspace/scanner-report.json" || { echo "Scanner run failed"; exit 1; }
+            else
+              echo "No relevant files changed."
+              touch temp_workspace/scanner-report.json
+            fi
         env:
-          SF_LAZY_LOAD_MODULES: 'true'
-          SF_AUTOUPDATE_DISABLE: 'true'
-          SF_DISABLE_AUTOUPDATE: 'true'
- 
-     # Step 11: Parse the JSON report and check if there are violations
+            SF_LAZY_LOAD_MODULES: 'true'
+            SF_AUTOUPDATE_DISABLE: 'true'
+            SF_DISABLE_AUTOUPDATE: 'true'
+
+          # Step 12: Parse the JSON report and check if there are violations
       - name: Check for Violations
         run: |
-          if jq -e '.[] | select(.severity == 3)' temp_workspace/scanner-report.json > /dev/null; then
-            echo "Severity 3 code violations found, blocking the commit."
-            exit 1  # This will halt the workflow and prevent the commit
-          else
-            echo "No severity 3 code violations found."
-          fi
+            if jq -e '.[] | select(.severity == 3)' temp_workspace/scanner-report.json > /dev/null; then
+              echo "Severity 3 code violations found, blocking the commit."
+              exit 1
+            else
+              echo "No severity 3 code violations found."
+            fi
+
+          # Step 13: If no violations, apply stashed changes and commit
+      - name: Apply Stashed Changes and Commit
+        if: success()
+        run: |
+            git stash pop
+            git add .
+            git commit -m "Code changes after successful scan"
+            git push
  
       # Step 12: Encode CSV report to Base64
       - name: Encode CSV File to Base64
