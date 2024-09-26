@@ -77,10 +77,10 @@ jobs:
           files=$(cat temp_workspace/changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
           echo "Files to scan: $files"
           if [ -n "$files" ]; then
-            sf scanner:run --target "$files" --format "csv" --outfile "temp_workspace/scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
+            sf scanner:run --target "$files" --format "json" --outfile "temp_workspace/scanner-report.json" || { echo "Scanner run failed"; exit 1; }
           else
             echo "No relevant files changed."
-            touch temp_workspace/scanner-report.csv
+            touch temp_workspace/scanner-report.json
           fi
         env:
           SF_LAZY_LOAD_MODULES: 'true'
@@ -90,7 +90,7 @@ jobs:
       # Step 11: Parse the CSV file and check if there are violations
       - name: Check for Violations
         run: |
-          if grep -q 'Severity,3' temp_workspace/scanner-report.csv; then
+          if grep -q '"severity":\s*3' temp_workspace/scanner-report.json; then
             echo "Severity 3 code violations found, blocking the commit."
             exit 1
           else
@@ -101,8 +101,8 @@ jobs:
       # Step 12: Encode CSV report to Base64
       - name: Encode CSV File to Base64
         run: |
-          if [ -f temp_workspace/scanner-report.csv ]; then
-            base64 temp_workspace/scanner-report.csv | tr -d '\n' > temp_workspace/encoded_report.txt
+          if [ -f temp_workspace/scanner-report.json ]; then
+            base64 temp_workspace/scanner-report.json | tr -d '\n' > temp_workspace/encoded_report.txt
           else
             echo "Scanner report CSV file not found."
             exit 1
@@ -127,7 +127,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: ${{ env.FILE_TITLE }}
-          path: temp_workspace/scanner-report.csv
+          path: temp_workspace/scanner-report.json
  
       # Step 16: Get Pusher's Email from GitHub API
       - name: Get Pusher's Email
@@ -149,7 +149,7 @@ jobs:
               -H "Content-Type: application/json" \
               -d '{
                 "Title": "'"${{ env.FILE_TITLE }}"'",
-                "PathOnClient": "scanner-report.csv",
+                "PathOnClient": "scanner-report.json",
                 "VersionData": "'"$(cat temp_workspace/encoded_report.txt)"'"
               }')
             echo "Response: $contentDocumentResponse"
@@ -187,4 +187,4 @@ jobs:
           subject: 'SFDX Code Scan Delta Report'
           body: 'Please find the attached SFDX Code Scan Delta Report.'
           to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
-          attachments: temp_workspace/scanner-report.csv
+          attachments: temp_workspace/scanner-report.json
