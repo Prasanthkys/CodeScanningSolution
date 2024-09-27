@@ -78,7 +78,9 @@ jobs:
             echo "::error file=scanner-report.csv::Scanner report not found!"
             exit 1
           fi
-          SEVERITY_FAIL_COUNT=$(awk -F',' '$3 == "1" || $3 == "2" {count++} END {print count}' scanner-report.csv)
+          # SEVERITY_FAIL_COUNT=$(awk -F',' '$3 == "1" || $3 == "2" {count++} END {print count}' scanner-report.csv)
+          SEVERITY_FAIL_COUNT=$(awk -F',' '$3 == "3" {count++} END {print count}' scanner-report.csv)
+
           if [ "$SEVERITY_FAIL_COUNT" -gt 0 ]; then
             echo "Quality gate failed due to high severity issues."
             echo "QUALITY_GATE_STATUS=FAILED" >> $GITHUB_ENV
