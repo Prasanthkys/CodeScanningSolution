@@ -98,9 +98,12 @@ jobs:
         
       - name: Revert changes if quality gate fails
         if: failure()  # If the quality gate failed
+        env:
+          GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
-          git reset --hard HEAD~1  # Reset the branch to remove the failed commit
-          git push --force origin HEAD  # Force push to remove the commit from the branch
+            git reset --hard HEAD~1  # Reset the branch to remove the failed commit
+            git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}".git HEAD  # Force push to remove the commit from the branch
+          
 
       - name: Get Repository and Branch Info
         id: get-info
