@@ -1,124 +1,94 @@
 name: SFDX Code Scan Delta
- 
+
 on:
   push:
     branches:
-      - main
       - '**'
- 
+
 jobs:
   installcli:
     runs-on: ubuntu-latest
- 
     steps:
-      # Step 1: Checkout the repository code
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
- 
-      # Step 2: Set up Node.js (required for Salesforce CLI)
-      - name: Set up Node.js
+
+      - name: Use Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20.x
- 
-      # Step 3: Install Salesforce CLI globally
-      - name: Install Salesforce CLI
-        run: npm install -g @salesforce/cli
- 
-      # Step 4: Configure npm for retry in case of failures
-      - name: Configure npm for retry
-        run: |
-          npm config set fetch-retry-mintimeout 20000
-          npm config set fetch-retry-maxtimeout 120000
- 
-      # Step 5: Retry installation of SFDX Scanner plugin (with retries in case of failure)
-      - name: Install SFDX Scanner Plugin with Retries
-        run: |
-          for i in {1..3}; do
-            echo "Attempt $i: Installing scanner plugin..."
-            if sf plugins install @salesforce/sfdx-scanner; then
-              echo "Plugin installed successfully."
-              break
-            else
-              echo "Attempt $i failed, retrying in 10 seconds..."
-              sleep 10
-            fi
-          done
- 
-      # Step 6: Verify Salesforce CLI installation
-      - name: Verify Salesforce CLI Installation
+
+      - name: Install CLI
+        run: npm install @salesforce/cli --global
+
+      - name: Install Scanner Plugin
+        run: sf plugins install @salesforce/sfdx-scanner
+
+      - name: Verify SFDX CLI Installation
         run: sf --version
- 
-      # Step 7: Verify the installation of SFDX Scanner plugin
-      - name: Verify SFDX Scanner Plugin
+
+      - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
- 
-      # Step 8: Create a temporary workspace directory
-      - name: Create Temporary Workspace
-        run: mkdir -p temp_workspace
- 
-      # Step 9: Get list of changed files
-      - name: Get Changed Files
+
+      - name: Get changed files
         id: get-changes
         run: |
           git fetch --unshallow || true
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files between HEAD~1 and HEAD"
-            git diff --name-only HEAD~1 HEAD > temp_workspace/changed_files.txt
+            git diff --name-only HEAD~1 HEAD > changed_files.txt
           else
-            echo "No previous commit to compare to." > temp_workspace/changed_files.txt
+            echo "No previous commit to compare to." > changed_files.txt
           fi
-          cat temp_workspace/changed_files.txt
+          cat changed_files.txt
 
-      # Step 10: Run SFDX Scanner only on relevant changed files (.cls and .lwc files)
       - name: Run SFDX Scanner on Changed Files
+        if: success()
         run: |
-          mkdir -p temp_workspace
-          files=$(cat temp_workspace/changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
+          files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
           echo "Files to scan: $files"
           if [ -n "$files" ]; then
-            sf scanner:run --target "$files" --format "json" --outfile "temp_workspace/scanner-report.json" || { echo "Scanner run failed"; exit 1; }
+            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
           else
             echo "No relevant files changed."
-            touch temp_workspace/scanner-report.json
+            touch scanner-report.csv
           fi
         env:
           SF_LAZY_LOAD_MODULES: 'true'
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
- 
-          # Step 11: Parse the JSON report and check if there are violations
-      - name: Check for Violations
-        run: |
-          if [ -f temp_workspace/scanner-report.json ]; then
-            # Using correct jq syntax to check for severity 3 violations
-            if jq -e '.[] | select(.severity == 3)' temp_workspace/scanner-report.json > /dev/null; then
-              echo "Severity 3 code violations found, blocking the commit."
-              exit 1  # This will halt the workflow and prevent the commit
-            else
-              echo "No severity 3 code violations found."
-            fi
-          else
-            echo "Scanner report not found. Skipping."
-          fi
 
-
-      # Step 12: Encode CSV report to Base64
-      - name: Encode CSV File to Base64
+      - name: Encode CSV file to Base64
+        if: success()
+        id: encode_file
         run: |
-          if [ -f temp_workspace/scanner-report.json ]; then
-            base64 temp_workspace/scanner-report.json | tr -d '\n' > temp_workspace/encoded_report.txt
+          if [ -f scanner-report.csv ]; then
+            base64 scanner-report.csv | tr -d '\n' > encoded_report.txt
           else
-            echo "Scanner report JSON file not found."
+            echo "Scanner report CSV file not found."
             exit 1
           fi
 
-      # Step 13: Install mailx for email notifications
-      - name: Install mailx
-        run: sudo apt-get install -y mailutils
- 
-      # Step 14: Gather repository, branch, and commit info
+      - name: Check Scanner Report Severity
+        id: check_severity
+        run: |
+          if [ ! -f "scanner-report.csv" ]; then
+            echo "Scanner report not found!"
+            echo "QUALITY_GATE_STATUS=FAILED" >> $GITHUB_ENV
+            echo "::error file=scanner-report.csv::Scanner report not found!"
+            exit 1
+          fi
+          SEVERITY_FAIL_COUNT=$(awk -F',' '$3 == "1" || $3 == "2" {count++} END {print count}' scanner-report.csv)
+          if [ "$SEVERITY_FAIL_COUNT" -gt 0 ]; then
+            echo "Quality gate failed due to high severity issues."
+            echo "QUALITY_GATE_STATUS=FAILED" >> $GITHUB_ENV
+            echo "::error::Quality gate failed due to high severity issues."
+          else
+            echo "Quality gate passed."
+            echo "QUALITY_GATE_STATUS=PASSED" >> $GITHUB_ENV
+            echo "::notice::Quality gate passed."
+          fi
+
       - name: Get Repository and Branch Info
         id: get-info
         run: |
@@ -127,15 +97,13 @@ jobs:
           COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
           FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
- 
-      # Step 15: Upload Scanner Report as GitHub Artifact
+
       - name: Upload Scanner Report as Artifact
         uses: actions/upload-artifact@v3
         with:
           name: ${{ env.FILE_TITLE }}
-          path: temp_workspace/scanner-report.json
- 
-      # Step 16: Get Pusher's Email from GitHub API
+          path: scanner-report.csv
+
       - name: Get Pusher's Email
         id: get-pusher-email
         run: |
@@ -144,30 +112,32 @@ jobs:
           PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
             "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
           echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
- 
-      # Step 17: Upload CSV Report to Salesforce
+
       - name: Upload CSV Report to Salesforce
         if: success()
         run: |
-          if [ -s temp_workspace/encoded_report.txt ]; then
-            contentDocumentResponse=$(curl -X POST https://aetna-c-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
+          if [ -s encoded_report.txt ]; then
+            contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
               -H "Content-Type: application/json" \
               -d '{
                 "Title": "'"${{ env.FILE_TITLE }}"'",
-                "PathOnClient": "scanner-report.json",
-                "VersionData": "'"$(cat temp_workspace/encoded_report.txt)"'"
+                "PathOnClient": "scanner-report.csv",
+                "VersionData": "'"$(cat encoded_report.txt)"'"
               }')
             echo "Response: $contentDocumentResponse"
+            
             contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
             if [ -z "$contentVersionId" ]; then
               echo "Error: Failed to upload file. No ContentVersionId found."
               exit 1
             fi
             echo "ContentVersionId: $contentVersionId"
-            contentDocumentResponse=$(curl -X GET https://aetna-c-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
+            
+            contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
             echo "ContentDocument Response: $contentDocumentResponse"
+            
             contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
             if [ -z "$contentDocumentId" ]; then
               echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
@@ -180,8 +150,7 @@ jobs:
         env:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
         shell: bash
- 
-      # Step 18: Send Email with Report
+
       - name: Send Email with actions-send-mail
         uses: dawidd6/action-send-mail@v3
         with:
@@ -193,4 +162,13 @@ jobs:
           subject: 'SFDX Code Scan Delta Report'
           body: 'Please find the attached SFDX Code Scan Delta Report.'
           to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
-          attachments: temp_workspace/scanner-report.json
+          attachments: scanner-report.csv
+
+      # Block the push if the quality gate failed
+      - name: Fail Push if Quality Gate Failed
+        if: env.QUALITY_GATE_STATUS == 'FAILED'
+        run: |
+          echo "QUALITY_GATE_STATUS is FAILED. Blocking the push."
+          # You can reset the changes here if you want to block the push
+          git reset --hard HEAD~1
+          exit 1
