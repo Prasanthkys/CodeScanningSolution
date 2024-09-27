@@ -51,4 +51,8 @@ public with sharing class AccountInsertClass {
             throw new CustomException('You do not have permission to create Opportunity records.');
         }
     }
+
+    public static void test(){
+        System.debug('Testing');
+    }
 }
