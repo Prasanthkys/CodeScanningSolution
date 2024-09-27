@@ -1,7 +1,13 @@
+name: SFDX Code Scan Delta
+
 on:
   push:
     branches:
       - '**'
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   installcli:
@@ -95,15 +101,15 @@ jobs:
               echo "QUALITY_GATE_STATUS=PASSED" >> $GITHUB_ENV
               echo "::notice::Quality gate passed."
             fi
-        
-      - name: Revert changes if quality gate fails
+
+      - name: Revert changes if quality gate fails and push to Dev3Mnr branch
         if: failure()  # If the quality gate failed
         env:
-          GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
-            git reset --hard HEAD~1  # Reset the branch to remove the failed commit
-            git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}".git HEAD  # Force push to remove the commit from the branch
-          
+          git reset --hard HEAD~1  # Reset the branch to remove the failed commit
+          git checkout -B Dev3Mnr  # Switch to Dev3Mnr branch or create if it doesn't exist
+          git push --force "https://x-access-token:${GIT_TOKEN}@github.com/${{ github.repository }}".git Dev3Mnr  # Push to Dev3Mnr branch
 
       - name: Get Repository and Branch Info
         id: get-info
