@@ -78,18 +78,23 @@ jobs:
             echo "::error file=scanner-report.csv::Scanner report not found!"
             exit 1
           fi
-          # SEVERITY_FAIL_COUNT=$(awk -F',' '$3 == "1" || $3 == "2" {count++} END {print count}' scanner-report.csv)
-          SEVERITY_FAIL_COUNT=$(awk -F',' '$3 == "3" {count++} END {print count}' scanner-report.csv)
-
+          SEVERITY_FAIL_COUNT=$(awk -F',' '$3 == "1" || $3 == "2" {count++} END {print count}' scanner-report.csv)
           if [ "$SEVERITY_FAIL_COUNT" -gt 0 ]; then
             echo "Quality gate failed due to high severity issues."
             echo "QUALITY_GATE_STATUS=FAILED" >> $GITHUB_ENV
             echo "::error::Quality gate failed due to high severity issues."
+            exit 1  # Fail the workflow and block the commit
           else
             echo "Quality gate passed."
             echo "QUALITY_GATE_STATUS=PASSED" >> $GITHUB_ENV
             echo "::notice::Quality gate passed."
           fi
+
+      - name: Revert changes if quality gate fails
+        if: failure()  # If the quality gate failed
+        run: |
+          git reset --hard HEAD~1  # Reset the branch to remove the failed commit
+          git push --force origin HEAD  # Force push to remove the commit from the branch
 
       - name: Get Repository and Branch Info
         id: get-info
@@ -116,7 +121,7 @@ jobs:
           echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
 
       - name: Upload CSV Report to Salesforce
-        if: success()
+        if: success() && env.QUALITY_GATE_STATUS == 'PASSED'  # Only upload if quality gate passed
         run: |
           if [ -s encoded_report.txt ]; then
             contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
@@ -155,6 +160,7 @@ jobs:
 
       - name: Send Email with actions-send-mail
         uses: dawidd6/action-send-mail@v3
+        if: env.QUALITY_GATE_STATUS == 'PASSED'  # Only send email if quality gate passed
         with:
           server_address: 'smtp.gmail.com'
           server_port: '587'
@@ -165,12 +171,3 @@ jobs:
           body: 'Please find the attached SFDX Code Scan Delta Report.'
           to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
           attachments: scanner-report.csv
-
-      # Block the push if the quality gate failed
-      - name: Fail Push if Quality Gate Failed
-        if: env.QUALITY_GATE_STATUS == 'FAILED'
-        run: |
-          echo "QUALITY_GATE_STATUS is FAILED. Blocking the push."
-          # You can reset the changes here if you want to block the push
-          git reset --hard HEAD~1
-          exit 1
