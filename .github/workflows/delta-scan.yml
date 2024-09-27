@@ -1,5 +1,3 @@
-name: SFDX Code Scan Delta
-
 on:
   push:
     branches:
@@ -78,7 +76,14 @@ jobs:
             echo "::error file=scanner-report.csv::Scanner report not found!"
             exit 1
           fi
-          SEVERITY_FAIL_COUNT=$(awk -F',' '$3 == "3"  {count++} END {print count}' scanner-report.csv)
+
+          echo "Checking scanner report content:"
+          cat scanner-report.csv  # Print CSV content to see what's inside
+          
+          SEVERITY_FAIL_COUNT=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "3") count++} END {print count}' scanner-report.csv)
+          SEVERITY_FAIL_COUNT=${SEVERITY_FAIL_COUNT:-0}  # Default to 0 if SEVERITY_FAIL_COUNT is empty
+          echo "Severity 3 Count: $SEVERITY_FAIL_COUNT"
+
           if [ "$SEVERITY_FAIL_COUNT" -gt 0 ]; then
             echo "Quality gate failed due to high severity issues."
             echo "QUALITY_GATE_STATUS=FAILED" >> $GITHUB_ENV
