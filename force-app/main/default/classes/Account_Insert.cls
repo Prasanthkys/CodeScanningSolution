@@ -19,6 +19,7 @@ public with sharing class AccountInsertClass {
                     acc.Description = 'Happy Thursday';
                 }
                 System.debug('Hello World');
+                System.debug('World');
             }
             insert accList;
         } else {

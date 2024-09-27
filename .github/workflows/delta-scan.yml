@@ -7,7 +7,7 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write  # Correct permissions for GitHub actions
+  pull-requests: write
 
 jobs:
   installcli:
@@ -107,8 +107,7 @@ jobs:
           GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
           git reset --hard HEAD~1  # Reset the branch to remove the failed commit
-          git pull origin Dev3Mnr --rebase  # Rebase to avoid conflict with remote changes
-          git push --force "https://x-access-token:${GIT_TOKEN}@github.com/${{ github.repository }}".git Dev3Mnr  # Push to Dev3Mnr branch
+          git push --force "https://x-access-token:${GIT_TOKEN}@github.com/${{ github.repository }}".git Dev3Mnr  # Force push to Dev3Mnr branch
 
       - name: Get Repository and Branch Info
         id: get-info
