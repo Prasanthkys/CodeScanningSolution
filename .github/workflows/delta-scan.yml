@@ -69,21 +69,31 @@ jobs:
       - name: Check Quality Gate
         id: check_severity
         run: |
-          if [ ! -f "scanner-report.csv" ]; then
-            echo "Scanner report not found!"
-            echo "QUALITY_GATE_STATUS=FAILED" >> $GITHUB_ENV
-            exit 1
-          fi
-          SEVERITY_FAIL_COUNT=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' scanner-report.csv)
-          SEVERITY_FAIL_COUNT=${SEVERITY_FAIL_COUNT:-0}
-          echo "Severity 3 Count: $SEVERITY_FAIL_COUNT"
-          if [ "$SEVERITY_FAIL_COUNT" -gt 0 ]; then
-            echo "Quality gate failed due to high severity issues."
-            echo "QUALITY_GATE_STATUS=FAILED" >> $GITHUB_ENV
-            exit 1
-          else
-            echo "Quality gate passed."
-            echo "QUALITY_GATE_STATUS=PASSED" >> $GITHUB_ENV
+            if [ ! -f "scanner-report.csv" ]; then
+              echo "Scanner report not found!"
+              echo "QUALITY_GATE_STATUS=FAILED" >> $GITHUB_ENV
+              exit 1
+            fi  # Closing the 'if' block
+        
+            echo "Checking scanner report content:"
+            cat scanner-report.csv  # Print CSV content to see what's inside
+            
+            # Update awk to account for double quotes around Severity values
+            SEVERITY_FAIL_COUNT=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' scanner-report.csv)
+            SEVERITY_FAIL_COUNT=${SEVERITY_FAIL_COUNT:-0}  # Default to 0 if SEVERITY_FAIL_COUNT is empty
+            echo "Severity 3 Count: $SEVERITY_FAIL_COUNT"
+        
+            if [ "$SEVERITY_FAIL_COUNT" -gt 0 ]; then
+              echo "Quality gate failed due to high severity issues."
+              echo "QUALITY_GATE_STATUS=FAILED" >> $GITHUB_ENV
+              echo "::error::Quality gate failed due to high severity issues."
+              exit 1  # Fail the workflow and block the commit
+            else
+              echo "Quality gate passed."
+              echo "QUALITY_GATE_STATUS=PASSED" >> $GITHUB_ENV
+              echo "::notice::Quality gate passed."
+            fi
+        
 
       - name: Push Changes to Original Branch if Quality Gate Passed
         if: success() && env.QUALITY_GATE_STATUS == 'PASSED'
