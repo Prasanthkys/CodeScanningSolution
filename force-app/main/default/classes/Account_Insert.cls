@@ -3,7 +3,6 @@
  * It performs necessary validation, including CRUD and FLS checks, before executing any DML operations.
  */
 public with sharing class AccountInsertClass {
- 
     /**
      * @description Inserts a list of Account records and updates their description.
      * Performs CRUD and FLS validation before insertion.
@@ -15,12 +14,13 @@ public with sharing class AccountInsertClass {
         if(Schema.sObjectType.Account.isCreateable()){
             for(Account acc : accList){
                 if(Schema.sObjectType.Account.fields.Description.isUpdateable()){
-                    acc.Description = 'Happy Thursday';
+                    acc.Description = 'Happy';
+                    acc.Rating = 'Hot';
+                    acc.Industry = 'Agriculture';
                 }
             }
             insert accList;
         } else {
-            System.debug('accList');
             throw new CustomException('You do not have permission to create Account records.');
         }
     }
@@ -42,7 +42,6 @@ public with sharing class AccountInsertClass {
                 opp.StageName = 'Prospecting';
                 opp.AccountId = acc.Id;
                 oppList.add(opp);
-                System.debug('Account Oppurtunity');
             }
             if(oppList.size() > 0){
                 insert oppList;
@@ -51,8 +50,23 @@ public with sharing class AccountInsertClass {
             throw new CustomException('You do not have permission to create Opportunity records.');
         }
     }
-
-    public static void test(){
-        System.debug('Testing');
+    /**
+     * @description Inserts a list of Account records and updates their description.
+     * Performs CRUD and FLS validation before insertion.
+     *
+     * @param accList The list of Account records to be inserted data.
+     * @throws CustomException If the user lacks permission to insert accounts.
+     */
+    public static void insertNewAccount(List<Account> accList){
+        if(Schema.sObjectType.Account.isCreateable()){
+            for(Account acc : accList){
+                if(Schema.sObjectType.Account.fields.Description.isUpdateable()){
+                    acc.Description = 'Happy Welcome Account';
+                }
+            }
+            insert accList;
+        } else {
+            throw new CustomException('You do not have permission to create Account records.');
+        }
     }
 }
