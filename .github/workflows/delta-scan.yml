@@ -45,14 +45,24 @@ jobs:
             echo "No previous commit to compare to." > changed_files.txt
           fi
           cat changed_files.txt
-
-      - name: Run SFDX Scanner on Changed Files
+ 
+      - name: Run SFDX Scanner on Each File Individually
         if: success()
         run: |
           files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
           echo "Files to scan: $files"
           if [ -n "$files" ]; then
-            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
+            for file in $files; do
+              # Extract just the filename without the full path to avoid directory issues
+              file_basename=$(basename "$file")
+              echo "Scanning file: $file"
+              # Scan the individual file and save the report with a safe filename
+              sf scanner:run --target "$file" --format "csv" --outfile "scanner-report-$file_basename.csv" || { echo "Scanner run failed"; exit 1; }
+            done
+            # Combine individual scanner reports into a single file
+            echo "Combining all scanner reports into one."
+            head -n 1 scanner-report-$(basename $(echo $files | cut -d' ' -f1)).csv > scanner-report.csv
+            tail -n +2 -q scanner-report-*.csv >> scanner-report.csv
           else
             echo "No relevant files changed."
             touch scanner-report.csv
@@ -61,7 +71,7 @@ jobs:
           SF_LAZY_LOAD_MODULES: 'true'
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
-
+ 
       - name: Encode CSV file to Base64
         if: success()
         id: encode_file
@@ -72,7 +82,6 @@ jobs:
             echo "Scanner report CSV file not found."
             exit 1
           fi
-
       - name: Check Scanner Report Severity
         id: check_severity
         run: |
