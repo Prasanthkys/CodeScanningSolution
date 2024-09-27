@@ -7,7 +7,7 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
+  pull-requests: write  # Correct permissions for GitHub actions
 
 jobs:
   installcli:
@@ -45,24 +45,14 @@ jobs:
             echo "No previous commit to compare to." > changed_files.txt
           fi
           cat changed_files.txt
- 
-      - name: Run SFDX Scanner on Each File Individually
+
+      - name: Run SFDX Scanner on Changed Files
         if: success()
         run: |
           files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
           echo "Files to scan: $files"
           if [ -n "$files" ]; then
-            for file in $files; do
-              # Extract just the filename without the full path to avoid directory issues
-              file_basename=$(basename "$file")
-              echo "Scanning file: $file"
-              # Scan the individual file and save the report with a safe filename
-              sf scanner:run --target "$file" --format "csv" --outfile "scanner-report-$file_basename.csv" || { echo "Scanner run failed"; exit 1; }
-            done
-            # Combine individual scanner reports into a single file
-            echo "Combining all scanner reports into one."
-            head -n 1 scanner-report-$(basename $(echo $files | cut -d' ' -f1)).csv > scanner-report.csv
-            tail -n +2 -q scanner-report-*.csv >> scanner-report.csv
+            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
           else
             echo "No relevant files changed."
             touch scanner-report.csv
@@ -71,7 +61,7 @@ jobs:
           SF_LAZY_LOAD_MODULES: 'true'
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
- 
+
       - name: Encode CSV file to Base64
         if: success()
         id: encode_file
@@ -82,6 +72,7 @@ jobs:
             echo "Scanner report CSV file not found."
             exit 1
           fi
+
       - name: Check Scanner Report Severity
         id: check_severity
         run: |
@@ -95,7 +86,6 @@ jobs:
             echo "Checking scanner report content:"
             cat scanner-report.csv  # Print CSV content to see what's inside
             
-            # Update awk to account for double quotes around Severity values
             SEVERITY_FAIL_COUNT=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' scanner-report.csv)
             SEVERITY_FAIL_COUNT=${SEVERITY_FAIL_COUNT:-0}  # Default to 0 if SEVERITY_FAIL_COUNT is empty
             echo "Severity 3 Count: $SEVERITY_FAIL_COUNT"
@@ -117,7 +107,7 @@ jobs:
           GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
           git reset --hard HEAD~1  # Reset the branch to remove the failed commit
-          git checkout -B Dev3Mnr  # Switch to Dev3Mnr branch or create if it doesn't exist
+          git pull origin Dev3Mnr --rebase  # Rebase to avoid conflict with remote changes
           git push --force "https://x-access-token:${GIT_TOKEN}@github.com/${{ github.repository }}".git Dev3Mnr  # Push to Dev3Mnr branch
 
       - name: Get Repository and Branch Info
