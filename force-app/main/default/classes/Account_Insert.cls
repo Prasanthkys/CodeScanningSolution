@@ -15,11 +15,8 @@ public with sharing class AccountInsertClass {
         if(Schema.sObjectType.Account.isCreateable()){
             for(Account acc : accList){
                 if(Schema.sObjectType.Account.fields.Description.isUpdateable()){
-                    System.debug('Hello');
                     acc.Description = 'Happy Thursday';
                 }
-                System.debug('Hello World');
-                System.debug('World');
             }
             insert accList;
         } else {
@@ -44,6 +41,7 @@ public with sharing class AccountInsertClass {
                 opp.StageName = 'Prospecting';
                 opp.AccountId = acc.Id;
                 oppList.add(opp);
+                System.debug('Account Oppurtunity');
             }
             if(oppList.size() > 0){
                 insert oppList;
