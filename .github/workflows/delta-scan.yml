@@ -1,3 +1,5 @@
+name: SFDX Code Scan Workflow
+
 on:
   push:
     branches:
@@ -7,7 +9,8 @@ jobs:
   installcli:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
@@ -16,23 +19,24 @@ jobs:
         with:
           node-version: 20.x
 
-      - name: Install CLI
+      - name: Install Salesforce CLI
         run: npm install @salesforce/cli --global
 
-      - name: Install Scanner Plugin
+      - name: Install SFDX Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
 
-      - name: Verify SFDX CLI Installation
+      - name: Verify Salesforce CLI Installation
         run: sf --version
 
-      - name: Verify SFDX Scanner Plugin Installation
+      - name: Verify Scanner Plugin Installation
         run: sf plugins --core
 
-      - name: Get changed files
+      - name: Get Changed Files
         id: get-changes
         run: |
           git fetch --unshallow || true
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
+            echo "Fetching changed files between HEAD~1 and HEAD"
             git diff --name-only HEAD~1 HEAD > changed_files.txt
           else
             echo "No previous commit to compare to." > changed_files.txt
@@ -45,42 +49,83 @@ jobs:
           files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
           echo "Files to scan: $files"
           if [ -n "$files" ]; then
-            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv"
+            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
           else
+            echo "No relevant files changed."
             touch scanner-report.csv
           fi
-        env:
-          SF_LAZY_LOAD_MODULES: 'true'
-          SF_AUTOUPDATE_DISABLE: 'true'
 
-      - name: Encode CSV file to Base64
+      - name: Encode CSV to Base64
         if: success()
         id: encode_file
         run: |
-          base64 scanner-report.csv | tr -d '\n' > encoded_report.txt
+          if [ -f scanner-report.csv ]; then
+            base64 scanner-report.csv | tr -d '\n' > encoded_report.txt
+          else
+            echo "Scanner report CSV file not found."
+            exit 1
+          fi
 
-      - name: Check Scanner Report Severity
+      - name: Check Quality Gate
         id: check_severity
         run: |
           if [ ! -f "scanner-report.csv" ]; then
+            echo "Scanner report not found!"
+            echo "QUALITY_GATE_STATUS=FAILED" >> $GITHUB_ENV
             exit 1
           fi
           SEVERITY_FAIL_COUNT=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' scanner-report.csv)
           SEVERITY_FAIL_COUNT=${SEVERITY_FAIL_COUNT:-0}
+          echo "Severity 3 Count: $SEVERITY_FAIL_COUNT"
           if [ "$SEVERITY_FAIL_COUNT" -gt 0 ]; then
-            echo "::error::Quality gate failed due to severity 3 issues."
+            echo "Quality gate failed due to high severity issues."
+            echo "QUALITY_GATE_STATUS=FAILED" >> $GITHUB_ENV
             exit 1
           else
             echo "Quality gate passed."
-          fi
+            echo "QUALITY_GATE_STATUS=PASSED" >> $GITHUB_ENV
 
-      - name: Push changes to GitHub if validation passes
-        if: success()
+      - name: Push Changes to Original Branch if Quality Gate Passed
+        if: success() && env.QUALITY_GATE_STATUS == 'PASSED'
         run: |
-          git config --global user.email "action@github.com"
-          git config --global user.name "GitHub Action"
-          git add .
-          git commit -m "Quality gate passed, pushing changes"
-          git push origin Dev3Mnr
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git push origin HEAD  # Push the changes only if quality gate passed
+
+      - name: Upload Scanner Report as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: Scanner Report
+          path: scanner-report.csv
+
+      - name: Get Pusher's Email
+        id: get-pusher-email
+        run: |
+          COMMIT_SHA=${{ github.sha }}
+          REPO=${{ github.repository }}
+          PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
+            "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
+          echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
+
+      - name: Upload Report to Salesforce
+        if: success() && env.QUALITY_GATE_STATUS == 'PASSED'
+        run: |
+          contentDocumentResponse=$(curl -X POST https://instance.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
+              -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d '{"Title": "Scanner Report", "PathOnClient": "scanner-report.csv", "VersionData": "$(cat encoded_report.txt)"}')
+          echo "Salesforce upload complete."
+
+      - name: Send Email Notification
+        uses: dawidd6/action-send-mail@v3
+        if: env.QUALITY_GATE_STATUS == 'PASSED'
+        with:
+          server_address: 'smtp.gmail.com'
+          server_port: '587'
+          username: ${{ secrets.GMAIL_EMAIL }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          from: ${{ secrets.GMAIL_EMAIL }}
+          subject: 'SFDX Code Scan Report'
+          body: 'SFDX Code Scan Delta Report passed quality gate.'
+          to: ${{ env.PUSHER_EMAIL }}
+          attachments: scanner-report.csv
