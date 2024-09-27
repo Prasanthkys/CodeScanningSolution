@@ -101,13 +101,13 @@ jobs:
               echo "::notice::Quality gate passed."
             fi
 
-      - name: Revert changes if quality gate fails and push only relevant files
+      - name: Revert changes if quality gate fails and push the reset commit
         if: failure()  # If the quality gate failed
         env:
           PAT_TOKEN: ${{ secrets.PAT_TOKEN }}  # Use the PAT token instead of GITHUB_TOKEN
         run: |
           git reset --hard HEAD~1  # Reset the branch to remove the failed commit
-          git push --force-with-lease "https://x-access-token:${PAT_TOKEN}@github.com/${{ github.repository }}".git Dev3Mnr -- `git ls-files | grep -v '.github/workflows'`  # Push only non-workflow files
+          git push --force "https://x-access-token:${PAT_TOKEN}@github.com/${{ github.repository }}".git Dev3Mnr  # Force push to Dev3Mnr branch
 
       - name: Debug Git Status and Logs (optional)
         if: failure()
