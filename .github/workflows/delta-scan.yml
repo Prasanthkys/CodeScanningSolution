@@ -104,6 +104,8 @@ jobs:
               echo "Scanner report not found!"
               echo "::set-output name=quality_gate_status::FAILED"
               echo "::error file=scanner-report.csv::Scanner report not found!"
+              echo "::notice::Quality gate passed."
+              echo $quality_gate_status
               exit 1
             fi
             echo "Checking scanner report content:"
@@ -114,10 +116,14 @@ jobs:
             if [ "$SEVERITY_FAIL_COUNT" -gt 0 ]; then
               echo "::set-output name=quality_gate_status::FAILED"
               echo "::error::Quality gate failed due to high severity issues."
+              echo "::notice::Quality gate passed."
+              echo $quality_gate_status
+
               exit 1
             else
               echo "::set-output name=quality_gate_status::PASSED"
               echo "::notice::Quality gate passed."
+              echo $quality_gate_status
 
   commit_and_push:
     runs-on: ubuntu-latest
