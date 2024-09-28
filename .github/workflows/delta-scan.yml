@@ -1,13 +1,7 @@
-name: SFDX Code Scan Delta
+name: SFDX Scan Code 
 
 on:
-  push:
-    branches:
-      - '**'
-
-permissions:
-  contents: write
-  pull-requests: write
+  workflow_dispatch:
 
 jobs:
   installcli:
@@ -86,6 +80,7 @@ jobs:
             echo "Checking scanner report content:"
             cat scanner-report.csv  # Print CSV content to see what's inside
             
+            # Update awk to account for double quotes around Severity values
             SEVERITY_FAIL_COUNT=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' scanner-report.csv)
             SEVERITY_FAIL_COUNT=${SEVERITY_FAIL_COUNT:-0}  # Default to 0 if SEVERITY_FAIL_COUNT is empty
             echo "Severity 3 Count: $SEVERITY_FAIL_COUNT"
@@ -100,22 +95,12 @@ jobs:
               echo "QUALITY_GATE_STATUS=PASSED" >> $GITHUB_ENV
               echo "::notice::Quality gate passed."
             fi
-
-      - name: Revert changes if quality gate fails and push the reset commit
+        
+      - name: Revert changes if quality gate fails
         if: failure()  # If the quality gate failed
-        env:
-          GIT_TOKEN: ${{ secrets.GIT_TOKEN }}  # Use GIT_TOKEN instead of PAT_TOKEN
         run: |
           git reset --hard HEAD~1  # Reset the branch to remove the failed commit
-          git push --force "https://x-access-token:${GIT_TOKEN}@github.com/${{ github.repository }}".git Dev3Mnr  # Force push to Dev3Mnr branch
-          
-
-      - name: Debug Git Status and Logs (optional)
-        if: failure()
-        run: |
-          git status
-          git log -1
-          git remote -v
+          git push --force origin HEAD  # Force push to remove the commit from the branch
 
       - name: Get Repository and Branch Info
         id: get-info
@@ -137,7 +122,7 @@ jobs:
         run: |
           COMMIT_SHA=${{ github.sha }}
           REPO=${{ github.repository }}
-          PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.PAT_TOKEN }}" \
+          PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
             "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
           echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
 
