@@ -3,7 +3,7 @@ name: SFDX Code Scan Delta with Temporary Workspace
 on:
   push:
     branches:
-      - '**'
+      - 'temp-branch'  # Temporary branch where changes are pushed initially
  
 permissions:
   contents: write
@@ -74,6 +74,8 @@ jobs:
   quality_gate:
     runs-on: ubuntu-latest
     needs: setup
+    outputs:
+      quality_gate_status: ${{ steps.check_severity.outputs.quality_gate_status }}  # Pass status to next job
     steps:
       - name: Download scanner report artifact
         uses: actions/download-artifact@v3
@@ -88,74 +90,42 @@ jobs:
           else
             echo "Scanner report CSV file not found."
             exit 1
-          fi
  
       - name: Check Scanner Report Severity
         id: check_severity
         run: |
             if [ ! -f "scanner-report.csv" ]; then
               echo "Scanner report not found!"
-              echo "QUALITY_GATE_STATUS=FAILED" >> $GITHUB_ENV
-              echo "::error file=scanner-report.csv::Scanner report not found!"
+              echo "::set-output name=quality_gate_status::FAILED"
               exit 1
             fi
             echo "Checking scanner report content:"
-            cat scanner-report.csv  # Print CSV content to see what's inside
+            cat scanner-report.csv
             SEVERITY_FAIL_COUNT=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' scanner-report.csv)
-            SEVERITY_FAIL_COUNT=${SEVERITY_FAIL_COUNT:-0}  # Default to 0 if SEVERITY_FAIL_COUNT is empty
-            echo "Severity 3 Count: $SEVERITY_FAIL_COUNT"
+            SEVERITY_FAIL_COUNT=${SEVERITY_FAIL_COUNT:-0}
             if [ "$SEVERITY_FAIL_COUNT" -gt 0 ]; then
               echo "Quality gate failed due to high severity issues."
-              echo "QUALITY_GATE_STATUS=FAILED" >> $GITHUB_ENV
-              echo "::error::Quality gate failed due to high severity issues."
-              exit 1  # Fail the workflow and block the commit
+              echo "::set-output name=quality_gate_status::FAILED"
+              exit 1
             else
               echo "Quality gate passed."
-              echo "QUALITY_GATE_STATUS=PASSED" >> $GITHUB_ENV
-              echo "::notice::Quality gate passed."
-            fi
- 
-      - name: Upload CSV Report to Salesforce
-        if: success() && env.QUALITY_GATE_STATUS == 'PASSED'  # Only upload if quality gate passed
-        run: |
-          if [ -s encoded_report.txt ]; then
-            contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
-              -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
-              -H "Content-Type: application/json" \
-              -d '{
-                "Title": "Code Scanner Delta Report",
-                "PathOnClient": "scanner-report.csv",
-                "VersionData": "'"$(cat encoded_report.txt)"'"
-              }')
-            echo "Response: $contentDocumentResponse"
-            contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
-            if [ -z "$contentVersionId" ]; then
-              echo "Error: Failed to upload file. No ContentVersionId found."
-              exit 1
-            fi
-            echo "ContentVersionId: $contentVersionId"
-          else
-            echo "No scanner report generated, skipping upload."
-          fi
-        env:
-          SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
-        shell: bash
+              echo "::set-output name=quality_gate_status::PASSED"
+        # The `set-output` command here properly sets the output for the job
  
   commit_and_push:
     runs-on: ubuntu-latest
     needs: quality_gate
-    if: ${{ needs.quality_gate.outputs.quality_gate_status == 'PASSED' }}
+    if: ${{ needs.quality_gate.outputs.quality_gate_status == 'PASSED' }}  # Only push if quality gate passed
     steps:
-      - name: Checkout code in temporary directory
+      - name: Checkout code
         uses: actions/checkout@v3
         with:
-          path: temp_workspace
           fetch-depth: 0
  
-      - name: Commit and push changes
+      - name: Merge temp branch to main branch
         run: |
-          cd temp_workspace
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Actions"
-          git commit -am "Committing changes after quality gate passed"
-          git push
+          git checkout Dev3Mnr  # Switch to main branch
+          git merge temp-branch  # Merge changes from temp branch to main
+          git push origin Dev3Mnr  # Push changes to main branch
