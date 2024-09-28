@@ -1,8 +1,14 @@
-name: SFDX Code Scanner
-
+name: SFDX Code Scan Delta
+ 
 on:
-  workflow_dispatch:
-
+  push:
+    branches:
+      - '**'
+ 
+permissions:
+  contents: write
+  pull-requests: write
+ 
 jobs:
   installcli:
     runs-on: ubuntu-latest
@@ -10,24 +16,24 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-
+ 
       - name: Use Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20.x
-
+ 
       - name: Install CLI
         run: npm install @salesforce/cli --global
-
+ 
       - name: Install Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
-
+ 
       - name: Verify SFDX CLI Installation
         run: sf --version
-
+ 
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
-
+ 
       - name: Get changed files
         id: get-changes
         run: |
@@ -39,7 +45,7 @@ jobs:
             echo "No previous commit to compare to." > changed_files.txt
           fi
           cat changed_files.txt
-
+ 
       - name: Run SFDX Scanner on Changed Files
         if: success()
         run: |
@@ -55,7 +61,7 @@ jobs:
           SF_LAZY_LOAD_MODULES: 'true'
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
-
+ 
       - name: Encode CSV file to Base64
         if: success()
         id: encode_file
@@ -66,7 +72,7 @@ jobs:
             echo "Scanner report CSV file not found."
             exit 1
           fi
-
+ 
       - name: Check Scanner Report Severity
         id: check_severity
         run: |
@@ -76,15 +82,14 @@ jobs:
               echo "::error file=scanner-report.csv::Scanner report not found!"
               exit 1
             fi
-        
+       
             echo "Checking scanner report content:"
             cat scanner-report.csv  # Print CSV content to see what's inside
-            
-            # Update awk to account for double quotes around Severity values
+           
             SEVERITY_FAIL_COUNT=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' scanner-report.csv)
             SEVERITY_FAIL_COUNT=${SEVERITY_FAIL_COUNT:-0}  # Default to 0 if SEVERITY_FAIL_COUNT is empty
             echo "Severity 3 Count: $SEVERITY_FAIL_COUNT"
-        
+       
             if [ "$SEVERITY_FAIL_COUNT" -gt 0 ]; then
               echo "Quality gate failed due to high severity issues."
               echo "QUALITY_GATE_STATUS=FAILED" >> $GITHUB_ENV
@@ -95,13 +100,22 @@ jobs:
               echo "QUALITY_GATE_STATUS=PASSED" >> $GITHUB_ENV
               echo "::notice::Quality gate passed."
             fi
-        
-      - name: Revert changes if quality gate fails
+ 
+      - name: Revert changes if quality gate fails and push the reset commit
         if: failure()  # If the quality gate failed
+        env:
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}  # Use the PAT token instead of GITHUB_TOKEN
         run: |
           git reset --hard HEAD~1  # Reset the branch to remove the failed commit
-          git push --force origin HEAD  # Force push to remove the commit from the branch
-
+          git push --force "https://x-access-token:${PAT_TOKEN}@github.com/${{ github.repository }}".git Dev3Mnr  # Force push to Dev3Mnr branch
+ 
+      - name: Debug Git Status and Logs (optional)
+        if: failure()
+        run: |
+          git status
+          git log -1
+          git remote -v
+ 
       - name: Get Repository and Branch Info
         id: get-info
         run: |
@@ -110,22 +124,22 @@ jobs:
           COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
           FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
-
+ 
       - name: Upload Scanner Report as Artifact
         uses: actions/upload-artifact@v3
         with:
           name: ${{ env.FILE_TITLE }}
           path: scanner-report.csv
-
+ 
       - name: Get Pusher's Email
         id: get-pusher-email
         run: |
           COMMIT_SHA=${{ github.sha }}
           REPO=${{ github.repository }}
-          PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
+          PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.PAT_TOKEN }}" \
             "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
           echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
-
+ 
       - name: Upload CSV Report to Salesforce
         if: success() && env.QUALITY_GATE_STATUS == 'PASSED'  # Only upload if quality gate passed
         run: |
@@ -139,18 +153,18 @@ jobs:
                 "VersionData": "'"$(cat encoded_report.txt)"'"
               }')
             echo "Response: $contentDocumentResponse"
-            
+           
             contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
             if [ -z "$contentVersionId" ]; then
               echo "Error: Failed to upload file. No ContentVersionId found."
               exit 1
             fi
             echo "ContentVersionId: $contentVersionId"
-            
+           
             contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
             echo "ContentDocument Response: $contentDocumentResponse"
-            
+           
             contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
             if [ -z "$contentDocumentId" ]; then
               echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
@@ -163,7 +177,7 @@ jobs:
         env:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
         shell: bash
-
+ 
       - name: Send Email with actions-send-mail
         uses: dawidd6/action-send-mail@v3
         if: env.QUALITY_GATE_STATUS == 'PASSED'  # Only send email if quality gate passed
