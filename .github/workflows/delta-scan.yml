@@ -95,7 +95,6 @@ jobs:
             echo "Scanner report CSV file not found."
             exit 1
           fi
-        
 
       - name: Check Scanner Report Severity
         id: check_severity
@@ -104,26 +103,22 @@ jobs:
               echo "Scanner report not found!"
               echo "::set-output name=quality_gate_status::FAILED"
               echo "::error file=scanner-report.csv::Scanner report not found!"
-              echo "::error::Quality gate failed due to high severity issues."
-              echo $quality_gate_status
               exit 1
             fi
+
             echo "Checking scanner report content:"
             cat scanner-report.csv
             SEVERITY_FAIL_COUNT=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' scanner-report.csv)
             SEVERITY_FAIL_COUNT=${SEVERITY_FAIL_COUNT:-0}
             echo "Severity 3 Count: $SEVERITY_FAIL_COUNT"
+
             if [ "$SEVERITY_FAIL_COUNT" -gt 0 ]; then
               echo "::set-output name=quality_gate_status::FAILED"
               echo "::error::Quality gate failed due to high severity issues."
-              echo "::error::Quality gate failed due to high severity issues."
-              echo $quality_gate_status
-
               exit 1
             else
               echo "::set-output name=quality_gate_status::PASSED"
               echo "::notice::Quality gate passed."
-              echo $quality_gate_status
 
   commit_and_push:
     runs-on: ubuntu-latest
