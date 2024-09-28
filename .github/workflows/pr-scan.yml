@@ -1,0 +1,46 @@
+on:
+    pull_request:
+      types: [opened, reopened, assigned]
+  
+jobs:
+    send_email:
+      runs-on: ubuntu-latest
+  
+      steps:
+        # Checkout the repository code
+        - name: Checkout code
+          uses: actions/checkout@v3
+  
+        # Send Email
+        - name: Send Email for PR Review
+          uses: dawidd6/action-send-mail@v3
+          with:
+            server_address: 'smtp.gmail.com'            # The SMTP server you're using (Gmail in this case)
+            server_port: '587'                          # SMTP port (Gmail's default)
+            username: ${{ secrets.GMAIL_EMAIL }}        # Your email address stored as a GitHub secret
+            password: ${{ secrets.GMAIL_APP_PASSWORD }} # App-specific password or your email password stored as a secret
+            subject: 'Pull Request Review Request'      # Subject of the email
+            body: 'A new PR has been assigned to you. Please review.'  # Email body content
+            from: ${{ secrets.GMAIL_EMAIL }}            # The email address you are sending from (this is required)
+            to: reviewer@example.com                    # Email recipient (or list of recipients)
+  
+    check_email_for_approval:
+      runs-on: ubuntu-latest
+      needs: send_email
+      steps:
+        - name: Check Email Inbox for Approval (Assumes external service sends event)
+          run: |
+            # Custom script that checks email responses
+            node check-email-response.js  # This script checks for 'Approved' in the email body
+  
+    approve_pr:
+      runs-on: ubuntu-latest
+      needs: check_email_for_approval
+      if: success()  # Only proceed if the approval was found in the email
+      steps:
+        - name: Approve Pull Request
+          run: |
+            curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews \
+            -d '{"event":"APPROVE"}'  
