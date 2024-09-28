@@ -2,9 +2,7 @@ name: Delta-Scan.yml
 
 
 on:
-  push:
-    branches:
-      - '**'
+  workflow_dispatch:
 
 jobs:
   installcli:
