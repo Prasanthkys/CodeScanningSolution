@@ -1,12 +1,14 @@
+name: SFDX Code Scan Delta with Temporary Workspace
+ 
 on:
   push:
     branches:
       - '**'
-
+ 
 permissions:
   contents: write
   pull-requests: write
-
+ 
 jobs:
   setup:
     runs-on: ubuntu-latest
@@ -15,30 +17,24 @@ jobs:
         uses: actions/checkout@v3
         with:
           path: temp_workspace
-
-      # Acquire lock before performing any actions in the workspace
-      - name: Acquire workspace lock
-        uses: softprops/turnstyle@v1
-        with:
-          poll-interval-seconds: 10
-
+ 
       - name: Use Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20.x
-
+ 
       - name: Install CLI
         run: npm install @salesforce/cli --global
-
+ 
       - name: Install Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
-
+ 
       - name: Verify SFDX CLI Installation
         run: sf --version
-
+ 
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
-
+ 
       - name: Get changed files in temporary workspace
         id: get-changes
         run: |
@@ -51,7 +47,7 @@ jobs:
             echo "No previous commit to compare to." > changed_files.txt
           fi
           cat changed_files.txt
-
+ 
       - name: Run SFDX Scanner on Changed Files
         if: success()
         run: |
@@ -68,24 +64,22 @@ jobs:
           SF_LAZY_LOAD_MODULES: 'true'
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
-
+ 
       - name: Save scanner report as an artifact for next steps
         uses: actions/upload-artifact@v3
         with:
           name: scanner-report
           path: temp_workspace/scanner-report.csv
-
+ 
   quality_gate:
     runs-on: ubuntu-latest
     needs: setup
-    outputs:
-      quality_gate_status: ${{ steps.check_severity.outputs.quality_gate_status }}
     steps:
       - name: Download scanner report artifact
         uses: actions/download-artifact@v3
         with:
           name: scanner-report
-
+ 
       - name: Encode CSV file to Base64
         id: encode_file
         run: |
@@ -95,31 +89,58 @@ jobs:
             echo "Scanner report CSV file not found."
             exit 1
           fi
-
+ 
       - name: Check Scanner Report Severity
         id: check_severity
         run: |
             if [ ! -f "scanner-report.csv" ]; then
               echo "Scanner report not found!"
-              echo "::set-output name=quality_gate_status::FAILED"
+              echo "QUALITY_GATE_STATUS=FAILED" >> $GITHUB_ENV
               echo "::error file=scanner-report.csv::Scanner report not found!"
               exit 1
             fi
-
             echo "Checking scanner report content:"
-            cat scanner-report.csv
+            cat scanner-report.csv  # Print CSV content to see what's inside
             SEVERITY_FAIL_COUNT=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' scanner-report.csv)
-            SEVERITY_FAIL_COUNT=${SEVERITY_FAIL_COUNT:-0}
+            SEVERITY_FAIL_COUNT=${SEVERITY_FAIL_COUNT:-0}  # Default to 0 if SEVERITY_FAIL_COUNT is empty
             echo "Severity 3 Count: $SEVERITY_FAIL_COUNT"
-
             if [ "$SEVERITY_FAIL_COUNT" -gt 0 ]; then
-              echo "::set-output name=quality_gate_status::FAILED"
+              echo "Quality gate failed due to high severity issues."
+              echo "QUALITY_GATE_STATUS=FAILED" >> $GITHUB_ENV
               echo "::error::Quality gate failed due to high severity issues."
-              exit 1
+              exit 1  # Fail the workflow and block the commit
             else
-              echo "::set-output name=quality_gate_status::PASSED"
+              echo "Quality gate passed."
+              echo "QUALITY_GATE_STATUS=PASSED" >> $GITHUB_ENV
               echo "::notice::Quality gate passed."
-
+            fi
+ 
+      - name: Upload CSV Report to Salesforce
+        if: success() && env.QUALITY_GATE_STATUS == 'PASSED'  # Only upload if quality gate passed
+        run: |
+          if [ -s encoded_report.txt ]; then
+            contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
+              -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "Title": "Code Scanner Delta Report",
+                "PathOnClient": "scanner-report.csv",
+                "VersionData": "'"$(cat encoded_report.txt)"'"
+              }')
+            echo "Response: $contentDocumentResponse"
+            contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
+            if [ -z "$contentVersionId" ]; then
+              echo "Error: Failed to upload file. No ContentVersionId found."
+              exit 1
+            fi
+            echo "ContentVersionId: $contentVersionId"
+          else
+            echo "No scanner report generated, skipping upload."
+          fi
+        env:
+          SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
+        shell: bash
+ 
   commit_and_push:
     runs-on: ubuntu-latest
     needs: quality_gate
@@ -130,7 +151,7 @@ jobs:
         with:
           path: temp_workspace
           fetch-depth: 0
-
+ 
       - name: Commit and push changes
         run: |
           cd temp_workspace
