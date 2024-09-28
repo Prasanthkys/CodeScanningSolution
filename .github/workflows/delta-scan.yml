@@ -1,9 +1,9 @@
-name: SFDX Code Scan Delta with Temporary Workspace
+name: SFDX Code Scan Delta with Virtual Branch
  
 on:
   push:
     branches:
-      - 'temp-branch'  # Temporary branch where changes are pushed initially
+      - '**'  # Capture all pushes
  
 permissions:
   contents: write
@@ -13,17 +13,18 @@ jobs:
   setup:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code into temporary directory
+      - name: Checkout code in detached state
         uses: actions/checkout@v3
         with:
-          path: temp_workspace
+          ref: ${{ github.ref }}  # Check out the original branch in detached state
+          fetch-depth: 0  # Fetch all history for proper diff calculations
  
       - name: Use Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20.x
  
-      - name: Install CLI
+      - name: Install Salesforce CLI
         run: npm install @salesforce/cli --global
  
       - name: Install Scanner Plugin
@@ -35,10 +36,9 @@ jobs:
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
  
-      - name: Get changed files in temporary workspace
+      - name: Get changed files
         id: get-changes
         run: |
-          cd temp_workspace
           git fetch --unshallow || true
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files between HEAD~1 and HEAD"
@@ -51,7 +51,6 @@ jobs:
       - name: Run SFDX Scanner on Changed Files
         if: success()
         run: |
-          cd temp_workspace
           files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
           echo "Files to scan: $files"
           if [ -n "$files" ]; then
@@ -69,38 +68,26 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: scanner-report
-          path: temp_workspace/scanner-report.csv
+          path: scanner-report.csv
  
   quality_gate:
     runs-on: ubuntu-latest
     needs: setup
     outputs:
-      quality_gate_status: ${{ steps.check_severity.outputs.quality_gate_status }}  # Pass status to next job
+      quality_gate_status: ${{ steps.check_severity.outputs.quality_gate_status }}
     steps:
       - name: Download scanner report artifact
         uses: actions/download-artifact@v3
         with:
           name: scanner-report
  
-      - name: Encode CSV file to Base64
-        id: encode_file
-        run: |
-          if [ -f scanner-report.csv ]; then
-            base64 scanner-report.csv | tr -d '\n' > encoded_report.txt
-          else
-            echo "Scanner report CSV file not found."
-            exit 1
- 
       - name: Check Scanner Report Severity
         id: check_severity
         run: |
             if [ ! -f "scanner-report.csv" ]; then
-              echo "Scanner report not found!"
               echo "::set-output name=quality_gate_status::FAILED"
               exit 1
             fi
-            echo "Checking scanner report content:"
-            cat scanner-report.csv
             SEVERITY_FAIL_COUNT=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' scanner-report.csv)
             SEVERITY_FAIL_COUNT=${SEVERITY_FAIL_COUNT:-0}
             if [ "$SEVERITY_FAIL_COUNT" -gt 0 ]; then
@@ -108,24 +95,22 @@ jobs:
               echo "::set-output name=quality_gate_status::FAILED"
               exit 1
             else
-              echo "Quality gate passed."
               echo "::set-output name=quality_gate_status::PASSED"
-        # The `set-output` command here properly sets the output for the job
  
   commit_and_push:
     runs-on: ubuntu-latest
     needs: quality_gate
-    if: ${{ needs.quality_gate.outputs.quality_gate_status == 'PASSED' }}  # Only push if quality gate passed
+    if: ${{ needs.quality_gate.outputs.quality_gate_status == 'PASSED' }}
     steps:
-      - name: Checkout code
+      - name: Checkout original branch
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0
+          ref: ${{ github.ref }}  # Checkout the original branch
  
-      - name: Merge temp branch to main branch
+      - name: Commit and push changes
         run: |
           git config --local user.email "actions@github.com"
           git config --local user.name "GitHub Actions"
-          git checkout Dev3Mnr  # Switch to main branch
-          git merge temp-branch  # Merge changes from temp branch to main
-          git push origin Dev3Mnr  # Push changes to branch branch
+          git add .
+          git commit -m "Committing changes after quality gate passed"
+          git push origin ${{ github.ref }}
