@@ -1,4 +1,4 @@
-name: SFDX Scan Code 
+name: SFDX Code Scanner
 
 on:
   workflow_dispatch:
