@@ -128,4 +128,4 @@ jobs:
           git config --local user.name "GitHub Actions"
           git checkout Dev3Mnr  # Switch to main branch
           git merge temp-branch  # Merge changes from temp branch to main
-          git push origin Dev3Mnr  # Push changes to main branch
+          git push origin Dev3Mnr  # Push changes to branch branch
