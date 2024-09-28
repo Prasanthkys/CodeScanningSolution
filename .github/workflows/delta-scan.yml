@@ -94,6 +94,8 @@ jobs:
           else
             echo "Scanner report CSV file not found."
             exit 1
+          fi
+        
 
       - name: Check Scanner Report Severity
         id: check_severity
