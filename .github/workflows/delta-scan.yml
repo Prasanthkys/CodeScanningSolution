@@ -1,31 +1,28 @@
-name: SFDX-Scan
-
+name: SFDX Code Scan Delta
 
 on:
   push:
     branches:
-      - '**'  # Capture all pushes
+      - '**'
 
 permissions:
   contents: write
   pull-requests: write
 
 jobs:
-  setup:
+  installcli:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code in detached state
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
         with:
-          ref: ${{ github.ref }}  # Check out the original branch in detached state
-          fetch-depth: 0  # Fetch all history for proper diff calculations
+          fetch-depth: 0
 
       - name: Use Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20.x
 
-      - name: Install Salesforce CLI
+      - name: Install CLI
         run: npm install @salesforce/cli --global
 
       - name: Install Scanner Plugin
@@ -65,53 +62,132 @@ jobs:
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
 
-      - name: Save scanner report as an artifact for next steps
-        uses: actions/upload-artifact@v3
-        with:
-          name: scanner-report
-          path: scanner-report.csv
-
-  quality_gate:
-    runs-on: ubuntu-latest
-    needs: setup
-    outputs:
-      quality_gate_status: ${{ steps.check_severity.outputs.quality_gate_status }}
-    steps:
-      - name: Download scanner report artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: scanner-report
+      - name: Encode CSV file to Base64
+        if: success()
+        id: encode_file
+        run: |
+          if [ -f scanner-report.csv ]; then
+            base64 scanner-report.csv | tr -d '\n' > encoded_report.txt
+          else
+            echo "Scanner report CSV file not found."
+            exit 1
+          fi
 
       - name: Check Scanner Report Severity
         id: check_severity
         run: |
             if [ ! -f "scanner-report.csv" ]; then
-              echo "::set-output name=quality_gate_status::FAILED"
+              echo "Scanner report not found!"
+              echo "QUALITY_GATE_STATUS=FAILED" >> $GITHUB_ENV
+              echo "::error file=scanner-report.csv::Scanner report not found!"
               exit 1
             fi
+        
+            echo "Checking scanner report content:"
+            cat scanner-report.csv  # Print CSV content to see what's inside
+            
             SEVERITY_FAIL_COUNT=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' scanner-report.csv)
-            SEVERITY_FAIL_COUNT=${SEVERITY_FAIL_COUNT:-0}
+            SEVERITY_FAIL_COUNT=${SEVERITY_FAIL_COUNT:-0}  # Default to 0 if SEVERITY_FAIL_COUNT is empty
+            echo "Severity 3 Count: $SEVERITY_FAIL_COUNT"
+        
             if [ "$SEVERITY_FAIL_COUNT" -gt 0 ]; then
               echo "Quality gate failed due to high severity issues."
-              echo "::set-output name=quality_gate_status::FAILED"
-              exit 1
+              echo "QUALITY_GATE_STATUS=FAILED" >> $GITHUB_ENV
+              echo "::error::Quality gate failed due to high severity issues."
+              exit 1  # Fail the workflow and block the commit
             else
-              echo "::set-output name=quality_gate_status::PASSED"
+              echo "Quality gate passed."
+              echo "QUALITY_GATE_STATUS=PASSED" >> $GITHUB_ENV
+              echo "::notice::Quality gate passed."
+            fi
 
-  commit_and_push:
-    runs-on: ubuntu-latest
-    needs: quality_gate
-    if: ${{ needs.quality_gate.outputs.quality_gate_status == 'PASSED' }}
-    steps:
-      - name: Checkout original branch
-        uses: actions/checkout@v3
-        with:
-          ref: ${{ github.ref }}  # Checkout the original branch
-
-      - name: Commit and push changes
+      - name: Revert changes if quality gate fails and push the reset commit
+        if: failure()  # If the quality gate failed
+        env:
+          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}  # Use the PAT token instead of GITHUB_TOKEN
         run: |
-          git config --local user.email "actions@github.com"
-          git config --local user.name "GitHub Actions"
-          git add .
-          git commit -m "Committing changes after quality gate passed"
-          git push origin ${{ github.ref }}
+          git reset --hard HEAD~1  # Reset the branch to remove the failed commit
+          git push --force "https://x-access-token:${PAT_TOKEN}@github.com/${{ github.repository }}".git Dev3Mnr  # Force push to Dev3Mnr branch
+
+      - name: Debug Git Status and Logs (optional)
+        if: failure()
+        run: |
+          git status
+          git log -1
+          git remote -v
+
+      - name: Get Repository and Branch Info
+        id: get-info
+        run: |
+          REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
+          BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
+          COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
+          FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
+          echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
+
+      - name: Upload Scanner Report as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.FILE_TITLE }}
+          path: scanner-report.csv
+
+      - name: Get Pusher's Email
+        id: get-pusher-email
+        run: |
+          COMMIT_SHA=${{ github.sha }}
+          REPO=${{ github.repository }}
+          PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.PAT_TOKEN }}" \
+            "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
+          echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
+
+      - name: Upload CSV Report to Salesforce
+        if: success() && env.QUALITY_GATE_STATUS == 'PASSED'  # Only upload if quality gate passed
+        run: |
+          if [ -s encoded_report.txt ]; then
+            contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
+              -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "Title": "'"${{ env.FILE_TITLE }}"'",
+                "PathOnClient": "scanner-report.csv",
+                "VersionData": "'"$(cat encoded_report.txt)"'"
+              }')
+            echo "Response: $contentDocumentResponse"
+            
+            contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
+            if [ -z "$contentVersionId" ]; then
+              echo "Error: Failed to upload file. No ContentVersionId found."
+              exit 1
+            fi
+            echo "ContentVersionId: $contentVersionId"
+            
+            contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
+              -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
+            echo "ContentDocument Response: $contentDocumentResponse"
+            
+            contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
+            if [ -z "$contentDocumentId" ]; then
+              echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
+              exit 1
+            fi
+            echo "ContentDocumentId: $contentDocumentId"
+          else
+            echo "No scanner report generated, skipping upload."
+          fi
+        env:
+          SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
+        shell: bash
+
+      - name: Send Email with actions-send-mail
+        uses: dawidd6/action-send-mail@v3
+        if: env.QUALITY_GATE_STATUS == 'PASSED'  # Only send email if quality gate passed
+        with:
+          server_address: 'smtp.gmail.com'
+          server_port: '587'
+          username: ${{ secrets.GMAIL_EMAIL }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          from: ${{ secrets.GMAIL_EMAIL }}
+          subject: 'SFDX Code Scan Delta Report'
+          body: 'Please find the attached SFDX Code Scan Delta Report.'
+          to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
+          attachments: scanner-report.csv
