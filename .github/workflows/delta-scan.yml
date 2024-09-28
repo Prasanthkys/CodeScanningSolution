@@ -12,6 +12,7 @@ permissions:
 jobs:
   installcli:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v3
         with:
@@ -82,14 +83,10 @@ jobs:
               echo "::error file=scanner-report.csv::Scanner report not found!"
               exit 1
             fi
-        
-            echo "Checking scanner report content:"
-            cat scanner-report.csv  # Print CSV content to see what's inside
-            
+
             SEVERITY_FAIL_COUNT=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' scanner-report.csv)
             SEVERITY_FAIL_COUNT=${SEVERITY_FAIL_COUNT:-0}  # Default to 0 if SEVERITY_FAIL_COUNT is empty
-            echo "Severity 3 Count: $SEVERITY_FAIL_COUNT"
-        
+
             if [ "$SEVERITY_FAIL_COUNT" -gt 0 ]; then
               echo "Quality gate failed due to high severity issues."
               echo "QUALITY_GATE_STATUS=FAILED" >> $GITHUB_ENV
@@ -99,15 +96,14 @@ jobs:
               echo "Quality gate passed."
               echo "QUALITY_GATE_STATUS=PASSED" >> $GITHUB_ENV
               echo "::notice::Quality gate passed."
-            fi
 
       - name: Revert changes if quality gate fails and push the reset commit
         if: failure()  # If the quality gate failed
         env:
-          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}  # Use the PAT token instead of GITHUB_TOKEN
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN }}  # Use the PAT token instead of GITHUB_TOKEN
         run: |
           git reset --hard HEAD~1  # Reset the branch to remove the failed commit
-          git push --force "https://x-access-token:${PAT_TOKEN}@github.com/${{ github.repository }}".git Dev3Mnr  # Force push to Dev3Mnr branch
+          git push --force "https://x-access-token:${GIT_TOKEN}@github.com/${{ github.repository }}".git Dev3Mnr  # Force push to Dev3Mnr branch
 
       - name: Debug Git Status and Logs (optional)
         if: failure()
@@ -136,7 +132,7 @@ jobs:
         run: |
           COMMIT_SHA=${{ github.sha }}
           REPO=${{ github.repository }}
-          PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.PAT_TOKEN }}" \
+          PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
             "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
           echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
 
@@ -153,18 +149,18 @@ jobs:
                 "VersionData": "'"$(cat encoded_report.txt)"'"
               }')
             echo "Response: $contentDocumentResponse"
-            
+
             contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
             if [ -z "$contentVersionId" ]; then
               echo "Error: Failed to upload file. No ContentVersionId found."
               exit 1
             fi
             echo "ContentVersionId: $contentVersionId"
-            
+
             contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
             echo "ContentDocument Response: $contentDocumentResponse"
-            
+
             contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
             if [ -z "$contentDocumentId" ]; then
               echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
