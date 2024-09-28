@@ -104,10 +104,11 @@ jobs:
       - name: Revert changes if quality gate fails and push the reset commit
         if: failure()  # If the quality gate failed
         env:
-          PAT_TOKEN: ${{ secrets.PAT_TOKEN }}  # Use the PAT token instead of GITHUB_TOKEN
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN }}  # Use GIT_TOKEN instead of PAT_TOKEN
         run: |
           git reset --hard HEAD~1  # Reset the branch to remove the failed commit
-          git push --force "https://x-access-token:${PAT_TOKEN}@github.com/${{ github.repository }}".git Dev3Mnr  # Force push to Dev3Mnr branch
+          git push --force "https://x-access-token:${GIT_TOKEN}@github.com/${{ github.repository }}".git Dev3Mnr  # Force push to Dev3Mnr branch
+          
 
       - name: Debug Git Status and Logs (optional)
         if: failure()
