@@ -1,6 +1,9 @@
 on:
-    pull_request:
-      types: [opened, reopened, assigned]
+    push:
+      branches:
+        - "**"  # Change this to your default or target branch if needed
+    # pull_request:
+    #   types: [opened, reopened, assigned]
   
 jobs:
     send_email:
