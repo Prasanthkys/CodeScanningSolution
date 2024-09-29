@@ -17,7 +17,6 @@ public with sharing class AccountInsertClass {
                     acc.Description = 'Happy Welcome';
                     acc.Rating = 'Hot';
                     acc.Industry = 'Agriculture';
-                    System.debug('Happy Welcome');
                 }
             }
             insert accList;
@@ -62,6 +61,7 @@ public with sharing class AccountInsertClass {
         if(Schema.sObjectType.Account.isCreateable()){
             for(Account acc : accList){
                 if(Schema.sObjectType.Account.fields.Description.isUpdateable()){
+                    System.debug('Happy Account');
                     acc.Description = 'Happy Welcome Account';
                 }
             }
@@ -69,19 +69,5 @@ public with sharing class AccountInsertClass {
         } else {
             throw new CustomException('You do not have permission to create Account records.');
         }
-    }
-    public static void createAccount(List<Account> accList){
-        if(Schema.sObjectType.Account.isCreateable()){
-            for(Account acc : accList){
-                if(Schema.sObjectType.Account.fields.Description.isUpdateable()){
-                    acc.Description = 'Happy Welcome Account';
-                    System.debug('Account');
-                }
-            }
-            insert accList;
-        } else {
-            throw new CustomException('You do not have permission to create Account records.');
-        }
-    }
-    
+    }   
 }
