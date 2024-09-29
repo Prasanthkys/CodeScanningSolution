@@ -17,6 +17,7 @@ public with sharing class AccountInsertClass {
                     acc.Description = 'Happy Welcome';
                     acc.Rating = 'Hot';
                     acc.Industry = 'Agriculture';
+                    System.debug('Happy');
                 }
             }
             insert accList;
@@ -42,10 +43,6 @@ public with sharing class AccountInsertClass {
                 opp.StageName = 'Prospecting';
                 opp.AccountId = acc.Id;
                 oppList.add(opp);
-                System.debug('OPP');
-                System.debug('Account');
-                System.debug('Records');
-                System.debug('Data');
             }
             if(oppList.size() > 0){
                 insert oppList;
@@ -66,6 +63,7 @@ public with sharing class AccountInsertClass {
             for(Account acc : accList){
                 if(Schema.sObjectType.Account.fields.Description.isUpdateable()){
                     System.debug('Happy Account');
+                    System.debug('Account');
                     acc.Description = 'Happy Welcome Account';
                 }
             }
