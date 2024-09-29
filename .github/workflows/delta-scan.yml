@@ -50,8 +50,9 @@ jobs:
             fi
             while IFS= read -r file; do
               echo "Processing file: $file"
-              # Extract the actual changed lines for the specific file
-              changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
+              # Extract the actual changed lines and their line numbers for the specific file
+              changed_lines=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
+              line_numbers=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d':' -f1)
               if [ -n "$changed_lines" ]; then
                 echo "Changed lines in $file:"
                 echo "$changed_lines"
@@ -81,9 +82,10 @@ jobs:
                 # Check if the scanner report was generated
                 if [ -s "scanner-report-$temp_file.csv" ]; then
                   echo "Scanner report generated for $temp_file."
-                  # Update the report with the original file name
-                  sed -i "1s/^/File,/" "scanner-report-$temp_file.csv"
-                  sed -i "2,\$s/^/$(basename "$file"),/" "scanner-report-$temp_file.csv"
+                  # Update the report with the original file name and line numbers
+                  sed -i "1s/^/File,Line,/" "scanner-report-$temp_file.csv"
+                  paste -d, <(echo "$file" | sed 'p;d' | xargs printf '%s\n%.0s' {1..1000}) <(echo "$line_numbers") "scanner-report-$temp_file.csv" > temp_with_lines.csv
+                  mv temp_with_lines.csv "scanner-report-$temp_file.csv"
                 else
                   echo "No scanner report generated for $temp_file."
                   exit 0  # Exit gracefully if no report was generated
@@ -121,8 +123,8 @@ jobs:
           REPO=${{ github.repository }}
           PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
             "
-            https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}"
-            | jq -r '.commit.committer.email')
+          https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}"
+          | jq -r '.commit.committer.email')
           echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
       - name: Encode CSV report to base64
         run: |
@@ -166,9 +168,3 @@ jobs:
                 echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
                 exit 1
               fi
-              echo "ContentDocumentId: $contentDocumentId"
-            else
-              echo "No encoded report found, skipping upload."
-            fi
-        env:
-            SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
