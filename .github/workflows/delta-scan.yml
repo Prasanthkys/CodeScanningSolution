@@ -62,16 +62,17 @@ jobs:
             while IFS= read -r file; do
               echo "Processing file: $file"
  
-              # Extract the actual changed lines and their line numbers for the specific file
-              changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
-              line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d':' -f1)
+              # Extract the actual changed lines for the specific file, including line numbers from the original file
+              original_lines=$(git diff --unified=0 HEAD~1 HEAD -- "$file")
+              changed_lines=$(echo "$original_lines" | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
+              original_line_numbers=$(echo "$original_lines" | grep -E '^[0-9]+[acd][0-9]+' | sed 's/^[0-9]*[acd]//;s/[^0-9]*$//')
  
               if [ -n "$changed_lines" ]; then
                 echo "Changed lines in $file:"
                 echo "$changed_lines"
  
-                echo "Line numbers in $file:"
-                echo "$line_numbers"
+                echo "Original line numbers in $file:"
+                echo "$original_line_numbers"
  
                 # Create a temporary file with a valid method structure
                 temp_file="temp_${file//\//_}"
