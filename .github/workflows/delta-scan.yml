@@ -4,8 +4,8 @@ on:
       - '**'
 
 jobs:
-  # Combined Job: Setup, Get Changed Files, Process, and Run Scanner
-  setup-and-process:
+  # Job 1: Setup and Installations
+  setup:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -29,9 +29,19 @@ jobs:
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
 
+  # Job 2: Get Changes, Process, Run Scanner, and Upload Artifacts
+  process-and-upload:
+    runs-on: ubuntu-latest
+    needs: setup  # Job 2 depends on Job 1 completing successfully
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
       - name: Get changed files and lines
         id: get-changes
         run: |
+          sf plugins install @salesforce/sfdx-scanner
           if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
             git fetch --unshallow
           fi
@@ -64,21 +74,17 @@ jobs:
             fi
           done <<< "$files"
 
-  # Job 2: Upload Artifacts (CSV report)
-  upload-artifacts:
-    runs-on: ubuntu-latest
-    needs: setup-and-process
-    steps:
-      - uses: actions/upload-artifact@v3
+      - name: Upload Scanner Report and Rules as Artifacts
+        uses: actions/upload-artifact@v3
         with:
-          name: SFDX_Code_Scan_Delta
-          path: |
-            scanner-report-*.csv
+            name: SFDX_Code_Scan_Delta
+            path: |
+              scanner-report-*.csv
 
   # Job 3: Email and Upload to Salesforce
   email-upload:
     runs-on: ubuntu-latest
-    needs: upload-artifacts
+    needs: process-and-upload
     steps:
       - name: Get Pusher's Email
         id: get-pusher-email
