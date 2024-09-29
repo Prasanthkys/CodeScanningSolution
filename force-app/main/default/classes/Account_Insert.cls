@@ -74,7 +74,7 @@ public with sharing class AccountInsertClass {
         System.debug('Testing method');
     }
     public static void test3(){
-        System.debug('Testing3 method');
+        System.debug('Testing method');
 
     }
 }
