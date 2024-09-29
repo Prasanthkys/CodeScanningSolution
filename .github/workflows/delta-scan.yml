@@ -1,9 +1,8 @@
 name: Delta-Scan.yml
-
-
+ 
 on:
   workflow_dispatch:
-
+ 
 jobs:
   installcli:
     runs-on: ubuntu-latest
@@ -11,67 +10,83 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-
+ 
       - name: Use Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20.x
-
+ 
       - name: Install CLI
         run: npm install @salesforce/cli --global
-
+ 
       - name: Install Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
-
+ 
       - name: Verify SFDX CLI Installation
         run: sf --version
-
+ 
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
-
-      - name: Get changed files
+ 
+      - name: Get changed files and lines
         id: get-changes
         run: |
           git fetch --unshallow || true
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-            echo "Fetching changed files between HEAD~1 and HEAD"
-            git diff --name-only HEAD~1 HEAD > changed_files.txt
+            echo "Fetching changes between HEAD~1 and HEAD"
+            git diff HEAD~1 HEAD > changes.diff
           else
-            echo "No previous commit to compare to." > changed_files.txt
+            echo "No previous commit to compare to." > changes.diff
           fi
+          cat changes.diff
+ 
+      - name: Extract changed lines
+        id: extract-changes
+        run: |
+          # Initialize temporary file for storing changed lines
+          touch temp_scan_file.cls
+          touch changed_files.txt
+ 
+          # Extract changes from the diff output and store them in the temporary file
+          awk '/^diff --git/ { file=$4; next } /^@@/ { split($2, lines, ","); start=substr(lines[1],2); length=lines[2]; if (length == "") length=1; next } /^+/ && !/^+++/' changes.diff | sed 's/^+//' > temp_scan_file.cls
+          # List the changed files to check which were impacted
+          awk '/^diff --git/ { file=$4; sub(/^b\//, "", file); print file > "changed_files.txt" }' changes.diff
+          echo "Extracted lines:"
+          cat temp_scan_file.cls
+          echo "Changed files:"
           cat changed_files.txt
-      - name: Run SFDX Scanner on Changed Files
+ 
+      - name: Run SFDX Scanner on Changed Lines
         if: success()
         run: |
-          files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
-          echo "Files to scan: $files"
-          if [ -n "$files" ]; then
-            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
+          # Check if there are relevant files to scan
+          if [ -s temp_scan_file.cls ]; then
+            echo "Running SFDX Scanner on changed lines"
+            sf scanner:run --target temp_scan_file.cls --format csv --outfile scanner-report.csv || { echo "Scanner run failed"; exit 1; }
           else
-            echo "No relevant files changed."
+            echo "No relevant changes to scan."
             touch scanner-report.csv
           fi
         env:
           SF_LAZY_LOAD_MODULES: 'true'
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
-
+ 
       - name: Generate Scanner Rule List
         if: success()
         run: |
           # Run the command without --format
           sf scanner:rule:list > scanner-rules.txt || { echo "Failed to generate rule list"; exit 1; }
           # Optionally process `scanner-rules.txt` to convert to CSV if necessary
-          # Example processing step (customize based on actual output):
           cat scanner-rules.txt > scanner-rules.csv
         env:
           SF_LAZY_LOAD_MODULES: 'true'
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
-
+ 
       - name: Install mailx
         run: sudo apt-get install -y mailutils
-
+ 
       - name: Get Repository and Branch Info
         id: get-info
         run: |
@@ -80,6 +95,7 @@ jobs:
           COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
           FILE_TITLE="SFDX_Code_Scan_Delta_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}.csv"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
+ 
       - name: Upload Scanner Report and Rules as Artifacts
         uses: actions/upload-artifact@v3
         with:
@@ -87,6 +103,7 @@ jobs:
           path: |
             scanner-report.csv
             scanner-rules.csv
+ 
       - name: Get Pusher's Email
         id: get-pusher-email
         run: |
@@ -95,7 +112,7 @@ jobs:
           PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
             "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
           echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
-
+ 
       - name: Encode CSV report to base64
         run: |
             if [ -s scanner-report.csv ]; then
@@ -104,14 +121,12 @@ jobs:
               echo "No scanner report found."
               exit 1
             fi
-        
+ 
       - name: Upload CSV Report to Salesforce
         if: success()
         run: |
             if [ -s encoded_report.txt ]; then
-              # Read the base64 content from the file and escape special characters for JSON
               ENCODED_DATA=$(cat encoded_report.txt | tr -d '\n')
-              
               # Upload the encoded report to Salesforce
               contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
                 -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
@@ -121,22 +136,14 @@ jobs:
                   "PathOnClient": "scanner-report.csv",
                   "VersionData": "'"$ENCODED_DATA"'"
                 }')
-                
               echo "Response: $contentDocumentResponse"
-              
-              # Extract the ContentVersionId from the response
               contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
               if [ -z "$contentVersionId" ]; then
                 echo "Error: Failed to upload file. No ContentVersionId found."
                 exit 1
               fi
-              echo "ContentVersionId: $contentVersionId"
-              
-              # Get the ContentDocumentId
               contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
                 -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
-              echo "ContentDocument Response: $contentDocumentResponse"
-              
               contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
               if [ -z "$contentDocumentId" ]; then
                 echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
@@ -147,4 +154,4 @@ jobs:
               echo "No encoded report found, skipping upload."
             fi
         env:
-            SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}        
+          SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
