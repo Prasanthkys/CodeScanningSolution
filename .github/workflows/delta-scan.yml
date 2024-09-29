@@ -1,11 +1,10 @@
 on:
   push:
     branches:
-      - '**'
+      "**"
 
 jobs:
-  # Job 1: Setup and Installations
-  setup:
+  installcli:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -17,58 +16,28 @@ jobs:
         with:
           node-version: 20.x
 
-      - name: Cache Node Modules
-        id: cache-node-modules
-        uses: actions/cache@v3
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+      - name: Install CLI
+        run: npm install @salesforce/cli --global
 
-      - name: Install Salesforce CLI
-        run: |
-          npm install @salesforce/cli --global
-          echo "Verifying Salesforce CLI installation"
-          sf --version
+      - name: Install Scanner Plugin
+        run: sf plugins install @salesforce/sfdx-scanner
 
-      - name: Install SFDX Scanner Plugin
-        run: |
-          sf plugins install @salesforce/sfdx-scanner
-          sf plugins --core
+      - name: Verify SFDX CLI Installation
+        run: sf --version
 
-      - name: Cache Installed CLI and Plugins
-        uses: actions/cache@v3
-        with:
-          path: ~/.npm
-          key: sfdx-cli-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            sfdx-cli-${{ runner.os }}
+      - name: Verify SFDX Scanner Plugin Installation
+        run: sf plugins --core
 
-  # Job 2: Get Changes, Process, Run Scanner, and Upload Artifacts
-  process-and-upload:
+  get_changes:
     runs-on: ubuntu-latest
-    needs: setup
+    needs: installcli
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-
-      - name: Restore Node Modules Cache
-        uses: actions/cache@v3
-        with:
-          path: ~/.npm
-          key: sfdx-cli-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            sfdx-cli-${{ runner.os }}
-
-      - name: Verify Salesforce CLI Installation
-        run: |
-          echo "Verifying Salesforce CLI installation in Job 2"
-          sf --version
-
       - name: Get changed files and lines
         id: get-changes
         run: |
-          # Fetch changes if repository is shallow
           if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
             git fetch --unshallow
           fi
@@ -79,44 +48,63 @@ jobs:
           fi
           cat changes.diff
 
+  scan_changes:
+    runs-on: ubuntu-latest
+    needs: get_changes
+    steps:
       - name: Extract changed lines, create temp file, and scan
         run: |
-          # Get changed files (cls and lwc only)
-          files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
-          if [ -z "$files" ]; then
-            echo "No changed .cls or .lwc files detected."
-            exit 0
-          fi
-          # Loop through the files, extract changed lines, and create temp file for each
-          while IFS= read -r file; do
-            changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
-            if [ -n "$changed_lines" ]; then
-              temp_file="temp_${file//\//_}"
-              echo "/* Temporary file for changed lines scan */" > "$temp_file"
-              echo "public class TempWrapperClass {" >> "$temp_file"
-              echo "    public static void tempMethod() {" >> "$temp_file"
-              echo "$changed_lines" >> "$temp_file"
-              echo "}" >> "$temp_file"
-              echo "}" >> "$temp_file"
-              # Run the SFDX scanner on the temporary file
-              sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv"
-              # Clean up the temporary file
-              rm "$temp_file"
+            files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+            if [ -z "$files" ]; then
+              exit 0
             fi
-          done <<< "$files"
+            while IFS= read -r file; do
+              changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
+              changed_line_numbers=$(grep -n '^+' changes.diff | grep "$file" | cut -d':' -f1)
+              if [ -n "$changed_lines" ]; then
+                temp_file="temp_${file//\//_}.cls"
+                echo "public class TempWrapperClass { public static void tempMethod() { $changed_lines }}" > "$temp_file"
+                open_braces=$(echo "$changed_lines" | grep -o '{' | wc -l)
+                close_braces=$(echo "$changed_lines" | grep -o '}' | wc -l)
+                if [ "$open_braces" -gt "$close_braces" ]; then
+                  remaining_closing_braces=$(($open_braces - $close_braces))
+                  for i in $(seq 1 $remaining_closing_braces); do
+                    echo "}" >> "$temp_file"
+                  done
+                fi
+                sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || exit 1
+                sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_||g' "scanner-report-$temp_file.csv"
+                awk -v line_numbers="$changed_line_numbers" -v file_name="$file" '
+                BEGIN { split(line_numbers, ln_arr, "\n"); line_index = 1 }
+                BEGIN { FS=OFS="," }
+                NR==1 { print }
+                NR>1 {
+                  $3 = file_name
+                  $4 = ln_arr[line_index++]
+                  print
+                }' "scanner-report-$temp_file.csv" > "scanner-report-modified-$temp_file.csv"
+                mv "scanner-report-modified-$temp_file.csv" "scanner-report-$temp_file.csv"
+                rm "$temp_file"
+              fi
+            done <<< "$files"
 
+  upload_artifact:
+    runs-on: ubuntu-latest
+    needs: scan_changes
+    steps:
       - name: Upload Scanner Report and Rules as Artifacts
         uses: actions/upload-artifact@v3
         with:
-            name: SFDX_Code_Scan_Delta
-            path: |
-              scanner-report-*.csv
+          name: SFDX_Code_Scan_Delta
+          path: scanner-report-*.csv
 
-  # Job 3: Email and Upload to Salesforce
-  email-upload:
+  email_report:
     runs-on: ubuntu-latest
-    needs: process-and-upload
+    needs: upload_artifact
     steps:
+      - name: Install mailx
+        run: sudo apt-get install -y mailutils
+
       - name: Get Pusher's Email
         id: get-pusher-email
         run: |
@@ -126,13 +114,38 @@ jobs:
             "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
           echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
 
-      - name: Upload CSV Report to Salesforce
+      - name: Encode CSV report to base64
         run: |
-          ENCODED_DATA=$(base64 scanner-report-*.csv)
-          curl -X POST https://your-salesforce-instance.com/services/data/v61.0/sobjects/ContentVersion/ \
-            -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "Title": "'"${{ env.FILE_TITLE }}"'",
-              "VersionData": "'"$ENCODED_DATA"'"
-            }'
+            report_file=$(find . -name "scanner-report-*.csv" | head -n 1)
+            if [ -s "$report_file" ]; then
+              base64 "$report_file" > encoded_report.txt
+            else
+              exit 0
+            fi
+
+  upload_to_salesforce:
+    runs-on: ubuntu-latest
+    needs: email_report
+    steps:
+      - name: Upload CSV Report to Salesforce
+        if: success()
+        run: |
+            if [ -s encoded_report.txt ]; then
+              ENCODED_DATA=$(cat encoded_report.txt | tr -d '\n')
+              contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
+                -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
+                -H "Content-Type: application/json" \
+                -d '{
+                  "Title": "'"${{ env.FILE_TITLE }}"'",
+                  "PathOnClient": "scanner-report.csv",
+                  "VersionData": "'"$ENCODED_DATA"'"
+                }')
+              echo "Response: $contentDocumentResponse"
+              contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
+              contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
+                -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
+              contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
+              if [ -z "$contentDocumentId" ]; then
+                exit 1
+              fi
+            fi
