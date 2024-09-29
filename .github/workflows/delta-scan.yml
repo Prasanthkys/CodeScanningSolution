@@ -110,10 +110,10 @@ jobs:
                   # Replace line numbers in the report based on changed lines file
                   echo "Replacing line numbers in scanner report with actual changed line numbers."
                   
-                  # Assuming the scanner report has the 'Line' column as the 5th column in the CSV
+                  # Assuming the scanner report has the 'Line' column (5th) and the 'Column' column (6th) in the CSV
                   paste -d ',' <(cut -d ',' -f1-4 "scanner-report-$temp_file.csv") <(echo "$line_numbers") <(cut -d ',' -f6- "scanner-report-$temp_file.csv") > "scanner-report-updated-$temp_file.csv"
                   
-                  echo "Updated scanner report with correct line numbers: scanner-report-updated-$temp_file.csv."
+                  echo "Updated scanner report with correct line and column numbers: scanner-report-updated-$temp_file.csv."
                   
                 else
                   echo "No scanner report generated for $temp_file."
