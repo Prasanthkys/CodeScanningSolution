@@ -104,7 +104,7 @@ jobs:
                   echo "Trimming the file paths in scanner report: scanner-report-$temp_file.csv"
                   
                   # Use sed to remove the specified path from the 'File' column
-                  sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_||g' "scanner-report-$temp_file.csv"
+                  sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_force-app_main_default_classes_||g' "scanner-report-$temp_file.csv"
                   
                   echo "File paths trimmed in scanner-report-$temp_file.csv."
                 else
