@@ -69,12 +69,17 @@ public with sharing class AccountInsertClass {
             throw new CustomException('You do not have permission to create Account records.');
         }
     }
-
-    public static void test(){
-        System.debug('Testing method');
+    public static void createAccount(List<Account> accList){
+        if(Schema.sObjectType.Account.isCreateable()){
+            for(Account acc : accList){
+                if(Schema.sObjectType.Account.fields.Description.isUpdateable()){
+                    acc.Description = 'Happy Welcome Account';
+                }
+            }
+            insert accList;
+        } else {
+            throw new CustomException('You do not have permission to create Account records.');
+        }
     }
-    public static void test3(){
-        System.debug('Testing method');
-
-    }
+    
 }
