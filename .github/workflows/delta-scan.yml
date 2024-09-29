@@ -48,21 +48,34 @@ jobs:
 
           cat changes.diff
 
-      - name: Extract changed lines and scan
+      - name: Extract changed lines, create temp file, and scan
         if: success()
         run: |
-          # Extract only the changed lines from the diff for .cls and .lwc files
+          # Extract only the changed files from the diff for .cls and .lwc files
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
           while IFS= read -r file; do
-            # Extract the line numbers for the changes
-            lines=$(grep -n '^@@' changes.diff | grep "$file" | cut -d' ' -f2 | sed 's/+//; s/,.*//')
+            echo "Processing file: $file"
             
-            # If there are changed lines, run the scanner on those lines
-            if [ -n "$lines" ]; then
-              echo "Running SFDX scanner on $file at lines $lines"
-              sf scanner:run --target "$file" --format "csv" --outfile "scanner-report-$file.csv" || { echo "Scanner run failed"; exit 1; }
+            # Extract the actual changed lines for the specific file
+            changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
+
+            if [ -n "$changed_lines" ]; then
+              echo "Changed lines in $file:"
+              echo "$changed_lines"
+              
+              # Create a temporary file with only the changed lines
+              temp_file="temp_${file//\//_}"
+              echo "$changed_lines" > "$temp_file"
+              echo "Created temporary file with changed lines: $temp_file"
+              
+              # Run the SFDX scanner on the temporary file
+              echo "Running SFDX scanner on temporary file $temp_file"
+              sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
+              
+              # Clean up the temporary file after scanning
+              rm "$temp_file"
             else
-              echo "No changes in relevant lines for $file."
+              echo "No relevant changes detected in $file."
             fi
           done <<< "$files"
         env:
