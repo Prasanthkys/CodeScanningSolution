@@ -17,31 +17,58 @@ jobs:
         with:
           node-version: 20.x
 
+      - name: Cache Node Modules
+        id: cache-node-modules
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+
       - name: Install Salesforce CLI
         run: |
           npm install @salesforce/cli --global
           echo "Verifying Salesforce CLI installation"
           sf --version
 
-      - name: Install Scanner Plugin
-        run: sf plugins install @salesforce/sfdx-scanner
+      - name: Install SFDX Scanner Plugin
+        run: |
+          sf plugins install @salesforce/sfdx-scanner
+          sf plugins --core
 
-      - name: Verify SFDX Scanner Plugin Installation
-        run: sf plugins --core
+      - name: Cache Installed CLI and Plugins
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: sfdx-cli-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            sfdx-cli-${{ runner.os }}
 
   # Job 2: Get Changes, Process, Run Scanner, and Upload Artifacts
   process-and-upload:
     runs-on: ubuntu-latest
-    needs: setup  # Job 2 depends on Job 1 completing successfully
+    needs: setup
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
+      - name: Restore Node Modules Cache
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: sfdx-cli-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            sfdx-cli-${{ runner.os }}
+
+      - name: Verify Salesforce CLI Installation
+        run: |
+          echo "Verifying Salesforce CLI installation in Job 2"
+          sf --version
+
       - name: Get changed files and lines
         id: get-changes
         run: |
-          sf plugins install @salesforce/sfdx-scanner
+          # Fetch changes if repository is shallow
           if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
             git fetch --unshallow
           fi
@@ -54,11 +81,13 @@ jobs:
 
       - name: Extract changed lines, create temp file, and scan
         run: |
+          # Get changed files (cls and lwc only)
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
           if [ -z "$files" ]; then
             echo "No changed .cls or .lwc files detected."
             exit 0
           fi
+          # Loop through the files, extract changed lines, and create temp file for each
           while IFS= read -r file; do
             changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
             if [ -n "$changed_lines" ]; then
@@ -69,7 +98,9 @@ jobs:
               echo "$changed_lines" >> "$temp_file"
               echo "}" >> "$temp_file"
               echo "}" >> "$temp_file"
+              # Run the SFDX scanner on the temporary file
               sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv"
+              # Clean up the temporary file
               rm "$temp_file"
             fi
           done <<< "$files"
