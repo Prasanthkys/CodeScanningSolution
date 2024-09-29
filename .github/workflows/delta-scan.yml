@@ -72,6 +72,8 @@ jobs:
                 echo "    /* End of extracted changed lines */" >> "$temp_file"
                 echo "}" >> "$temp_file"
                 echo "Created temporary file with class structure: $temp_file"
+
+                cat temp_file
                 
                 # Run the SFDX scanner on the temporary file
                 echo "Running SFDX scanner on temporary file $temp_file"
