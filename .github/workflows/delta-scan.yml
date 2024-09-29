@@ -53,6 +53,8 @@ jobs:
         run: |
           # Extract only the changed files from the diff for .cls and .lwc files
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+          echo "Files data::"
+          cat $files
           
           if [ -z "$files" ]; then
             echo "No changed .cls or .lwc files detected."
@@ -80,11 +82,10 @@ jobs:
                   line_number=$(echo "$line" | sed -E 's/^\+([0-9]+).*/\1/')
                   changed_content=$(echo "$line" | sed -E 's/^\+[0-9]+:(.*)/\1/')
                   
-                  column_number="1"  # Assuming column starts at 1
-                  
                   # Add metadata about file, line, and column
-                  echo "// File: $file, Line: $line_number, Column: $column_number" >> "$temp_file"
+                  echo "// File: $file, Line: $line_number" >> "$temp_file"
                   echo "$changed_content" >> "$temp_file"
+                  cat $temp_file
               done <<< "$changed_lines"
 
               echo "        /* End of extracted changed lines */" >> "$temp_file"
