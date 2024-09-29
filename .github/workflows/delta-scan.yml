@@ -31,6 +31,7 @@ jobs:
         run: sf plugins --core
 
       - name: Get changed files and lines
+        id: get-changes
         run: |
           # Check if the repository is shallow and unshallow if necessary
           if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
@@ -40,7 +41,6 @@ jobs:
             echo "Repository is not shallow, skipping unshallow."
           fi
 
-          # Check if there are any previous commits to compare against
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files and lines between HEAD~1 and HEAD"
             git diff --unified=0 HEAD~1 HEAD > changes.diff
@@ -48,82 +48,70 @@ jobs:
             echo "No previous commit to compare to." > changes.diff
           fi
 
-          # Check if there are any changes in general, not limited to .cls or .lwc files
-          if grep -q '^\+\+\+' changes.diff; then
-            echo "Changes detected:"
-            cat changes.diff
-          else
-            echo "No changes detected."
-          fi
+          cat changes.diff
 
-          # Extract changed .cls or .lwc files specifically
-          files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
-
-          if [ -z "$files" ]; then
-            echo "No changed .cls or .lwc files detected."
-            exit 0  # Exit gracefully if no relevant files are changed
-          else
-            echo "Changed files: $files"
-          fi
-
-      - name: Extract changed lines with original line numbers and create temp file for scan
+      - name: Extract changed lines, create temp file, and scan
+        if: success()
         run: |
-              files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+            # Extract only the changed files from the diff for .cls and .lwc files
+            files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+            
+            if [ -z "$files" ]; then
+              echo "No changed .cls or .lwc files detected."
+              exit 0  # Gracefully exit if no relevant files are changed
+            fi
+
+            while IFS= read -r file; do
+              echo "Processing file: $file"
               
-              if [ -z "$files" ]; then
-                echo "No changed .cls or .lwc files detected."
-                exit 0
-              fi
-  
-              declare -A line_mapping
-  
-              while IFS= read -r file; do
-                echo "Processing file: $file"
+              # Extract the actual changed lines for the specific file
+              changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
+        
+              if [ -n "$changed_lines" ]; then
+                echo "Changed lines in $file:"
+                echo "$changed_lines"
                 
-                # Strip the .cls extension from the original file name if present
-                filename_without_extension="${file%.cls}"
-                temp_file="temp_${filename_without_extension//\//_}.cls"
-                
+                # Create a temporary file with a valid method structure
+                temp_file="temp_${file//\//_}.cls"
                 echo "/* Temporary file for changed lines scan */" > "$temp_file"
                 echo "public class TempWrapperClass {" >> "$temp_file"
                 echo "    public static void tempMethod() {" >> "$temp_file"
                 echo "        /* Begin of extracted changed lines */" >> "$temp_file"
-  
-                # Extract the changed lines with their original line numbers
-                grep -A 1000 "$file" changes.diff | grep -n '^+' | grep -v '+++' | while IFS= read -r line; do
-                    original_line_number=$(echo "$line" | cut -d'-' -f1)
-                    code_line=$(echo "$line" | cut -d'+' -f2)
-                    echo "        // Original line number: $original_line_number" >> "$temp_file"
-                    echo "        $code_line" >> "$temp_file"
-                    # Map the line numbers from the temp file to the original line number
-                    line_mapping[$temp_file:$(wc -l < "$temp_file")]=$original_line_number
-                done
-  
+                echo "$changed_lines" >> "$temp_file"
                 echo "        /* End of extracted changed lines */" >> "$temp_file"
                 echo "    }" >> "$temp_file"
-                echo "}" >> "$temp_file"
+        
+                # Check for unbalanced braces (ensure the method and class are closed properly)
+                open_braces=$(echo "$changed_lines" | grep -o '{' | wc -l)
+                close_braces=$(echo "$changed_lines" | grep -o '}' | wc -l)
+                if [ "$open_braces" -gt "$close_braces" ]; then
+                  remaining_closing_braces=$(($open_braces - $close_braces))
+                  for i in $(seq 1 $remaining_closing_braces); do
+                    echo "}" >> "$temp_file"
+                  done
+                fi
+        
+                echo "}" >> "$temp_file"  # Close the class
+                echo "Created temporary file with method structure: $temp_file"
                 
-                echo "Created temporary file: $temp_file"
+                # Run the SFDX scanner on the temporary file
+                echo "Running SFDX scanner on temporary file $temp_file"
+                sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
                 
-                # Run the scanner on the temporary file
-                sf scanner:run --target "$temp_file" --format "json" --outfile "scanner-report-$temp_file.json"
-  
                 # Check if the scanner report was generated
-                if [ -s "scanner-report-$temp_file.json" ]; then
-                    # Create directory structure for final scanner report if not exists
-                    output_dir=$(dirname "$file")
-                    mkdir -p "$output_dir"
-  
-                    # Post-process the JSON report to replace temp file line numbers with original ones
-                    jq --argjson mapping "$(declare -p line_mapping)" '.files[].issues[] | .location.startLine |= ($mapping[.file: .location.startLine])' "scanner-report-$temp_file.json" > "$output_dir/final-scanner-report-${file##*/}.json"
+                if [ -s "scanner-report-$temp_file.csv" ]; then
+                  echo "Scanner report generated for $temp_file."
                 else
-                    echo "No scanner report generated for $temp_file."
+                  echo "No scanner report generated for $temp_file."
+                  exit 0  # Exit gracefully if no report was generated
                 fi
                 
-                # Clean up temp file after scanning
+                # Clean up the temporary file after scanning
                 rm "$temp_file"
-              done <<< "$files"   
-  
+              else
+                echo "No relevant changes detected in $file."
+              fi
+            done <<< "$files"
         env:
             SF_LAZY_LOAD_MODULES: 'true'
             SF_AUTOUPDATE_DISABLE: 'true'
@@ -141,12 +129,12 @@ jobs:
           FILE_TITLE="SFDX_Code_Scan_Delta_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}.csv"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
 
-      - name: Upload Final Scanner Report
+      - name: Upload Scanner Report and Rules as Artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: Final_Scanner_Report
-          path: final-scanner-report-*.json
-  
+          name: SFDX_Code_Scan_Delta
+          path: |
+            scanner-report-*.csv
 
       - name: Get Pusher's Email
         id: get-pusher-email
