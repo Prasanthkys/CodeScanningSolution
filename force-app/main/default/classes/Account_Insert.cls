@@ -17,8 +17,6 @@ public with sharing class AccountInsertClass {
                     acc.Description = 'Happy Welcome';
                     acc.Rating = 'Hot';
                     acc.Industry = 'Agriculture';
-                    System.debug('Good Morning');
-
                 }
             }
             insert accList;
@@ -70,5 +68,9 @@ public with sharing class AccountInsertClass {
         } else {
             throw new CustomException('You do not have permission to create Account records.');
         }
+    }
+
+    public static void test(){
+        System.debug('Testing method');
     }
 }
