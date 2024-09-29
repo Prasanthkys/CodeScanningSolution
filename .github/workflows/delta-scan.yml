@@ -199,7 +199,9 @@ jobs:
             report_file=$(find . -name "scanner-report-*.csv" | head -n 1)
             if [ -s "$report_file" ]; then
               base64 "$report_file" > encoded_report.txt
+              echo "Encoded report file created."
             else
+              echo "No scanner report found."
               exit 0
             fi
 
