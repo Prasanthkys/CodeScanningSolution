@@ -94,15 +94,19 @@ jobs:
   
                 # Check if the scanner report was generated
                 if [ -s "scanner-report-$temp_file.json" ]; then
+                    # Create directory structure for final scanner report if not exists
+                    output_dir=$(dirname "$file")
+                    mkdir -p "$output_dir"
+  
                     # Post-process the JSON report to replace temp file line numbers with original ones
-                    jq --argjson mapping "$(declare -p line_mapping)" '.files[].issues[] | .location.startLine |= ($mapping[.file: .location.startLine])' "scanner-report-$temp_file.json" > "final-scanner-report-$file.json"
+                    jq --argjson mapping "$(declare -p line_mapping)" '.files[].issues[] | .location.startLine |= ($mapping[.file: .location.startLine])' "scanner-report-$temp_file.json" > "$output_dir/final-scanner-report-${file##*/}.json"
                 else
                     echo "No scanner report generated for $temp_file."
                 fi
                 
                 # Clean up temp file after scanning
                 rm "$temp_file"
-              done <<< "$files"  
+              done <<< "$files"   
   
         env:
             SF_LAZY_LOAD_MODULES: 'true'
