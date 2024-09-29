@@ -173,7 +173,8 @@ jobs:
                 }')
                 
               echo "Response: $contentDocumentResponse"
-              echo "ContentDocument Response: $contentDocumentResponse"
+                
+              echo "Response: $contentDocumentResponse"
               
               # Extract the ContentVersionId from the response
               contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
