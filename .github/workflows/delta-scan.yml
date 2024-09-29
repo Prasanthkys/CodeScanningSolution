@@ -1,129 +1,87 @@
-name: SFDX Code Scan Delta
-
 on:
   push:
     branches:
-      - "**"
+      - '**'
 
 jobs:
-  installcli:
+  # Job 1: Setup and Installations
+  setup-environment:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-
       - name: Use Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20.x
-
       - name: Install CLI
         run: npm install @salesforce/cli --global
-
       - name: Install Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
-
       - name: Verify SFDX CLI Installation
         run: sf --version
-
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
 
-  get_changes:
+  # Job 2: Get Changed Files and Lines
+  get-changes:
     runs-on: ubuntu-latest
-    needs: installcli
+    needs: setup-environment
     steps:
       - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
       - name: Get changed files and lines
         id: get-changes
         run: |
-          # Check if the repository is shallow and unshallow if necessary
           if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
-            echo "Repository is shallow, unshallowing..."
             git fetch --unshallow
-          else
-            echo "Repository is not shallow, skipping unshallow."
           fi
-
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-            echo "Fetching changed files and lines between HEAD~1 and HEAD"
             git diff --unified=0 HEAD~1 HEAD > changes.diff
           else
             echo "No previous commit to compare to." > changes.diff
           fi
-
           cat changes.diff
 
-  scan_code:
+  # Job 3: Process Changes and Run Scanner
+  process-changes:
     runs-on: ubuntu-latest
-    needs: get_changes
+    needs: get-changes
     steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
       - name: Extract changed lines, create temp file, and scan
         run: |
-            # Extract only the changed files from the diff for .cls and .lwc files
-            files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
-
-            if [ -z "$files" ]; then
-              echo "No changed .cls or .lwc files detected."
-              exit 0  # Gracefully exit if no relevant files are changed
+          files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+          if [ -z "$files" ]; then
+            exit 0
+          fi
+          while IFS= read -r file; do
+            changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
+            if [ -n "$changed_lines" ]; then
+              temp_file="temp_${file//\//_}"
+              echo "public class TempWrapperClass {" > "$temp_file"
+              echo "    public static void tempMethod() {" >> "$temp_file"
+              echo "$changed_lines" >> "$temp_file"
+              echo "}" >> "$temp_file"
+              sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv"
+              rm "$temp_file"
             fi
+          done <<< "$files"
 
-            while IFS= read -r file; do
-              echo "Processing file: $file"
-
-              # Extract the actual changed lines for the specific file
-              changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
-
-              if [ -n "$changed_lines" ]; then
-                echo "Changed lines in $file:"
-                echo "$changed_lines"
-
-                # Create a temporary file with a valid method structure
-                temp_file="temp_${file//\//_}"
-                echo "/* Temporary file for changed lines scan */" > "$temp_file"
-                echo "public class TempWrapperClass {" >> "$temp_file"
-                echo "    public static void tempMethod() {" >> "$temp_file"
-                echo "        /* Begin of extracted changed lines */" >> "$temp_file"
-                echo "$changed_lines" >> "$temp_file"
-                echo "        /* End of extracted changed lines */" >> "$temp_file"
-                echo "    }" >> "$temp_file"
-
-                # Run the SFDX scanner on the temporary file
-                sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
-
-                # Clean up the temporary file after scanning
-                rm "$temp_file"
-              else
-                echo "No relevant changes detected in $file."
-              fi
-            done <<< "$files"
-        env:
-            SF_LAZY_LOAD_MODULES: 'true'
-            SF_AUTOUPDATE_DISABLE: 'true'
-            SF_DISABLE_AUTOUPDATE: 'true'
-
-  upload_artifact:
+  # Job 4: Upload Artifacts (CSV report)
+  upload-artifacts:
     runs-on: ubuntu-latest
-    needs: scan_code
+    needs: process-changes
     steps:
-      - name: Upload Scanner Report and Rules as Artifacts
-        uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v3
         with:
           name: SFDX_Code_Scan_Delta
           path: |
             scanner-report-*.csv
 
-  upload_salesforce:
+  # Job 5: Email and Upload to Salesforce
+  email-upload:
     runs-on: ubuntu-latest
-    needs: upload_artifact
+    needs: upload-artifacts
     steps:
       - name: Get Pusher's Email
         id: get-pusher-email
@@ -133,26 +91,13 @@ jobs:
           PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
             "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
           echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
-
       - name: Upload CSV Report to Salesforce
         run: |
-            if [ -s encoded_report.txt ]; then
-              # Read the base64 content from the file and escape special characters for JSON
-              ENCODED_DATA=$(cat encoded_report.txt | tr -d '\n')
-
-              # Upload the encoded report to Salesforce
-              contentDocumentResponse=$(curl -X POST https://your-salesforce-instance/services/data/v61.0/sobjects/ContentVersion/ \
-                -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
-                -H "Content-Type: application/json" \
-                -d '{
-                  "Title": "'"${{ env.FILE_TITLE }}"'",
-                  "PathOnClient": "scanner-report.csv",
-                  "VersionData": "'"$ENCODED_DATA"'"
-                }')
-
-              echo "Response: $contentDocumentResponse"
-            else
-              echo "No encoded report found, skipping upload."
-            fi
-        env:
-            SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
+          ENCODED_DATA=$(base64 scanner-report-*.csv)
+          curl -X POST https://your-salesforce-instance.com/services/data/v61.0/sobjects/ContentVersion/ \
+            -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "Title": "'"${{ env.FILE_TITLE }}"'",
+              "VersionData": "'"$ENCODED_DATA"'"
+            }'
