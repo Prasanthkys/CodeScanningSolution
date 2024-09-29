@@ -70,7 +70,7 @@ jobs:
                 echo "$changed_lines"
                 
                 # Create a temporary file with a valid method structure
-                temp_file="temp_${file//\//_}.cls"
+                temp_file="temp_${file//\//_}"
                 echo "/* Temporary file for changed lines scan */" > "$temp_file"
                 echo "public class TempWrapperClass {" >> "$temp_file"
                 echo "    public static void tempMethod() {" >> "$temp_file"
