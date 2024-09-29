@@ -96,9 +96,6 @@ jobs:
                 # Run the SFDX scanner on the temporary file
                 echo "Running SFDX scanner on temporary file $temp_file"
                 sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
-
-                echo "Temporary File:"
-                cat $temp_file
                 
                 # Check if the scanner report was generated
                 if [ -s "scanner-report-$temp_file.csv" ]; then
