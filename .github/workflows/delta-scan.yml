@@ -79,10 +79,23 @@ jobs:
                 echo "Running SFDX scanner on $file for changed lines"
                 sf scanner:run --target "$file" --format "csv" --outfile "scanner-report-$file.csv" || { echo "Scanner run failed"; exit 1; }
                 
-                # Filter the report for only the changed lines based on the extracted line numbers
-                # You might need to post-process the CSV to filter only the relevant lines
-                echo "Filtering scanner report for $file"
-                awk -F, -v lines="$line_numbers" 'BEGIN {split(lines, arr, ",")} {for (i in arr) if ($2 == arr[i]) print $0}' "scanner-report-$file.csv" > "filtered-scanner-report-$file.csv"
+                # Check if the scanner report was generated
+                if [ -s "scanner-report-$file.csv" ]; then
+                  echo "Scanner report generated for $file."
+                  
+                  # Filter the report for only the changed lines based on the extracted line numbers
+                  echo "Filtering scanner report for $file"
+                  awk -F, -v lines="$line_numbers" 'BEGIN {split(lines, arr, ",")} {for (i in arr) if ($2 == arr[i]) print $0}' "scanner-report-$file.csv" > "filtered-scanner-report-$file.csv"
+                  
+                  # Check if the filtered report is generated
+                  if [ -s "filtered-scanner-report-$file.csv" ]; then
+                    echo "Filtered scanner report generated: filtered-scanner-report-$file.csv"
+                  else
+                    echo "No filtered scanner report generated for $file."
+                  fi
+                else
+                  echo "No scanner report generated for $file."
+                fi
               else
                 echo "No relevant line changes detected in $file."
               fi
@@ -91,6 +104,11 @@ jobs:
             SF_LAZY_LOAD_MODULES: 'true'
             SF_AUTOUPDATE_DISABLE: 'true'
             SF_DISABLE_AUTOUPDATE: 'true'
+
+      - name: Check for generated reports
+        run: |
+            echo "Listing all filtered scanner reports..."
+            ls -l filtered-scanner-report-*.csv || echo "No filtered scanner reports found."
 
       - name: Upload Scanner Reports as Artifacts
         if: success()
