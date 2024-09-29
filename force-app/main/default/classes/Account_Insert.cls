@@ -21,6 +21,7 @@ public with sharing class AccountInsertClass {
                     System.debug('Happy');
                     System.debug('Sunday');
                     System.debug('Weekend');
+                    System.debug('Good');
 
                 }
             }

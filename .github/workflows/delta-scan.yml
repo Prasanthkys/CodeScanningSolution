@@ -212,7 +212,10 @@ jobs:
         if: success()
         run: |
             if [ -s encoded_report.txt ]; then
+              # Read the base64 content from the file and escape special characters for JSON
               ENCODED_DATA=$(cat encoded_report.txt | tr -d '\n')
+              
+              # Upload the encoded report to Salesforce
               contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
                 -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
                 -H "Content-Type: application/json" \
@@ -221,12 +224,32 @@ jobs:
                   "PathOnClient": "scanner-report.csv",
                   "VersionData": "'"$ENCODED_DATA"'"
                 }')
+                
               echo "Response: $contentDocumentResponse"
+                
+              echo "Response: $contentDocumentResponse"
+              
+              # Extract the ContentVersionId from the response
               contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
-              contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
-                -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
-              contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
-              if [ -z "$contentDocumentId" ]; then
+              if [ -z "$contentVersionId" ]; then
+                echo "Error: Failed to upload file. No ContentVersionId found."
                 exit 1
               fi
+              echo "ContentVersionId: $contentVersionId"
+              
+              # Get the ContentDocumentId
+              contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
+                -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
+              echo "ContentDocument Response: $contentDocumentResponse"
+              
+              contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
+              if [ -z "$contentDocumentId" ]; then
+                echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
+                exit 1
+              fi
+              echo "ContentDocumentId: $contentDocumentId"
+            else
+              echo "No encoded report found, skipping upload."
             fi
+        env:
+            SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
