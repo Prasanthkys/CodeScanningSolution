@@ -166,48 +166,58 @@ jobs:
 
 
   email_report:
-            runs-on: ubuntu-latest
-            needs: upload_artifact
-            steps:
-              - uses: actions/checkout@v3 # Checkout the repository so you can use git commands
-                with:
-                  fetch-depth: 0
-        
-              - name: Install mailx
-                run: sudo apt-get install -y mailutils
-        
-              - name: Get Repository and Branch Info
-                id: get-info
-                run: |
-                  REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
-                  BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
-                  COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
-                  FILE_TITLE="SFDX_Code_Scan_Delta_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}.csv"
-                  echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
-        
-              - name: Get Pusher's Email
-                id: get-pusher-email
-                run: |
-                  COMMIT_SHA=${{ github.sha }}
-                  REPO=${{ github.repository }}
-                  PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
-                    "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
-                  echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
-        
-              - name: Encode CSV report to base64
-                run: |
-                    report_file=$(find . -name "scanner-report-*.csv" | head -n 1)
-                    if [ -s "$report_file" ]; then
-                      base64 "$report_file" > encoded_report.txt
-                    else
-                      exit 0
-                    fi
-        
+    runs-on: ubuntu-latest
+    needs: upload_artifact
+    steps:
+      - uses: actions/checkout@v3 # Checkout the repository so you can use git commands
+        with:
+          fetch-depth: 0
+
+      - name: Install mailx
+        run: sudo apt-get install -y mailutils
+
+      - name: Get Repository and Branch Info
+        id: get-info
+        run: |
+          REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
+          BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
+          COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
+          FILE_TITLE="SFDX_Code_Scan_Delta_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}.csv"
+          echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
+
+      - name: Get Pusher's Email
+        id: get-pusher-email
+        run: |
+          COMMIT_SHA=${{ github.sha }}
+          REPO=${{ github.repository }}
+          PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
+            "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
+          echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
+
+      - name: Encode CSV report to base64
+        run: |
+            report_file=$(find . -name "scanner-report-*.csv" | head -n 1)
+            if [ -s "$report_file" ]; then
+              base64 "$report_file" > encoded_report.txt
+            else
+              exit 0
+            fi
+
+      - name: Upload encoded report as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: encoded-report
+          path: encoded_report.txt
 
   upload_to_salesforce:
     runs-on: ubuntu-latest
     needs: email_report
     steps:
+      - name: Download encoded report artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: encoded-report
+
       - name: Upload CSV Report to Salesforce
         if: success()
         run: |
@@ -224,8 +234,6 @@ jobs:
                   "PathOnClient": "scanner-report.csv",
                   "VersionData": "'"$ENCODED_DATA"'"
                 }')
-                
-              echo "Response: $contentDocumentResponse"
                 
               echo "Response: $contentDocumentResponse"
               
@@ -252,4 +260,4 @@ jobs:
               echo "No encoded report found, skipping upload."
             fi
         env:
-            SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
+          SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
