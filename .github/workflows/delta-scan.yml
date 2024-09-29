@@ -64,8 +64,10 @@ jobs:
               while IFS= read -r file; do
                 echo "Processing file: $file"
                 
-                # Create a mapping between original line numbers and the extracted lines
-                temp_file="temp_${file//\//_}.cls"
+                # Strip the .cls extension from the original file name if present
+                filename_without_extension="${file%.cls}"
+                temp_file="temp_${filename_without_extension//\//_}.cls"
+                
                 echo "/* Temporary file for changed lines scan */" > "$temp_file"
                 echo "public class TempWrapperClass {" >> "$temp_file"
                 echo "    public static void tempMethod() {" >> "$temp_file"
