@@ -42,25 +42,38 @@ jobs:
             echo "No previous commit to compare to." > changes.diff
           fi
           cat changes.diff
+      - name: Upload changes.diff as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: changes-diff
+          path: changes.diff
 
   # Job 3: Process Changes and Run Scanner
   process-changes:
     runs-on: ubuntu-latest
     needs: get-changes
     steps:
+      - uses: actions/checkout@v3
+      - name: Download changes.diff artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: changes-diff
       - name: Extract changed lines, create temp file, and scan
         run: |
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
           if [ -z "$files" ]; then
+            echo "No changed .cls or .lwc files detected."
             exit 0
           fi
           while IFS= read -r file; do
             changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
             if [ -n "$changed_lines" ]; then
               temp_file="temp_${file//\//_}"
-              echo "public class TempWrapperClass {" > "$temp_file"
+              echo "/* Temporary file for changed lines scan */" > "$temp_file"
+              echo "public class TempWrapperClass {" >> "$temp_file"
               echo "    public static void tempMethod() {" >> "$temp_file"
               echo "$changed_lines" >> "$temp_file"
+              echo "}" >> "$temp_file"
               echo "}" >> "$temp_file"
               sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv"
               rm "$temp_file"
