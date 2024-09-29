@@ -31,7 +31,6 @@ jobs:
         run: sf plugins --core
 
       - name: Get changed files and lines
-        id: get-changes
         run: |
           # Check if the repository is shallow and unshallow if necessary
           if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
@@ -41,6 +40,7 @@ jobs:
             echo "Repository is not shallow, skipping unshallow."
           fi
 
+          # Check if there are any previous commits to compare against
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files and lines between HEAD~1 and HEAD"
             git diff --unified=0 HEAD~1 HEAD > changes.diff
@@ -48,7 +48,23 @@ jobs:
             echo "No previous commit to compare to." > changes.diff
           fi
 
-          cat changes.diff
+          # Check if there are any changes in general, not limited to .cls or .lwc files
+          if grep -q '^\+\+\+' changes.diff; then
+            echo "Changes detected:"
+            cat changes.diff
+          else
+            echo "No changes detected."
+          fi
+
+          # Extract changed .cls or .lwc files specifically
+          files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+
+          if [ -z "$files" ]; then
+            echo "No changed .cls or .lwc files detected."
+            exit 0  # Exit gracefully if no relevant files are changed
+          else
+            echo "Changed files: $files"
+          fi
 
       - name: Extract changed lines with original line numbers and create temp file for scan
         run: |
