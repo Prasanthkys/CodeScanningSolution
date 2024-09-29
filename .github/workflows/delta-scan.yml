@@ -107,23 +107,11 @@ jobs:
                   # Use sed to remove the specified path from the 'File' column
                   sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_force-app_main_default_classes_||g' "scanner-report-$temp_file.csv"
                   
-                  # Correct the Line numbers using awk
-                  tmp_csv="scanner-report-corrected-$temp_file.csv"
-                  awk -F ',' -v OFS=',' -v lines="$line_numbers" '
-                      BEGIN {
-                          n = split(lines, lineArray, " ")
-                      }
-                      NR == 1 {
-                          print $0  # Print the header as-is
-                      }
-                      NR > 1 {
-                          $5 = lineArray[NR-1]  # Replace the Line column (5th field) with the correct line number
-                          print $0  # Print the updated line
-                      }
-                  ' "scanner-report-$temp_file.csv" > "$tmp_csv"
-
-                  # Move the corrected file to the final report name
-                  mv "$tmp_csv" "scanner-report-updated-$temp_file.csv"
+                  # Replace line numbers in the report based on changed lines file
+                  echo "Replacing line numbers in scanner report with actual changed line numbers."
+                  
+                  # Assuming the scanner report has the 'Line' column as the 5th column in the CSV
+                  paste -d ',' <(cut -d ',' -f1-4 "scanner-report-$temp_file.csv") <(echo "$line_numbers") <(cut -d ',' -f6- "scanner-report-$temp_file.csv") > "scanner-report-updated-$temp_file.csv"
                   
                   echo "Updated scanner report with correct line numbers: scanner-report-updated-$temp_file.csv."
                   
