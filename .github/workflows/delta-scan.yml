@@ -85,6 +85,7 @@ jobs:
                   # Add metadata about file, line, and column
                   echo "// File: $file, Line: $line_number" >> "$temp_file"
                   echo "$changed_content" >> "$temp_file"
+                  echo "Temporary File Data"
                   cat $temp_file
               done <<< "$changed_lines"
 
