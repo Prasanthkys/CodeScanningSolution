@@ -48,37 +48,46 @@ jobs:
 
           cat changes.diff
 
-      - name: Extract changed lines and scan
+      - name: Extract changed lines, create temp file, and scan
         if: success()
         run: |
-          # Extract only the changed files from the diff for .cls and .lwc files
-          files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
-          while IFS= read -r file; do
-            echo "Processing file: $file"
-
-            # Create a temporary file to store the changed lines
-            temp_file="temp_$file"
-            changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
-            
-            if [ -n "$changed_lines" ]; then
-              echo "Writing changed lines to temporary file: $temp_file"
-              echo "$changed_lines" > "$temp_file"
+            # Extract only the changed files from the diff for .cls and .lwc files
+            files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+            while IFS= read -r file; do
+              echo "Processing file: $file"
               
-              # Run the SFDX scanner on the temporary file
-              echo "Running SFDX scanner on $temp_file"
-              sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$file.csv" || { echo "Scanner run failed"; exit 1; }
-
-              # Clean up the temporary file after scan
-              rm "$temp_file"
-            else
-              echo "No relevant changes detected in $file."
-            fi
-          done <<< "$files"
+              # Extract the actual changed lines for the specific file
+              changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
+        
+              if [ -n "$changed_lines" ]; then
+                echo "Changed lines in $file:"
+                echo "$changed_lines"
+                
+                # Create a temporary file with a basic class structure
+                temp_file="temp_${file//\//_}"
+                echo "/* Temporary file for changed lines scan */" > "$temp_file"
+                echo "public class TempWrapperClass {" >> "$temp_file"
+                echo "    /* Begin of extracted changed lines */" >> "$temp_file"
+                echo "$changed_lines" >> "$temp_file"
+                echo "    /* End of extracted changed lines */" >> "$temp_file"
+                echo "}" >> "$temp_file"
+                echo "Created temporary file with class structure: $temp_file"
+                
+                # Run the SFDX scanner on the temporary file
+                echo "Running SFDX scanner on temporary file $temp_file"
+                sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
+                
+                # Clean up the temporary file after scanning
+                rm "$temp_file"
+              else
+                echo "No relevant changes detected in $file."
+              fi
+            done <<< "$files"
         env:
-          SF_LAZY_LOAD_MODULES: 'true'
-          SF_AUTOUPDATE_DISABLE: 'true'
-          SF_DISABLE_AUTOUPDATE: 'true'
-
+            SF_LAZY_LOAD_MODULES: 'true'
+            SF_AUTOUPDATE_DISABLE: 'true'
+            SF_DISABLE_AUTOUPDATE: 'true'
+        
       - name: Install mailx
         run: sudo apt-get install -y mailutils
 
