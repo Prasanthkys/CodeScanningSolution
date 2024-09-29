@@ -73,7 +73,7 @@ jobs:
                 echo "$changed_line_numbers"
                 
                 # Create a temporary file with a valid method structure
-                temp_file="temp_${file//\//_}"
+                temp_file="temp_${file//\//_}.cls"
                 echo "/* Temporary file for changed lines scan */" > "$temp_file"
                 echo "public class TempWrapperClass {" >> "$temp_file"
                 echo "    public static void tempMethod() {" >> "$temp_file"
@@ -107,13 +107,13 @@ jobs:
                   echo "Trimming the file paths in scanner report: scanner-report-$temp_file.csv"
                   
                   # Use sed to remove the specified path from the 'File' column
-                  sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_force-app_main_default_classes_||g' "scanner-report-$temp_file.csv"
+                  sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_||g' "scanner-report-$temp_file.csv"
                   
                   # Replace the 'Line' column with actual changed line numbers
                   echo "Replacing Line column with actual changed line numbers."
                   
                   # Use awk to replace the 'Line' column with the actual line numbers from the diff
-                  awk -v line_numbers="$changed_line_numbers" '
+                  awk -v line_numbers="$changed_line_numbers" -v file_name="$file" '
                   BEGIN {
                     split(line_numbers, ln_arr, "\n")
                     line_index = 1
@@ -121,13 +121,14 @@ jobs:
                   BEGIN { FS=OFS="," }
                   NR==1 { print }  # Print header
                   NR>1 {
-                    $3 = ln_arr[line_index++]
+                    $3 = file_name   # Update the File column with the file name
+                    $4 = ln_arr[line_index++]  # Update Line column with actual line number
                     print
                   }' "scanner-report-$temp_file.csv" > "scanner-report-modified-$temp_file.csv"
 
                   mv "scanner-report-modified-$temp_file.csv" "scanner-report-$temp_file.csv"
                   
-                  echo "Line column updated with actual changed line numbers in scanner-report-$temp_file.csv."
+                  echo "File and Line columns updated with actual values in scanner-report-$temp_file.csv."
                 else
                   echo "No scanner report generated for $temp_file."
                   exit 0  # Exit gracefully if no report was generated
