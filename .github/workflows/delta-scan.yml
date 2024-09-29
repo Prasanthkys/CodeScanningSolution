@@ -163,7 +163,7 @@ jobs:
               ENCODED_DATA=$(cat encoded_report.txt | tr -d '\n')
               
               # Upload the encoded report to Salesforce
-              contentDocumentResponse=$(curl -X POST https://your.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
+              contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
                 -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
                 -H "Content-Type: application/json" \
                 -d '{
@@ -173,6 +173,7 @@ jobs:
                 }')
                 
               echo "Response: $contentDocumentResponse"
+              echo "ContentDocument Response: $contentDocumentResponse"
               
               # Extract the ContentVersionId from the response
               contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
@@ -183,7 +184,7 @@ jobs:
               echo "ContentVersionId: $contentVersionId"
               
               # Get the ContentDocumentId
-              contentDocumentResponse=$(curl -X GET https://your.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
+              contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
                 -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
               echo "ContentDocument Response: $contentDocumentResponse"
               
