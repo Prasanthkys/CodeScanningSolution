@@ -50,7 +50,7 @@ jobs:
  
           cat changes.diff
  
-      - name: Extract changed lines, create temp file, and scan
+      - name: Extract changed lines, map file and line columns, and scan
         if: success()
         run: |
             # Extract only the changed files from the diff for .cls and .lwc files
@@ -92,12 +92,18 @@ jobs:
                 # Run the SFDX scanner on the temporary file
                 echo "Running SFDX scanner on temporary file $temp_file"
                 sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
+ 
                 # Check if the scanner report was generated
                 if [ -s "scanner-report-$temp_file.csv" ]; then
                   echo "Scanner report generated for $temp_file."
-                  # Update the report with the original file name and line numbers
-                  paste -d, <(echo "$file" | sed 'p;d' | xargs printf '%s\n%.0s' {1..1000}) <(echo "$line_numbers") "scanner-report-$temp_file.csv" > temp_with_lines.csv
-                  mv temp_with_lines.csv "scanner-report-$temp_file.csv"
+ 
+                  # Modify the scanner report to map the original file path and line numbers
+                  original_file_line_col=$(paste -d, <(echo "$file" | xargs printf '%s\n%.0s' {1..1000}) <(echo "$line_numbers"))
+                  # Remove temp file references and insert original file and line info
+                  awk -F, -v file_line_col="$original_file_line_col" 'BEGIN{split(file_line_col, arr, "\n"); idx=1} {OFS=","; $1=arr[idx]; idx++} 1' "scanner-report-$temp_file.csv" > "final-report-$file.csv"
+ 
+                  # Save the final report
+                  mv "final-report-$file.csv" "scanner-report-$file.csv"
                 else
                   echo "No scanner report generated for $temp_file."
                   exit 0  # Exit gracefully if no report was generated
@@ -177,6 +183,7 @@ jobs:
               # Get the ContentDocumentId
               contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
                 -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
+              echo "ContentDocument Response: $contentDocumentResponse"
               contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
               if [ -z "$contentDocumentId" ]; then
                 echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
@@ -186,3 +193,5 @@ jobs:
             else
               echo "No encoded report found, skipping upload."
             fi
+        env:
+            SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
