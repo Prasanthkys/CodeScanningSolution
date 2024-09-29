@@ -1,3 +1,5 @@
+name: SFDX Code Scan Delta
+
 on:
   push:
     branches:
@@ -51,73 +53,70 @@ jobs:
       - name: Extract changed lines, create temp file, and scan
         if: success()
         run: |
-          # Extract only the changed files from the diff for .cls and .lwc files
-          files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
-          echo "Files data::"
-          cat $files
-          
-          if [ -z "$files" ]; then
-            echo "No changed .cls or .lwc files detected."
-            exit 0  # Gracefully exit if no relevant files are changed
-          fi
-
-          while IFS= read -r file; do
-            echo "Processing file: $file"
+            # Extract only the changed files from the diff for .cls and .lwc files
+            files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
             
-            # Extract the actual changed lines with line numbers
-            changed_lines=$(grep -A 1000 "$file" changes.diff | grep -E '^\+\d+' | sed -E 's/^(\+\d+)(.*)/\1:\2/')
-      
-            if [ -n "$changed_lines" ]; then
-              echo "Changed lines in $file:"
-              echo "$changed_lines"
-              
-              # Create a temporary file with a valid method structure
-              temp_file="temp_${file//\//_}.cls"
-              echo "/* Temporary file for changed lines scan */" > "$temp_file"
-              echo "public class TempWrapperClass {" >> "$temp_file"
-              echo "    public static void tempMethod() {" >> "$temp_file"
-              echo "        /* Begin of extracted changed lines */" >> "$temp_file"
-
-              while IFS= read -r line; do
-                  line_number=$(echo "$line" | sed -E 's/^\+([0-9]+).*/\1/')
-                  changed_content=$(echo "$line" | sed -E 's/^\+[0-9]+:(.*)/\1/')
-                  
-                  # Add metadata about file, line, and column
-                  echo "// File: $file, Line: $line_number" >> "$temp_file"
-                  echo "$changed_content" >> "$temp_file"
-                  echo "Temporary File Data"
-                  cat $temp_file
-              done <<< "$changed_lines"
-
-              echo "        /* End of extracted changed lines */" >> "$temp_file"
-              echo "    }" >> "$temp_file"
-              echo "}" >> "$temp_file"  # Close the class
-              
-              echo "Created temporary file with method structure: $temp_file"
-              
-              # Run the SFDX scanner on the temporary file
-              echo "Running SFDX scanner on temporary file $temp_file"
-              sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
-              
-              # Check if the scanner report was generated
-              if [ -s "scanner-report-$temp_file.csv" ]; then
-                echo "Scanner report generated for $temp_file."
-              else
-                echo "No scanner report generated for $temp_file."
-                exit 0  # Exit gracefully if no report was generated
-              fi
-              
-              # Clean up the temporary file after scanning
-              rm "$temp_file"
-            else
-              echo "No relevant changes detected in $file."
+            if [ -z "$files" ]; then
+              echo "No changed .cls or .lwc files detected."
+              exit 0  # Gracefully exit if no relevant files are changed
             fi
-          done <<< "$files"
+
+            while IFS= read -r file; do
+              echo "Processing file: $file"
+              
+              # Extract the actual changed lines for the specific file
+              changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
+        
+              if [ -n "$changed_lines" ]; then
+                echo "Changed lines in $file:"
+                echo "$changed_lines"
+                
+                # Create a temporary file with a valid method structure
+                temp_file="temp_${file//\//_}.cls"
+                echo "/* Temporary file for changed lines scan */" > "$temp_file"
+                echo "public class TempWrapperClass {" >> "$temp_file"
+                echo "    public static void tempMethod() {" >> "$temp_file"
+                echo "        /* Begin of extracted changed lines */" >> "$temp_file"
+                echo "$changed_lines" >> "$temp_file"
+                echo "        /* End of extracted changed lines */" >> "$temp_file"
+                echo "    }" >> "$temp_file"
+        
+                # Check for unbalanced braces (ensure the method and class are closed properly)
+                open_braces=$(echo "$changed_lines" | grep -o '{' | wc -l)
+                close_braces=$(echo "$changed_lines" | grep -o '}' | wc -l)
+                if [ "$open_braces" -gt "$close_braces" ]; then
+                  remaining_closing_braces=$(($open_braces - $close_braces))
+                  for i in $(seq 1 $remaining_closing_braces); do
+                    echo "}" >> "$temp_file"
+                  done
+                fi
+        
+                echo "}" >> "$temp_file"  # Close the class
+                echo "Created temporary file with method structure: $temp_file"
+                
+                # Run the SFDX scanner on the temporary file
+                echo "Running SFDX scanner on temporary file $temp_file"
+                sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
+                
+                # Check if the scanner report was generated
+                if [ -s "scanner-report-$temp_file.csv" ]; then
+                  echo "Scanner report generated for $temp_file."
+                else
+                  echo "No scanner report generated for $temp_file."
+                  exit 0  # Exit gracefully if no report was generated
+                fi
+                
+                # Clean up the temporary file after scanning
+                rm "$temp_file"
+              else
+                echo "No relevant changes detected in $file."
+              fi
+            done <<< "$files"
         env:
             SF_LAZY_LOAD_MODULES: 'true'
             SF_AUTOUPDATE_DISABLE: 'true'
-            SF_DISABLE_AUTOUPDATE: 'true'
-
+            SF_DISABLE_AUTOUPDATE: 'true'        
+        
       - name: Install mailx
         run: sudo apt-get install -y mailutils
 
@@ -172,7 +171,9 @@ jobs:
                   "PathOnClient": "scanner-report.csv",
                   "VersionData": "'"$ENCODED_DATA"'"
                 }')
-              
+                
+              echo "Response: $contentDocumentResponse"
+                
               echo "Response: $contentDocumentResponse"
               
               # Extract the ContentVersionId from the response
