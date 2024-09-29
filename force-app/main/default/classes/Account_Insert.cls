@@ -74,7 +74,8 @@ public with sharing class AccountInsertClass {
             for(Account acc : accList){
                 if(Schema.sObjectType.Account.fields.Description.isUpdateable()){
                     acc.Description = 'Happy Welcome Account';
-                    System.debug('Fappy Welcome');
+                    System.debug('Happy Welcome');
+                    System.debug('Welcome');
                 }
             }
             insert accList;
