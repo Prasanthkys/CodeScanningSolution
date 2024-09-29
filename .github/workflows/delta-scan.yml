@@ -16,11 +16,12 @@ jobs:
         with:
           node-version: 20.x
       - name: Install CLI
-        run: npm install @salesforce/cli --global
+        run: |
+          npm install @salesforce/cli --global
+          echo "Verifying Salesforce CLI installation"
+          sf --version
       - name: Install Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
-      - name: Verify SFDX CLI Installation
-        run: sf --version
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
 
@@ -58,6 +59,10 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: changes-diff
+      - name: Verify Salesforce CLI Installation
+        run: |
+          echo "Verifying Salesforce CLI installation again before processing"
+          sf --version
       - name: Extract changed lines, create temp file, and scan
         run: |
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
