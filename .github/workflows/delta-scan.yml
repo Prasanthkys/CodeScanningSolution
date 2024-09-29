@@ -127,6 +127,13 @@ jobs:
               fi
             done <<< "$files"
 
+      # Upload the CSV report as an artifact
+      - name: Upload Scanner Report as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: SFDX_Code_Scan_Report
+          path: scanner-report-updated-*.csv
+
       - name: Install mailx
         run: sudo apt-get install -y mailutils
 
@@ -138,13 +145,6 @@ jobs:
           COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
           FILE_TITLE="SFDX_Code_Scan_Delta_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}.csv"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
-
-      - name: Upload Scanner Report and Rules as Artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: SFDX_Code_Scan_Delta
-          path: |
-            scanner-report-updated-*.csv
 
       - name: Get Pusher's Email
         id: get-pusher-email
@@ -184,8 +184,6 @@ jobs:
                 
               echo "Response: $contentDocumentResponse"
                 
-              echo "Response: $contentDocumentResponse"
-              
               # Extract the ContentVersionId from the response
               contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
               if [ -z "$contentVersionId" ]; then
