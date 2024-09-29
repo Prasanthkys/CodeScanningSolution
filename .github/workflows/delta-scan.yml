@@ -50,8 +50,7 @@ jobs:
 
           cat changes.diff
 
-      - name: Extract changed lines with original line numbers, create temp file, and scan
-        if: success()
+      - name: Extract changed lines with original line numbers and create temp file for scan
         run: |
               files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
               
@@ -60,63 +59,48 @@ jobs:
                 exit 0
               fi
   
+              declare -A line_mapping
+  
               while IFS= read -r file; do
                 echo "Processing file: $file"
                 
-                # Extract the changed lines and their original line numbers
-                changed_lines=$(grep -A 1000 "$file" changes.diff | grep -n '^+' | grep -v '+++' | sed 's/^\([0-9]*\)-[^+]*\+\(.*\)/\1 \2/')
+                # Create a mapping between original line numbers and the extracted lines
+                temp_file="temp_${file//\//_}.cls"
+                echo "/* Temporary file for changed lines scan */" > "$temp_file"
+                echo "public class TempWrapperClass {" >> "$temp_file"
+                echo "    public static void tempMethod() {" >> "$temp_file"
+                echo "        /* Begin of extracted changed lines */" >> "$temp_file"
   
-                if [ -n "$changed_lines" ]; then
-                  echo "Changed lines with line numbers in $file:"
-                  echo "$changed_lines"
-                  
-                  temp_file="temp_${file//\//_}.cls"
-                  echo "/* Temporary file for changed lines scan */" > "$temp_file"
-                  echo "public class TempWrapperClass {" >> "$temp_file"
-                  echo "    public static void tempMethod() {" >> "$temp_file"
-                  echo "        /* Begin of extracted changed lines */" >> "$temp_file"
-                  
-                  # Loop through changed lines and add them with comments on the original line numbers
-                  while IFS= read -r line_data; do
-                    line_number=$(echo "$line_data" | cut -d' ' -f1)
-                    code_line=$(echo "$line_data" | cut -d' ' -f2-)
-                    echo "        // Original line number: $line_number" >> "$temp_file"
+                # Extract the changed lines with their original line numbers
+                grep -A 1000 "$file" changes.diff | grep -n '^+' | grep -v '+++' | while IFS= read -r line; do
+                    original_line_number=$(echo "$line" | cut -d'-' -f1)
+                    code_line=$(echo "$line" | cut -d'+' -f2)
+                    echo "        // Original line number: $original_line_number" >> "$temp_file"
                     echo "        $code_line" >> "$temp_file"
-                  done <<< "$changed_lines"
+                    # Map the line numbers from the temp file to the original line number
+                    line_mapping[$temp_file:$(wc -l < "$temp_file")]=$original_line_number
+                done
   
-                  echo "        /* End of extracted changed lines */" >> "$temp_file"
-                  echo "    }" >> "$temp_file"
-                  
-                  # Ensure the class and method structure are properly closed
-                  open_braces=$(echo "$changed_lines" | grep -o '{' | wc -l)
-                  close_braces=$(echo "$changed_lines" | grep -o '}' | wc -l)
-                  if [ "$open_braces" -gt "$close_braces" ]; then
-                    remaining_closing_braces=$(($open_braces - $close_braces))
-                    for i in $(seq 1 $remaining_closing_braces); do
-                      echo "}" >> "$temp_file"
-                    done
-                  fi
+                echo "        /* End of extracted changed lines */" >> "$temp_file"
+                echo "    }" >> "$temp_file"
+                echo "}" >> "$temp_file"
+                
+                echo "Created temporary file: $temp_file"
+                
+                # Run the scanner on the temporary file
+                sf scanner:run --target "$temp_file" --format "json" --outfile "scanner-report-$temp_file.json"
   
-                  echo "}" >> "$temp_file"
-                  echo "Created temporary file: $temp_file"
-  
-                  # Run the scanner on the temporary file
-                  sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
-  
-                  # Check if scanner report was generated
-                  if [ -s "scanner-report-$temp_file.csv" ]; then
-                    echo "Scanner report generated for $temp_file."
-                  else
-                    echo "No scanner report generated for $temp_file."
-                    exit 0
-                  fi
-  
-                  # Clean up temporary file after scanning
-                  rm "$temp_file"
+                # Check if the scanner report was generated
+                if [ -s "scanner-report-$temp_file.json" ]; then
+                    # Post-process the JSON report to replace temp file line numbers with original ones
+                    jq --argjson mapping "$(declare -p line_mapping)" '.files[].issues[] | .location.startLine |= ($mapping[.file: .location.startLine])' "scanner-report-$temp_file.json" > "final-scanner-report-$file.json"
                 else
-                  echo "No relevant changes detected in $file."
+                    echo "No scanner report generated for $temp_file."
                 fi
-              done <<< "$files"
+                
+                # Clean up temp file after scanning
+                rm "$temp_file"
+              done <<< "$files"  
   
         env:
             SF_LAZY_LOAD_MODULES: 'true'
@@ -135,12 +119,12 @@ jobs:
           FILE_TITLE="SFDX_Code_Scan_Delta_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}.csv"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
 
-      - name: Upload Scanner Report and Rules as Artifacts
+      - name: Upload Final Scanner Report
         uses: actions/upload-artifact@v3
         with:
-          name: SFDX_Code_Scan_Delta
-          path: |
-            scanner-report-*.csv
+          name: Final_Scanner_Report
+          path: final-scanner-report-*.json
+  
 
       - name: Get Pusher's Email
         id: get-pusher-email
