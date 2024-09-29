@@ -50,74 +50,79 @@ jobs:
 
           cat changes.diff
 
-      - name: Extract changed lines with original file and line numbers
+      - name: Extract changed lines with original line numbers, create temp file, and scan
         if: success()
         run: |
-            # Extract changed files with line numbers from the diff
-            grep -nE '^(\+\+\+ b\/.*|@@)' changes.diff > extracted_changes.txt
-            cat extracted_changes.txt
-
-            # Extract only the files from the diff
-            files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
-
-            if [ -z "$files" ]; then
-              echo "No changed .cls or .lwc files detected."
-              exit 0  # Gracefully exit if no relevant files are changed
-            fi
-
-            while IFS= read -r file; do
-              echo "Processing file: $file"
+              files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
               
-              # Extract the line numbers of changed lines for the specific file
-              line_numbers=$(grep -A 1000 "$file" extracted_changes.txt | grep -E '^@@' | awk '{print $2}' | sed 's/[^0-9]//g')
-
-              if [ -n "$line_numbers" ]; then
-                echo "Changed line numbers in $file:"
-                echo "$line_numbers"
-                
-                # Run the SFDX scanner on the original file, focusing on the changed lines
-                echo "Running SFDX scanner on $file for changed lines"
-                sf scanner:run --target "$file" --format "csv" --outfile "scanner-report-$file.csv" || { echo "Scanner run failed"; exit 1; }
-                
-                # Check if the scanner report was generated
-                if [ -s "scanner-report-$file.csv" ]; then
-                  echo "Scanner report generated for $file."
-                  
-                  # Filter the report for only the changed lines based on the extracted line numbers
-                  echo "Filtering scanner report for $file"
-                  awk -F, -v lines="$line_numbers" 'BEGIN {split(lines, arr, ",")} {for (i in arr) if ($2 == arr[i]) print $0}' "scanner-report-$file.csv" > "filtered-scanner-report-$file.csv"
-                  
-                  # Check if the filtered report is generated
-                  if [ -s "filtered-scanner-report-$file.csv" ]; then
-                    echo "Filtered scanner report generated: filtered-scanner-report-$file.csv"
-                  else
-                    echo "No filtered scanner report generated for $file."
-                  fi
-                else
-                  echo "No scanner report generated for $file."
-                fi
-              else
-                echo "No relevant line changes detected in $file."
+              if [ -z "$files" ]; then
+                echo "No changed .cls or .lwc files detected."
+                exit 0
               fi
-            done <<< "$files"
+  
+              while IFS= read -r file; do
+                echo "Processing file: $file"
+                
+                # Extract the changed lines and their original line numbers
+                changed_lines=$(grep -A 1000 "$file" changes.diff | grep -n '^+' | grep -v '+++' | sed 's/^\([0-9]*\)-[^+]*\+\(.*\)/\1 \2/')
+  
+                if [ -n "$changed_lines" ]; then
+                  echo "Changed lines with line numbers in $file:"
+                  echo "$changed_lines"
+                  
+                  temp_file="temp_${file//\//_}.cls"
+                  echo "/* Temporary file for changed lines scan */" > "$temp_file"
+                  echo "public class TempWrapperClass {" >> "$temp_file"
+                  echo "    public static void tempMethod() {" >> "$temp_file"
+                  echo "        /* Begin of extracted changed lines */" >> "$temp_file"
+                  
+                  # Loop through changed lines and add them with comments on the original line numbers
+                  while IFS= read -r line_data; do
+                    line_number=$(echo "$line_data" | cut -d' ' -f1)
+                    code_line=$(echo "$line_data" | cut -d' ' -f2-)
+                    echo "        // Original line number: $line_number" >> "$temp_file"
+                    echo "        $code_line" >> "$temp_file"
+                  done <<< "$changed_lines"
+  
+                  echo "        /* End of extracted changed lines */" >> "$temp_file"
+                  echo "    }" >> "$temp_file"
+                  
+                  # Ensure the class and method structure are properly closed
+                  open_braces=$(echo "$changed_lines" | grep -o '{' | wc -l)
+                  close_braces=$(echo "$changed_lines" | grep -o '}' | wc -l)
+                  if [ "$open_braces" -gt "$close_braces" ]; then
+                    remaining_closing_braces=$(($open_braces - $close_braces))
+                    for i in $(seq 1 $remaining_closing_braces); do
+                      echo "}" >> "$temp_file"
+                    done
+                  fi
+  
+                  echo "}" >> "$temp_file"
+                  echo "Created temporary file: $temp_file"
+  
+                  # Run the scanner on the temporary file
+                  sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
+  
+                  # Check if scanner report was generated
+                  if [ -s "scanner-report-$temp_file.csv" ]; then
+                    echo "Scanner report generated for $temp_file."
+                  else
+                    echo "No scanner report generated for $temp_file."
+                    exit 0
+                  fi
+  
+                  # Clean up temporary file after scanning
+                  rm "$temp_file"
+                else
+                  echo "No relevant changes detected in $file."
+                fi
+              done <<< "$files"
+  
         env:
             SF_LAZY_LOAD_MODULES: 'true'
             SF_AUTOUPDATE_DISABLE: 'true'
-            SF_DISABLE_AUTOUPDATE: 'true'
-
-      - name: Check for generated reports
-        run: |
-            echo "Listing all filtered scanner reports..."
-            ls -l filtered-scanner-report-*.csv || echo "No filtered scanner reports found."
-
-      - name: Upload Scanner Reports as Artifacts
-        if: success()
-        uses: actions/upload-artifact@v3
-        with:
-          name: SFDX_Temp_Scanner_Reports
-          path: |
-            filtered-scanner-report-*.csv
-
+            SF_DISABLE_AUTOUPDATE: 'true'        
+        
       - name: Install mailx
         run: sudo apt-get install -y mailutils
 
@@ -130,6 +135,13 @@ jobs:
           FILE_TITLE="SFDX_Code_Scan_Delta_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}.csv"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
 
+      - name: Upload Scanner Report and Rules as Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: SFDX_Code_Scan_Delta
+          path: |
+            scanner-report-*.csv
+
       - name: Get Pusher's Email
         id: get-pusher-email
         run: |
@@ -141,7 +153,7 @@ jobs:
 
       - name: Encode CSV report to base64
         run: |
-            report_file=$(find . -name "filtered-scanner-report-*.csv" | head -n 1)
+            report_file=$(find . -name "scanner-report-*.csv" | head -n 1)
             if [ -s "$report_file" ]; then
               base64 "$report_file" > encoded_report.txt
             else
@@ -157,7 +169,7 @@ jobs:
               ENCODED_DATA=$(cat encoded_report.txt | tr -d '\n')
               
               # Upload the encoded report to Salesforce
-              contentDocumentResponse=$(curl -X POST https://yourInstance.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
+              contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
                 -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
                 -H "Content-Type: application/json" \
                 -d '{
@@ -165,6 +177,8 @@ jobs:
                   "PathOnClient": "scanner-report.csv",
                   "VersionData": "'"$ENCODED_DATA"'"
                 }')
+                
+              echo "Response: $contentDocumentResponse"
                 
               echo "Response: $contentDocumentResponse"
               
@@ -177,7 +191,7 @@ jobs:
               echo "ContentVersionId: $contentVersionId"
               
               # Get the ContentDocumentId
-              contentDocumentResponse=$(curl -X GET https://yourInstance.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
+              contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
                 -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
               echo "ContentDocument Response: $contentDocumentResponse"
               
