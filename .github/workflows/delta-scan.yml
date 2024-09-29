@@ -62,9 +62,9 @@ jobs:
             while IFS= read -r file; do
               echo "Processing file: $file"
               
-              # Extract the actual changed lines and original line numbers for the specific file
+              # Extract the actual changed lines and line numbers for the specific file
               changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
-              original_line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@' | grep -oP '(?<=\+)\d+')
+              line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@' | grep -oP '(?<=\+)\d+')
 
               if [ -n "$changed_lines" ]; then
                 echo "Changed lines in $file:"
@@ -93,10 +93,6 @@ jobs:
                 echo "}" >> "$temp_file"  # Close the class
                 echo "Created temporary file with method structure: $temp_file"
                 
-                # Map the temporary file's lines to original file's line numbers
-                temp_line_numbers=($(seq 1 $(echo "$changed_lines" | wc -l)))  # Temporary file line numbers
-                original_line_map=($(echo "$original_line_numbers"))  # Corresponding original file line numbers
-                
                 # Run the SFDX scanner on the temporary file
                 echo "Running SFDX scanner on temporary file $temp_file"
                 sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
@@ -111,9 +107,9 @@ jobs:
                   # Use sed to remove the specified path from the 'File' column
                   sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_force-app_main_default_classes_||g' "scanner-report-$temp_file.csv"
                   
-                  # Replace the Line column in the report with the original line numbers
+                  # Correct the Line numbers using awk
                   tmp_csv="scanner-report-corrected-$temp_file.csv"
-                  awk -F ',' -v OFS=',' -v lines="${original_line_map[*]}" '
+                  awk -F ',' -v OFS=',' -v lines="$line_numbers" '
                       BEGIN {
                           n = split(lines, lineArray, " ")
                       }
@@ -121,7 +117,7 @@ jobs:
                           print $0  # Print the header as-is
                       }
                       NR > 1 {
-                          $5 = lineArray[NR-1]  # Replace the Line column (5th field) with the correct line number from the original file
+                          $5 = lineArray[NR-1]  # Replace the Line column (5th field) with the correct line number
                           print $0  # Print the updated line
                       }
                   ' "scanner-report-$temp_file.csv" > "$tmp_csv"
