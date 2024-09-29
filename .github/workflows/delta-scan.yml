@@ -28,109 +28,104 @@ jobs:
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
 
-  get_changes:
-    runs-on: ubuntu-latest
-    needs: installcli
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
       - name: Get changed files and lines
         id: get-changes
         run: |
+          # Check if the repository is shallow and unshallow if necessary
           if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            echo "Repository is shallow, unshallowing..."
             git fetch --unshallow
+          else
+            echo "Repository is not shallow, skipping unshallow."
           fi
+
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
+            echo "Fetching changed files and lines between HEAD~1 and HEAD"
             git diff --unified=0 HEAD~1 HEAD > changes.diff
           else
             echo "No previous commit to compare to." > changes.diff
           fi
+
           cat changes.diff
-
-      - name: Upload changes.diff as artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: changes-diff
-          path: changes.diff
-
-  scan_changes:
-    runs-on: ubuntu-latest
-    needs: get_changes
-    steps:
-      - name: Install Salesforce CLI
-        run: npm install @salesforce/cli --global
-
-      - name: Install Scanner Plugin
-        run: sf plugins install @salesforce/sfdx-scanner
-
-      - name: Download changes.diff artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: changes-diff
 
       - name: Extract changed lines, create temp file, and scan
         if: success()
         run: |
-              files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+            # Extract only the changed files from the diff for .cls and .lwc files
+            files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+            
+            if [ -z "$files" ]; then
+              echo "No changed .cls or .lwc files detected."
+              exit 0  # Gracefully exit if no relevant files are changed
+            fi
+
+            while IFS= read -r file; do
+              echo "Processing file: $file"
               
-              if [ -z "$files" ]; then
-                echo "No changed .cls or .lwc files detected."
-                exit 0
-              fi
-  
-              while IFS= read -r file; do
-                echo "Processing file: $file"
+              # Extract the actual changed lines and line numbers for the specific file
+              changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
+              line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@' | grep -oP '(?<=\+)\d+')
+
+              if [ -n "$changed_lines" ]; then
+                echo "Changed lines in $file:"
+                echo "$changed_lines"
                 
-                changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
-          
-                if [ -n "$changed_lines" ]; then
-                  temp_file="temp_${file//\//_}.cls"
-                  echo "/* Temporary file for changed lines scan */" > "$temp_file"
-                  echo "public class TempWrapperClass {" >> "$temp_file"
-                  echo "    public static void tempMethod() {" >> "$temp_file"
-                  echo "$changed_lines" >> "$temp_file"
-                  echo "    }" >> "$temp_file"
-                  echo "}" >> "$temp_file"
-          
-                  open_braces=$(echo "$changed_lines" | grep -o '{' | wc -l)
-                  close_braces=$(echo "$changed_lines" | grep -o '}' | wc -l)
-                  if [ "$open_braces" -gt "$close_braces" ]; then
-                    remaining_closing_braces=$(($open_braces - $close_braces))
-                    for i in $(seq 1 $remaining_closing_braces); do
-                      echo "}" >> "$temp_file"
-                    done
-                  fi
-          
-                  sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
-
-                  if [ -s "scanner-report-$temp_file.csv" ]; then
-                    sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_force-app_main_default_classes_||g' "scanner-report-$temp_file.csv"
-                  fi
-                  
-                  rm "$temp_file"
+                # Create a temporary file with a valid method structure
+                temp_file="temp_${file//\//_}"
+                echo "/* Temporary file for changed lines scan */" > "$temp_file"
+                echo "public class TempWrapperClass {" >> "$temp_file"
+                echo "    public static void tempMethod() {" >> "$temp_file"
+                echo "        /* Begin of extracted changed lines */" >> "$temp_file"
+                echo "$changed_lines" >> "$temp_file"
+                echo "        /* End of extracted changed lines */" >> "$temp_file"
+                echo "    }" >> "$temp_file"
+        
+                # Check for unbalanced braces (ensure the method and class are closed properly)
+                open_braces=$(echo "$changed_lines" | grep -o '{' | wc -l)
+                close_braces=$(echo "$changed_lines" | grep -o '}' | wc -l)
+                if [ "$open_braces" -gt "$close_braces" ]; then
+                  remaining_closing_braces=$(($open_braces - $close_braces))
+                  for i in $(seq 1 $remaining_closing_braces); do
+                    echo "}" >> "$temp_file"
+                  done
                 fi
-              done <<< "$files"
-      
-      - name: Upload scanner report as artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: scanner-report
-          path: scanner-report-*.csv
-
-  email_report:
-    runs-on: ubuntu-latest
-    needs: scan_changes
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
-      - name: Download scanner report artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: scanner-report
+        
+                echo "}" >> "$temp_file"  # Close the class
+                echo "Created temporary file with method structure: $temp_file"
+                
+                # Run the SFDX scanner on the temporary file
+                echo "Running SFDX scanner on temporary file $temp_file"
+                sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
+                
+                # Check if the scanner report was generated
+                if [ -s "scanner-report-$temp_file.csv" ]; then
+                  echo "Scanner report generated for $temp_file."
+                  
+                  # Trim the file paths in the 'File' column of the generated report
+                  echo "Trimming the file paths in scanner report: scanner-report-$temp_file.csv"
+                  
+                  # Use sed to remove the specified path from the 'File' column
+                  sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_force-app_main_default_classes_||g' "scanner-report-$temp_file.csv"
+                  
+                  # Replace line numbers in the report based on changed lines file
+                  echo "Replacing line numbers in scanner report with actual changed line numbers."
+                  
+                  # Assuming the scanner report has the 'Line' column as the 5th column in the CSV
+                  paste -d ',' <(cut -d ',' -f1-4 "scanner-report-$temp_file.csv") <(echo "$line_numbers") <(cut -d ',' -f6- "scanner-report-$temp_file.csv") > "scanner-report-updated-$temp_file.csv"
+                  
+                  echo "Updated scanner report with correct line numbers: scanner-report-updated-$temp_file.csv."
+                  
+                else
+                  echo "No scanner report generated for $temp_file."
+                  exit 0  # Exit gracefully if no report was generated
+                fi
+                
+                # Clean up the temporary file after scanning
+                rm "$temp_file"
+              else
+                echo "No relevant changes detected in $file."
+              fi
+            done <<< "$files"
 
       - name: Install mailx
         run: sudo apt-get install -y mailutils
@@ -144,6 +139,13 @@ jobs:
           FILE_TITLE="SFDX_Code_Scan_Delta_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}.csv"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
 
+      - name: Upload Scanner Report and Rules as Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: SFDX_Code_Scan_Delta
+          path: |
+            scanner-report-updated-*.csv
+
       - name: Get Pusher's Email
         id: get-pusher-email
         run: |
@@ -155,35 +157,22 @@ jobs:
 
       - name: Encode CSV report to base64
         run: |
-            report_file=$(find . -name "scanner-report-*.csv" | head -n 1)
+            report_file=$(find . -name "scanner-report-updated-*.csv" | head -n 1)
             if [ -s "$report_file" ]; then
               base64 "$report_file" > encoded_report.txt
             else
               echo "No scanner report found."
-              exit 1
+              exit 0  # Gracefully exit if no report was found
             fi
-
-      - name: Upload encoded report as artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: encoded-report
-          path: encoded_report.txt
-
-  upload_to_salesforce:
-    runs-on: ubuntu-latest
-    needs: email_report
-    steps:
-      - name: Download encoded report artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: encoded-report
 
       - name: Upload CSV Report to Salesforce
         if: success()
         run: |
             if [ -s encoded_report.txt ]; then
+              # Read the base64 content from the file and escape special characters for JSON
               ENCODED_DATA=$(cat encoded_report.txt | tr -d '\n')
               
+              # Upload the encoded report to Salesforce
               contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
                 -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
                 -H "Content-Type: application/json" \
@@ -194,7 +183,10 @@ jobs:
                 }')
                 
               echo "Response: $contentDocumentResponse"
+                
+              echo "Response: $contentDocumentResponse"
               
+              # Extract the ContentVersionId from the response
               contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
               if [ -z "$contentVersionId" ]; then
                 echo "Error: Failed to upload file. No ContentVersionId found."
@@ -202,6 +194,7 @@ jobs:
               fi
               echo "ContentVersionId: $contentVersionId"
               
+              # Get the ContentDocumentId
               contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
                 -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
               echo "ContentDocument Response: $contentDocumentResponse"
@@ -216,4 +209,4 @@ jobs:
               echo "No encoded report found, skipping upload."
             fi
         env:
-          SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
+            SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
