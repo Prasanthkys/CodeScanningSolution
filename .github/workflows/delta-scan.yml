@@ -22,7 +22,7 @@ jobs:
       - name: Install Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
 
-      - name: Verify SFDX CLI Installation
+      - name: Verify SFDX CLI Installationn
         run: sf --version
 
       - name: Verify SFDX Scanner Plugin Installation
@@ -62,10 +62,9 @@ jobs:
             while IFS= read -r file; do
               echo "Processing file: $file"
               
-              # Extract the actual changed lines and line numbers for the specific file
+              # Extract the actual changed lines for the specific file
               changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
-              line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@' | grep -oP '(?<=\+)\d+')
-
+        
               if [ -n "$changed_lines" ]; then
                 echo "Changed lines in $file:"
                 echo "$changed_lines"
@@ -107,14 +106,7 @@ jobs:
                   # Use sed to remove the specified path from the 'File' column
                   sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_force-app_main_default_classes_||g' "scanner-report-$temp_file.csv"
                   
-                  # Replace line numbers in the report based on changed lines file
-                  echo "Replacing line numbers in scanner report with actual changed line numbers."
-                  
-                  # Assuming the scanner report has the 'Line' column (5th) and the 'Column' column (6th) in the CSV
-                  paste -d ',' <(cut -d ',' -f1-4 "scanner-report-$temp_file.csv") <(echo "$line_numbers") <(cut -d ',' -f6- "scanner-report-$temp_file.csv") > "scanner-report-updated-$temp_file.csv"
-                  
-                  echo "Updated scanner report with correct line and column numbers: scanner-report-updated-$temp_file.csv."
-                  
+                  echo "File paths trimmed in scanner-report-$temp_file.csv."
                 else
                   echo "No scanner report generated for $temp_file."
                   exit 0  # Exit gracefully if no report was generated
@@ -126,13 +118,10 @@ jobs:
                 echo "No relevant changes detected in $file."
               fi
             done <<< "$files"
-
-      # Upload the CSV report as an artifact
-      - name: Upload Scanner Report as Artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: SFDX_Code_Scan_Report
-          path: scanner-report-updated-*.csv
+        env:
+            SF_LAZY_LOAD_MODULES: 'true'
+            SF_AUTOUPDATE_DISABLE: 'true'
+            SF_DISABLE_AUTOUPDATE: 'true'
 
       - name: Install mailx
         run: sudo apt-get install -y mailutils
@@ -146,6 +135,13 @@ jobs:
           FILE_TITLE="SFDX_Code_Scan_Delta_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}.csv"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
 
+      - name: Upload Scanner Report and Rules as Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: SFDX_Code_Scan_Delta
+          path: |
+            scanner-report-*.csv
+
       - name: Get Pusher's Email
         id: get-pusher-email
         run: |
@@ -157,7 +153,7 @@ jobs:
 
       - name: Encode CSV report to base64
         run: |
-            report_file=$(find . -name "scanner-report-updated-*.csv" | head -n 1)
+            report_file=$(find . -name "scanner-report-*.csv" | head -n 1)
             if [ -s "$report_file" ]; then
               base64 "$report_file" > encoded_report.txt
             else
@@ -184,6 +180,8 @@ jobs:
                 
               echo "Response: $contentDocumentResponse"
                 
+              echo "Response: $contentDocumentResponse"
+              
               # Extract the ContentVersionId from the response
               contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
               if [ -z "$contentVersionId" ]; then
