@@ -25,8 +25,8 @@ jobs:
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
 
-  # Job 2: Get Changed Files and Lines
-  get-changes:
+  # Combined Job: Get Changed Files, Process, and Run Scanner
+  get-and-process-changes:
     runs-on: ubuntu-latest
     needs: setup-environment
     steps:
@@ -43,26 +43,6 @@ jobs:
             echo "No previous commit to compare to." > changes.diff
           fi
           cat changes.diff
-      - name: Upload changes.diff as artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: changes-diff
-          path: changes.diff
-
-  # Job 3: Process Changes and Run Scanner
-  process-changes:
-    runs-on: ubuntu-latest
-    needs: get-changes
-    steps:
-      - uses: actions/checkout@v3
-      - name: Download changes.diff artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: changes-diff
-      - name: Verify Salesforce CLI Installation
-        run: |
-          echo "Verifying Salesforce CLI installation again before processing"
-          sf --version
       - name: Extract changed lines, create temp file, and scan
         run: |
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
@@ -85,10 +65,10 @@ jobs:
             fi
           done <<< "$files"
 
-  # Job 4: Upload Artifacts (CSV report)
+  # Job 3: Upload Artifacts (CSV report)
   upload-artifacts:
     runs-on: ubuntu-latest
-    needs: process-changes
+    needs: get-and-process-changes
     steps:
       - uses: actions/upload-artifact@v3
         with:
@@ -96,7 +76,7 @@ jobs:
           path: |
             scanner-report-*.csv
 
-  # Job 5: Email and Upload to Salesforce
+  # Job 4: Email and Upload to Salesforce
   email-upload:
     runs-on: ubuntu-latest
     needs: upload-artifacts
