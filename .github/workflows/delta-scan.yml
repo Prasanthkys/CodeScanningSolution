@@ -22,7 +22,7 @@ jobs:
       - name: Install Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
 
-      - name: Verify SFDX CLI Installationn
+      - name: Verify SFDX CLI Installation
         run: sf --version
 
       - name: Verify SFDX Scanner Plugin Installation
@@ -58,13 +58,13 @@ jobs:
               echo "No changed .cls or .lwc files detected."
               exit 0  # Gracefully exit if no relevant files are changed
             fi
-        
+
             while IFS= read -r file; do
               echo "Processing file: $file"
               
               # Extract the actual changed lines and their original line numbers for the specific file
               changed_lines_with_numbers=$(grep -A 1000 "$file" changes.diff | grep -Pzo '@@.*?\n\+.*?\n')
-              
+        
               if [ -n "$changed_lines_with_numbers" ]; then
                 echo "Changed lines with original line numbers in $file:"
                 echo "$changed_lines_with_numbers"
@@ -99,7 +99,7 @@ jobs:
                     echo "}" >> "$temp_file"
                   done
                 fi
-        
+
                 echo "}" >> "$temp_file"  # Close the class
                 echo "Created temporary file with method structure: $temp_file"
                 
@@ -107,7 +107,7 @@ jobs:
                 echo "Running SFDX scanner on temporary file $temp_file"
                 sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
                 
-                # If a report was generated, map the line numbers back to the original file
+                # If a report was generated, map the original line numbers to the scanner report
                 if [ -s "scanner-report-$temp_file.csv" ]; then
                   echo "Mapping original line numbers to the scanner report."
                   
@@ -132,7 +132,6 @@ jobs:
             SF_LAZY_LOAD_MODULES: 'true'
             SF_AUTOUPDATE_DISABLE: 'true'
             SF_DISABLE_AUTOUPDATE: 'true'
-        
 
       - name: Install mailx
         run: sudo apt-get install -y mailutils
