@@ -59,9 +59,16 @@ jobs:
             while IFS= read -r file; do
               echo "Processing file: $file"
 
+              # Ensure that the file path is absolute
+              full_file_path="${{ github.workspace }}/$file"
+              if [ ! -f "$full_file_path" ]; then
+                echo "Error: File not found - $full_file_path"
+                exit 1
+              fi
+
               # 1. Run SFDX scanner on the full changed file
               echo "Running SFDX scanner on full file: $file"
-              sf scanner:run --target "$file" --format "csv" --outfile "scanner-report-$file.csv" || { echo "Scanner run failed on $file"; exit 1; }
+              sf scanner:run --target "$full_file_path" --format "csv" --outfile "scanner-report-${file//\//_}.csv" || { echo "Scanner run failed on $file"; exit 1; }
 
               # 2. Extract the changed lines for the specific file
               changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
