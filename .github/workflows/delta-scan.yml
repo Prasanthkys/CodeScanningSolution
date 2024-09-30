@@ -22,7 +22,7 @@ jobs:
       - name: Install Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
 
-      - name: Verify SFDX CLI Installationn
+      - name: Verify SFDX CLI Installation
         run: sf --version
 
       - name: Verify SFDX Scanner Plugin Installation
@@ -31,14 +31,11 @@ jobs:
       - name: Get changed files and lines
         id: get-changes
         run: |
-          # Check if the repository is shallow and unshallow if necessary
           if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
             echo "Repository is shallow, unshallowing..."
             git fetch --unshallow
-          else
-            echo "Repository is not shallow, skipping unshallow."
           fi
-
+          
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files and lines between HEAD~1 and HEAD"
             git diff --unified=0 HEAD~1 HEAD > changes.diff
@@ -51,25 +48,29 @@ jobs:
       - name: Extract changed lines, create temp file, and scan
         if: success()
         run: |
-            # Extract only the changed files from the diff for .cls and .lwc files
             files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
             
             if [ -z "$files" ]; then
               echo "No changed .cls or .lwc files detected."
-              exit 0  # Gracefully exit if no relevant files are changed
+              exit 0
             fi
 
+            # Scan both the full files and create temp files for the changed lines
             while IFS= read -r file; do
               echo "Processing file: $file"
-              
-              # Extract the actual changed lines for the specific file
+
+              # 1. Run SFDX scanner on the full changed file
+              echo "Running SFDX scanner on full file: $file"
+              sf scanner:run --target "$file" --format "csv" --outfile "scanner-report-$file.csv" || { echo "Scanner run failed on $file"; exit 1; }
+
+              # 2. Extract the changed lines for the specific file
               changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
-        
+
               if [ -n "$changed_lines" ]; then
                 echo "Changed lines in $file:"
                 echo "$changed_lines"
-                
-                # Create a temporary file with a valid method structure
+
+                # Create a temporary file for changed lines
                 temp_file="temp_${file//\//_}"
                 echo "/* Temporary file for changed lines scan */" > "$temp_file"
                 echo "public class TempWrapperClass {" >> "$temp_file"
@@ -78,8 +79,8 @@ jobs:
                 echo "$changed_lines" >> "$temp_file"
                 echo "        /* End of extracted changed lines */" >> "$temp_file"
                 echo "    }" >> "$temp_file"
-        
-                # Check for unbalanced braces (ensure the method and class are closed properly)
+
+                # Ensure the method and class are closed properly
                 open_braces=$(echo "$changed_lines" | grep -o '{' | wc -l)
                 close_braces=$(echo "$changed_lines" | grep -o '}' | wc -l)
                 if [ "$open_braces" -gt "$close_braces" ]; then
@@ -88,30 +89,12 @@ jobs:
                     echo "}" >> "$temp_file"
                   done
                 fi
-        
-                echo "}" >> "$temp_file"  # Close the class
-                echo "Created temporary file with method structure: $temp_file"
-                
-                # Run the SFDX scanner on the temporary file
-                echo "Running SFDX scanner on temporary file $temp_file"
-                sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
-                
-                # Check if the scanner report was generated
-                if [ -s "scanner-report-$temp_file.csv" ]; then
-                  echo "Scanner report generated for $temp_file."
-                  
-                  # Trim the file paths in the 'File' column of the generated report
-                  echo "Trimming the file paths in scanner report: scanner-report-$temp_file.csv"
-                  
-                  # Use sed to remove the specified path from the 'File' column
-                  sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_force-app_main_default_classes_||g' "scanner-report-$temp_file.csv"
-                  
-                  echo "File paths trimmed in scanner-report-$temp_file.csv."
-                else
-                  echo "No scanner report generated for $temp_file."
-                  exit 0  # Exit gracefully if no report was generated
-                fi
-                
+                echo "}" >> "$temp_file"
+
+                # Run the SFDX scanner on the temp file
+                echo "Running SFDX scanner on temp file: $temp_file"
+                sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed on temp file"; exit 1; }
+
                 # Clean up the temporary file after scanning
                 rm "$temp_file"
               else
@@ -122,6 +105,13 @@ jobs:
             SF_LAZY_LOAD_MODULES: 'true'
             SF_AUTOUPDATE_DISABLE: 'true'
             SF_DISABLE_AUTOUPDATE: 'true'
+
+      - name: Upload Scanner Reports as Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: SFDX_Code_Scan_Reports
+          path: |
+            scanner-report-*.csv
 
       - name: Install mailx
         run: sudo apt-get install -y mailutils
@@ -135,12 +125,12 @@ jobs:
           FILE_TITLE="SFDX_Code_Scan_Delta_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}.csv"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
 
-      - name: Upload Scanner Report and Rules as Artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: SFDX_Code_Scan_Delta
-          path: |
-            scanner-report-*.csv
+      # - name: Upload Scanner Report and Rules as Artifacts
+      #   uses: actions/upload-artifact@v3
+      #   with:
+      #     name: SFDX_Code_Scan_Delta
+      #     path: |
+      #       scanner-report-*.csv
 
       - name: Get Pusher's Email
         id: get-pusher-email
