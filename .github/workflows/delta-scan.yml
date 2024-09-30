@@ -56,7 +56,7 @@ jobs:
             fi
 
             # Scan both the full files and create temp files for the changed lines
-            while IFS= read -r file; do
+            for file in $files; do
               echo "Processing file: $file"
 
               # Ensure that the file path is absolute
@@ -92,17 +92,6 @@ jobs:
                 echo "        /* End of extracted changed lines */" >> "$temp_file"
                 echo "    }" >> "$temp_file"
 
-                # Ensure the method and class are closed properly
-                open_braces=$(echo "$changed_lines" | grep -o '{' | wc -l)
-                close_braces=$(echo "$changed_lines" | grep -o '}' | wc -l)
-                if [ "$open_braces" -gt "$close_braces" ]; then
-                  remaining_closing_braces=$(($open_braces - $close_braces))
-                  for i in $(seq 1 $remaining_closing_braces); do
-                    echo "}" >> "$temp_file"
-                  done
-                fi
-                echo "}" >> "$temp_file"
-
                 # Run the SFDX scanner on the temp file
                 echo "Running SFDX scanner on temp file: $temp_file"
                 sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-${file//\//_}-temp.csv" || { echo "Scanner run failed on temp file"; exit 1; }
@@ -112,12 +101,15 @@ jobs:
                 awk 'BEGIN{FS=OFS=","} NR==1{$(NF+1)="Status"} NR>1{$(NF+1)="New"} 1' "scanner-report-${file//\//_}-temp.csv" > "scanner-report-${file//\//_}-temp-status.csv"
                 mv "scanner-report-${file//\//_}-temp-status.csv" "scanner-report-${file//\//_}-temp.csv"
 
+                # Remove the header from the temp file report
+                tail -n +2 "scanner-report-${file//\//_}-temp.csv" >> "scanner-report-${file//\//_}-full.csv"
+
                 # Clean up the temporary file after scanning
                 rm "$temp_file"
               else
                 echo "No relevant changes detected in $file."
               fi
-            done <<< "$files"
+            done
         env:
             SF_LAZY_LOAD_MODULES: 'true'
             SF_AUTOUPDATE_DISABLE: 'true'
@@ -130,6 +122,13 @@ jobs:
           path: |
             scanner-report-*-full.csv
             scanner-report-*-temp.csv
+
+      - name: Upload Merged Scanner Reports as Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: SFDX_Merged_Scan_Report
+          path: |
+            scanner-report-*-full.csv
 
 
       - name: Install mailx
