@@ -9,7 +9,7 @@ public with sharing class Sample {
                     acc.Description = 'Happy Welcome';
                     acc.Rating = 'Hot';
                     acc.Industry = 'Agriculture';
-                    System.debug('Wel');
+                    System.debug('Welcome');
                 }
             }
             insert accList;
