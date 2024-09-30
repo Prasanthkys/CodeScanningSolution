@@ -68,7 +68,7 @@ jobs:
 
               # 1. Run SFDX scanner on the full changed file
               echo "Running SFDX scanner on full file: $file"
-              sf scanner:run --target "$full_file_path" --format "csv" --outfile "scanner-report-${file//\//_}.csv" || { echo "Scanner run failed on $file"; exit 1; }
+              sf scanner:run --target "$full_file_path" --format "csv" --outfile "scanner-report-${file//\//_}-full.csv" || { echo "Scanner run failed on $file"; exit 1; }
 
               # 2. Extract the changed lines for the specific file
               changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
@@ -100,7 +100,7 @@ jobs:
 
                 # Run the SFDX scanner on the temp file
                 echo "Running SFDX scanner on temp file: $temp_file"
-                sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed on temp file"; exit 1; }
+                sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-${file//\//_}-temp.csv" || { echo "Scanner run failed on temp file"; exit 1; }
 
                 # Clean up the temporary file after scanning
                 rm "$temp_file"
@@ -118,7 +118,9 @@ jobs:
         with:
           name: SFDX_Code_Scan_Reports
           path: |
-            scanner-report-*.csv
+            scanner-report-*-full.csv
+            scanner-report-*-temp.csv
+
 
       - name: Install mailx
         run: sudo apt-get install -y mailutils
