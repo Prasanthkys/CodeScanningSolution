@@ -107,6 +107,11 @@ jobs:
                 echo "Running SFDX scanner on temp file: $temp_file"
                 sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-${file//\//_}-temp.csv" || { echo "Scanner run failed on temp file"; exit 1; }
 
+                # Add the "Status" column to the temp file report
+                echo "Adding Status column with value 'New' to the temp file report"
+                awk 'BEGIN{FS=OFS=","} NR==1{$(NF+1)="Status"} NR>1{$(NF+1)="New"} 1' "scanner-report-${file//\//_}-temp.csv" > "scanner-report-${file//\//_}-temp-status.csv"
+                mv "scanner-report-${file//\//_}-temp-status.csv" "scanner-report-${file//\//_}-temp.csv"
+
                 # Clean up the temporary file after scanning
                 rm "$temp_file"
               else
