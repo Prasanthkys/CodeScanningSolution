@@ -101,7 +101,8 @@ jobs:
                 awk 'BEGIN{FS=OFS=","} NR==1{$(NF+1)="Status"} NR>1{$(NF+1)="New"} 1' "scanner-report-${file//\//_}-temp.csv" > "scanner-report-${file//\//_}-temp-status.csv"
                 mv "scanner-report-${file//\//_}-temp-status.csv" "scanner-report-${file//\//_}-temp.csv"
 
-                # Remove the header from the temp file report
+                # Remove the header from the temp file report and append its rows to the full file report
+                echo "Merging temp file report rows with the full file report"
                 tail -n +2 "scanner-report-${file//\//_}-temp.csv" >> "scanner-report-${file//\//_}-full.csv"
 
                 # Clean up the temporary file after scanning
