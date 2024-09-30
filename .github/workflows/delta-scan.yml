@@ -70,6 +70,11 @@ jobs:
               echo "Running SFDX scanner on full file: $file"
               sf scanner:run --target "$full_file_path" --format "csv" --outfile "scanner-report-${file//\//_}-full.csv" || { echo "Scanner run failed on $file"; exit 1; }
 
+              # Add the "Status" column to the full file report
+              echo "Adding Status column with value 'Existing' to the full file report"
+              awk 'BEGIN{FS=OFS=","} NR==1{$(NF+1)="Status"} NR>1{$(NF+1)="Existing"} 1' "scanner-report-${file//\//_}-full.csv" > "scanner-report-${file//\//_}-full-status.csv"
+              mv "scanner-report-${file//\//_}-full-status.csv" "scanner-report-${file//\//_}-full.csv"
+
               # 2. Extract the changed lines for the specific file
               changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
 
