@@ -31,14 +31,22 @@ jobs:
       - name: Get changed files and lines
         id: get-changes
         run: |
-          # Fetch changes between the previous and current commit
+          # Check if the repository is shallow and fetch the full history if necessary
           if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
             echo "Repository is shallow, unshallowing..."
             git fetch --unshallow
           fi
       
-          git diff --unified=0 --line-number HEAD~1 HEAD > changes.diff
+          # Check if there are at least two commits to compare
+          if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
+            echo "Fetching changed .cls and .lwc files between HEAD~1 and HEAD"
+            git diff --unified=0 HEAD~1 HEAD -- '*.cls' '*.lwc' > changes.diff
+          else
+            echo "No previous commit to compare to." > changes.diff
+          fi
+      
           cat changes.diff
+      
       
       - name: Extract changed lines, create temp file, and scan
         if: success()
