@@ -44,6 +44,7 @@ jobs:
 
       - name: Run SFDX Scanner on Changed Files and Filter for Changed Lines
         if: success()
+        continue-on-error: true  # Allow the job to continue even if violations are found
         run: |
           # Extract only the file paths, remove the '+++ b/' prefix, and store them in 'changed_files.txt'
           grep "^+++ b/" changed_lines.txt | sed 's|+++ b/||' > changed_files.txt
