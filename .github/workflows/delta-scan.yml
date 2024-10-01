@@ -45,7 +45,9 @@ jobs:
       - name: Run SFDX Scanner on Changed Files and Filter for Changed Lines
         if: success()
         run: |
-          files=$(cat changed_lines.txt | grep -E '\.cls$|\.lwc$' || true)
+          # Extract only the file paths, remove the '+++ b/' prefix, and store them in 'changed_files.txt'
+          grep "^+++ b/" changed_lines.txt | sed 's|+++ b/||' > changed_files.txt
+          files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
           echo "Files to scan: $files"
           if [ -n "$files" ]; then
             # Run scanner on all changed files
@@ -71,6 +73,7 @@ jobs:
           SF_LAZY_LOAD_MODULES: 'true'
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
+
 
       - name: Generate Scanner Rule List
         if: success()
