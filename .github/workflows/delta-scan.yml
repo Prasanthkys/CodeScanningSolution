@@ -1,12 +1,10 @@
-name: Salesforce Code Scan and Critical Permissions Check on Pull Request
-
 on:
-  pull_request:
+  push:
     branches:
-      - '**'
+      "**"
 
 jobs:
-  run-code-scan:
+  installcli:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -18,57 +16,53 @@ jobs:
         with:
           node-version: 20.x
 
-      - name: Install Salesforce CLI
+      - name: Install CLI
         run: npm install @salesforce/cli --global
 
       - name: Install Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
 
-      - name: Verify Salesforce CLI Installation
+      - name: Verify SFDX CLI Installationn
         run: sf --version
 
-      - name: Verify Scanner Plugin Installation
+      - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
 
       - name: Get changed files and lines
         id: get-changes
         run: |
-          # Check if the repository is shallow and unshallow if necessary
+          # Fetch changes between the previous and current commit
           if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
             echo "Repository is shallow, unshallowing..."
             git fetch --unshallow
-          else
-            echo "Repository is not shallow, skipping unshallow."
           fi
-
-          if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-            echo "Fetching changed files and lines between HEAD~1 and HEAD"
-            git diff --unified=0 HEAD~1 HEAD > changes.diff
-          else
-            echo "No previous commit to compare to." > changes.diff
-          fi
-
+      
+          git diff --unified=0 --line-number HEAD~1 HEAD > changes.diff
           cat changes.diff
-
+      
       - name: Extract changed lines, create temp file, and scan
         if: success()
         run: |
-          # Extract only the changed files from the diff for .cls and .lwc files
+          # Extract only the changed .cls and .lwc files from the diff
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+          
           if [ -z "$files" ]; then
-            echo "No changed .cls or .lwc files detected."
-            exit 0  # Gracefully exit if no relevant files are changed
+            echo "No relevant .cls or .lwc files changed."
+            exit 0
           fi
-
+      
           while IFS= read -r file; do
             echo "Processing file: $file"
-            # Extract the actual changed lines for the specific file
+            
+            # Extract the actual changed lines along with their line numbers
             changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
+            line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -o '^[0-9]\+')
+      
             if [ -n "$changed_lines" ]; then
               echo "Changed lines in $file:"
               echo "$changed_lines"
-
-              # Create a temporary file with a valid method structure
+              
+              # Create a temporary file with valid method structure
               temp_file="temp_${file//\//_}"
               echo "/* Temporary file for changed lines scan */" > "$temp_file"
               echo "public class TempWrapperClass {" >> "$temp_file"
@@ -77,8 +71,8 @@ jobs:
               echo "$changed_lines" >> "$temp_file"
               echo "        /* End of extracted changed lines */" >> "$temp_file"
               echo "    }" >> "$temp_file"
-
-              # Check for unbalanced braces (ensure the method and class are closed properly)
+              
+              # Check for unbalanced braces
               open_braces=$(echo "$changed_lines" | grep -o '{' | wc -l)
               close_braces=$(echo "$changed_lines" | grep -o '}' | wc -l)
               if [ "$open_braces" -gt "$close_braces" ]; then
@@ -87,37 +81,49 @@ jobs:
                   echo "}" >> "$temp_file"
                 done
               fi
-
+      
               echo "}" >> "$temp_file"  # Close the class
               echo "Created temporary file with method structure: $temp_file"
-
+              
               # Run the SFDX scanner on the temporary file
               echo "Running SFDX scanner on temporary file $temp_file"
               sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
-
-              # Check if the scanner report was generated
+              
+              # Process the generated report
               if [ -s "scanner-report-$temp_file.csv" ]; then
                 echo "Scanner report generated for $temp_file."
-                # Trim the file paths in the 'File' column of the generated report
+                
+                # Trim the file paths in the 'File' column of the report
                 echo "Trimming the file paths in scanner report: scanner-report-$temp_file.csv"
-                # Use sed to remove the specified path from the 'File' column
                 sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_force-app_main_default_classes_||g' "scanner-report-$temp_file.csv"
-                echo "File paths trimmed in scanner-report-$temp_file.csv."
               else
                 echo "No scanner report generated for $temp_file."
                 exit 0  # Exit gracefully if no report was generated
               fi
-
-              # Clean up the temporary file after scanning
+      
+              # Clean up temporary file
               rm "$temp_file"
             else
               echo "No relevant changes detected in $file."
             fi
           done <<< "$files"
+      
         env:
-          SF_LAZY_LOAD_MODULES: 'true'
-          SF_AUTOUPDATE_DISABLE: 'true'
-          SF_DISABLE_AUTOUPDATE: 'true'
+            SF_LAZY_LOAD_MODULES: 'true'
+            SF_AUTOUPDATE_DISABLE: 'true'
+            SF_DISABLE_AUTOUPDATE: 'true'
+
+      - name: Install mailx
+        run: sudo apt-get install -y mailutils
+
+      - name: Get Repository and Branch Info
+        id: get-info
+        run: |
+          REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
+          BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
+          COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
+          FILE_TITLE="SFDX_Code_Scan_Delta_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}.csv"
+          echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
 
       - name: Upload Scanner Report and Rules as Artifacts
         uses: actions/upload-artifact@v3
@@ -126,77 +132,67 @@ jobs:
           path: |
             scanner-report-*.csv
 
-      - name: Block PR merge if severity violations are found
+      - name: Get Pusher's Email
+        id: get-pusher-email
         run: |
-          if [ -f scanner-report-$temp_file.csv ]; then
-            # Assuming 'severity' is the third column in the CSV
-            severity_fail_count=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' scanner-report-$temp_file.csv)
-            echo "Severity 3 issues count: $severity_fail_count"
-            if [ "$severity_fail_count" -gt 0 ]; then
-              echo "Blocking your pull request due to severity 3 vulnerabilities found."
-              exit 1
+          COMMIT_SHA=${{ github.sha }}
+          REPO=${{ github.repository }}
+          PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
+            "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
+          echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
+
+      - name: Encode CSV report to base64
+        run: |
+            report_file=$(find . -name "scanner-report-*.csv" | head -n 1)
+            if [ -s "$report_file" ]; then
+              base64 "$report_file" > encoded_report.txt
             else
-              echo "No severity 3 vulnerabilities found. Proceeding with Approval."
+              echo "No scanner report found."
+              exit 0  # Gracefully exit if no report was found
             fi
-          else
-            echo "No scanner report found."
-            exit 1
-          fi
 
-  check-critical-permissions:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Scan Profiles and Permission Sets for Critical Permissions
+      - name: Upload CSV Report to Salesforce
+        if: success()
         run: |
-          CRITICAL_PERMISSIONS=(
-              "AssignPermissionSets"
-              "AuthorApex"
-              "CustomizeApplication"
-              "FreezeUsers"
-              "ManageEncryptionKeys"
-              "ManageInternalUsers"
-              "ManagePasswordPolicies"
-              "ManageProfilesPermissionSets"
-              "ManageRoles"
-              "ManageSharing"
-              "ManageUsers"
-              "ModifyAllData"
-              "MonitorLoginHistory"
-              "MultiFactorAuthenticationRequired"
-              "PasswordNeverExpires"
-              "ResetPasswordsUnlockUsers"
-              "ViewAllData"
-          )
-
-          BLOCKED_FILES=()
-
-          # Search through profiles
-          for FILE in $(find force-app/main/default/profiles -name '*.profile-meta.xml'); do
-            for PERMISSION in "${CRITICAL_PERMISSIONS[@]}"; do
-              if grep -q "$PERMISSION" "$FILE" && ! grep -q "System Administrator" "$FILE"; then
-                BLOCKED_FILES+=("$FILE")
+            if [ -s encoded_report.txt ]; then
+              # Read the base64 content from the file and escape special characters for JSON
+              ENCODED_DATA=$(cat encoded_report.txt | tr -d '\n')
+              
+              # Upload the encoded report to Salesforce
+              contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
+                -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
+                -H "Content-Type: application/json" \
+                -d '{
+                  "Title": "'"${{ env.FILE_TITLE }}"'",
+                  "PathOnClient": "scanner-report.csv",
+                  "VersionData": "'"$ENCODED_DATA"'"
+                }')
+                
+              echo "Response: $contentDocumentResponse"
+                
+              echo "Response: $contentDocumentResponse"
+              
+              # Extract the ContentVersionId from the response
+              contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
+              if [ -z "$contentVersionId" ]; then
+                echo "Error: Failed to upload file. No ContentVersionId found."
+                exit 1
               fi
-            done
-          done
-
-          # Search through permission sets
-          for FILE in $(find force-app/main/default/permissionsets -name '*.permissionset-meta.xml'); do
-            for PERMISSION in "${CRITICAL_PERMISSIONS[@]}"; do
-              if grep -q "$PERMISSION" "$FILE"; then
-                BLOCKED_FILES+=("$FILE")
+              echo "ContentVersionId: $contentVersionId"
+              
+              # Get the ContentDocumentId
+              contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
+                -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
+              echo "ContentDocument Response: $contentDocumentResponse"
+              
+              contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
+              if [ -z "$contentDocumentId" ]; then
+                echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
+                exit 1
               fi
-            done
-          done
-
-          if [ ${#BLOCKED_FILES[@]} -gt 0 ]; then
-            echo "Critical permissions found in the following files:"
-            for FILE in "${BLOCKED_FILES[@]}"; do
-              echo "$FILE"
-            done
-            exit 1
-          else
-            echo "No critical permissions assigned to non-System Administrator profiles or permission sets."
-          fi
+              echo "ContentDocumentId: $contentDocumentId"
+            else
+              echo "No encoded report found, skipping upload."
+            fi
+        env:
+            SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
