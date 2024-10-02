@@ -38,33 +38,10 @@ jobs:
             echo "Repository is not shallow, skipping unshallow."
           fi
 
-          # Fetch the diff between the last two commits
+          # Fetch the diff between the last two commits and capture only changes for .cls and .lwc files
           git diff --unified=0 HEAD~1 HEAD > changes.diff
 
-          # Extract the file name and line numbers from the diff
-          while IFS= read -r file; do
-              echo "Processing file: $file"
-
-              # Extract changed lines along with the line numbers
-              grep -n '^@@ ' changes.diff | while read -r header; do
-                  # Extract the line range information from the diff header
-                  start_line=$(echo "$header" | sed -n 's/^@@ -\([0-9]\+\).*/\1/p')
-                  # Add the start line number to changed lines
-                  grep -n -A 1000 "^+++ b/$file" changes.diff | grep '^+' | grep -v '+++' | while read -r line; do
-                      line_number=$((start_line))
-                      echo "$line_number: $line"
-                      start_line=$((start_line + 1))
-                  done
-              done
-
-          done <<< "$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')"
-
-          cat changes.diff
-
-      - name: Extract changed lines, create temp file, and scan
-        if: success()
-        run: |
-          # Extract only the changed files from the diff for .cls and .lwc files
+          # Extract only changed .cls and .lwc files from the diff
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
 
           if [ -z "$files" ]; then
@@ -72,18 +49,19 @@ jobs:
             exit 0  # Gracefully exit if no relevant files are changed
           fi
 
+          # Loop through each file and extract changed lines with line numbers
           while IFS= read -r file; do
             echo "Processing file: $file"
-            # Extract the actual changed lines for the specific file
-            changed_lines=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
 
-            # Extract line numbers of the changed lines
+            # Extract changed lines and corresponding line numbers from the diff
+            changed_lines=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
             line_numbers=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d':' -f1)
 
             if [ -n "$changed_lines" ]; then
               echo "Changed lines in $file:"
               echo "$changed_lines"
-              # Create a temporary file with a valid method structure
+              
+              # Create a temporary file with the extracted lines
               temp_file="temp_${file//\//_}"
               echo "/* Temporary file for changed lines scan */" > "$temp_file"
               echo "public class TempWrapperClass {" >> "$temp_file"
@@ -94,9 +72,9 @@ jobs:
               echo "    }" >> "$temp_file"
 
               # Create a CSV report with line numbers and changed lines
-              report_file="scanner-report-$temp_file.csv"
+              report_file="scanner-report-${temp_file}.csv"
               echo "Line Number,Changed Line" > "$report_file"
-              paste <(echo "$line_numbers") <(echo "$changed_lines") >> "$report_file"
+              paste <(echo "$line_numbers") <(echo "$changed_lines") | sed 's/\t/,/g' >> "$report_file"
 
               # Check for unbalanced braces (ensure the method and class are closed properly)
               open_braces=$(echo "$changed_lines" | grep -o '{' | wc -l)
@@ -110,20 +88,17 @@ jobs:
 
               echo "}" >> "$temp_file"  # Close the class
               echo "Created temporary file with method structure: $temp_file"
+              
               # Run the SFDX scanner on the temporary file
               echo "Running SFDX scanner on temporary file $temp_file"
-              sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-$temp_file-report.csv" || { echo "Scanner run failed"; exit 1; }
+              sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-${temp_file}-report.csv" || { echo "Scanner run failed"; exit 1; }
 
               # Clean up the temporary file after scanning
               rm "$temp_file"
             else
               echo "No relevant changes detected in $file."
             fi
-            done <<< "$files"
-        env:
-          SF_LAZY_LOAD_MODULES: "true"
-          SF_AUTOUPDATE_DISABLE: "true"
-          SF_DISABLE_AUTOUPDATE: "true"
+          done <<< "$files"
 
       - name: Install mailx
         run: sudo apt-get install -y mailutils
