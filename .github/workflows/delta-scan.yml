@@ -53,51 +53,23 @@ jobs:
           while IFS= read -r file; do
             echo "Processing file: $file"
 
-            # Extract changed lines and corresponding line numbers from the diff
-            changed_lines=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
-            line_numbers=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d':' -f1)
+            # Extract the diff block associated with the current file
+            file_diff=$(awk "/^\+\+\+ b\/$file\$/,/^diff/" changes.diff | grep -v '^diff')
 
-            if [ -n "$changed_lines" ]; then
-              echo "Changed lines in $file:"
-              echo "$changed_lines"
-              
-              # Create a temporary file with the extracted lines
-              temp_file="temp_${file//\//_}"
-              echo "/* Temporary file for changed lines scan */" > "$temp_file"
-              echo "public class TempWrapperClass {" >> "$temp_file"
-              echo "    public static void tempMethod() {" >> "$temp_file"
-              echo "        /* Begin of extracted changed lines */" >> "$temp_file"
-              echo "$changed_lines" >> "$temp_file"
-              echo "        /* End of extracted changed lines */" >> "$temp_file"
-              echo "    }" >> "$temp_file"
+            # Extract changed lines and corresponding line numbers
+            echo "$file_diff" | grep -n '^+' | grep -v '+++' | while read -r line; do
+              line_number=$(echo "$line" | cut -d: -f1)
+              changed_line=$(echo "$line" | cut -d: -f2- | sed 's/^[+ ]//')
 
-              # Create a CSV report with line numbers and changed lines
-              report_file="scanner-report-${temp_file}.csv"
-              echo "Line Number,Changed Line" > "$report_file"
-              paste <(echo "$line_numbers") <(echo "$changed_lines") | sed 's/\t/,/g' >> "$report_file"
+              # Display the line number and the changed line
+              echo "Line $line_number: $changed_line"
+            done
 
-              # Check for unbalanced braces (ensure the method and class are closed properly)
-              open_braces=$(echo "$changed_lines" | grep -o '{' | wc -l)
-              close_braces=$(echo "$changed_lines" | grep -o '}' | wc -l)
-              if [ "$open_braces" -gt "$close_braces" ]; then
-                remaining_closing_braces=$(($open_braces - $close_braces))
-                for i in $(seq 1 $remaining_closing_braces); do
-                  echo "}" >> "$temp_file"
-                done
-              fi
-
-              echo "}" >> "$temp_file"  # Close the class
-              echo "Created temporary file with method structure: $temp_file"
-              
-              # Run the SFDX scanner on the temporary file
-              echo "Running SFDX scanner on temporary file $temp_file"
-              sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-${temp_file}-report.csv" || { echo "Scanner run failed"; exit 1; }
-
-              # Clean up the temporary file after scanning
-              rm "$temp_file"
-            else
+            # If no relevant changes were found in the file diff, log it
+            if [ -z "$file_diff" ]; then
               echo "No relevant changes detected in $file."
             fi
+
           done <<< "$files"
 
       - name: Install mailx
