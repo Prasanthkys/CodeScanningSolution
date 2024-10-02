@@ -73,10 +73,10 @@ jobs:
       - name: Filter Vulnerabilities to Changed Lines
         if: success()
         run: |
-          awk '/^\+\d+/{print NR-1 " " $0}' changes.diff | grep -oP '\d+' > changed_lines.txt
+          awk '/^\+/ {print NR-1 " " $0}' changes.diff | grep -o '[0-9]\+' > changed_lines.txt
           echo "Changed lines: $(cat changed_lines.txt)"
-
-          awk -F, 'NR==1 {print $0} NR>1 {for(i in lines) if ($4 == lines[i]) print $0}' lines=$(cat changed_lines.txt | tr '\n' ' ') scanner-report-full.csv > scanner-report.csv
+        
+          awk -F, 'NR==1 {print $0} NR>1 {for(i in lines) if ($4 == lines[i]) print $0}' lines=$(cat changed_lines.txt | tr '\n' ' ') scanner-report-full.csv > scanner-report.csv        
 
       - name: Encode CSV file to Base64
         if: success()
