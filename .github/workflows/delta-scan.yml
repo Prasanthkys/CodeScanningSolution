@@ -40,6 +40,27 @@ jobs:
             echo "Repository is not shallow, skipping unshallow."
           fi
 
+          # Fetch the diff between the last two commits
+          git diff --unified=0 HEAD~1 HEAD > changes.diff
+          
+          # Extract the file name and line numbers from the diff
+          while IFS= read -r file; do
+              echo "Processing file: $file"
+          
+              # Extract changed lines along with the line numbers
+              grep -n '^@@ ' changes.diff | while read -r header; do
+                  # Extract the line range information from the diff header
+                  start_line=$(echo "$header" | sed -n 's/^@@ -\([0-9]\+\).*/\1/p')
+                  # Add the start line number to changed lines
+                  grep -n -A 1000 "^+++ b/$file" changes.diff | grep '^+' | grep -v '+++' | while read -r line; do
+                      line_number=$((start_line))
+                      echo "$line_number: $line"
+                      start_line=$((start_line + 1))
+                  done
+              done
+          
+          done <<< "$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')"
+
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files and lines between HEAD~1 and HEAD"
             git diff --unified=0 HEAD~1 HEAD > changes.diff
@@ -48,22 +69,6 @@ jobs:
           fi
 
           cat changes.diff
-
-          # Get changed lines and their corresponding line numbers
-              changed_lines=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
-              line_numbers=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d':' -f1)
-              
-                printf "Changed Lines:\n%s\n" "$changed_lines"
-
-              # Convert both `changed_lines` and `line_numbers` into arrays
-              mapfile -t changed_lines_array <<< "$changed_lines"
-              mapfile -t line_numbers_array <<< "$line_numbers"
-              
-              # Loop through both arrays and print each line with its corresponding number
-              for i in "${!changed_lines_array[@]}"; do
-                echo "Line Number: ${line_numbers_array[$i]}, Changed Line: ${changed_lines_array[$i]}"
-              done
-
 
       - name: Extract changed lines, line numbers, create temp file, and scan
         if: success()
