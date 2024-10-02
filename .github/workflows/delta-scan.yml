@@ -73,17 +73,11 @@ jobs:
       - name: Filter Vulnerabilities to Changed Lines
         if: success()
         run: |
-            # Extract changed lines and the corresponding file paths from the diff
+            # Extract changed lines and corresponding file paths from the diff
             git diff --unified=0 -- '*.cls' '*.lwc' > changes.diff
-            awk '/^\+\d+/ {print FILENAME " " NR " " $0}' changes.diff | grep -E '^diff --git|^\+\d+' > changes_info.txt
-            echo "Changes Info:"
-            cat changes_info.txt
-        
-            # Prepare variables to store changed file names and lines
-            touch changed_files_with_lines.txt
         
             # Capture the file names and their corresponding changed lines
-            awk '/^diff --git/ {file=$3} /^\+\d+/ {print file " " substr($0, 2)}' changes.diff > changed_files_with_lines.txt
+            awk '/^diff --git/ {file=$3} /^\+[0-9]+/ {print file " " substr($0, 2)}' changes.diff > changed_files_with_lines.txt
             echo "Changed files and lines:"
             cat changed_files_with_lines.txt
         
@@ -103,9 +97,9 @@ jobs:
         
             # Debug: Output filtered scanner report
             echo "Filtered Scanner Report:"
-            cat scanner-report.csv        
+            cat scanner-report.csv
         
-
+        
       - name: Encode CSV file to Base64
         if: success()
         id: encode_file
