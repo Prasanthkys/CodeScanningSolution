@@ -61,9 +61,10 @@ jobs:
 
             while IFS= read -r file; do
               echo "Processing file: $file"
-              
-              # Extract the actual changed lines and their corresponding line numbers for the specific file
-              grep -A 1000 "$file" changes.diff | grep -E '^@@' -A 100 | grep -E '^\+' | grep -v '+++' > temp_changed_lines_with_numbers.txt
+
+              # Extracting line numbers and changed lines from the diff
+              # This will extract the starting line number and corresponding changed lines.
+              awk '/^@@/ { split($4,a,","); line=a[1]; next } /^[+][^+]/ { print line, $0; line++ }' changes.diff > temp_changed_lines_with_numbers.txt
 
               if [ -s temp_changed_lines_with_numbers.txt ]; then
                 temp_file="temp_${file//\//_}"
@@ -75,11 +76,11 @@ jobs:
                 echo "    public static void tempMethod() {" >> "$temp_file"
 
                 while IFS= read -r line; do
-                  line_number=$(echo "$line" | grep -Eo '^@@ \-[0-9]+,[0-9]+ \+[0-9]+' | sed 's/^@@.*+//')
-                  changed_line=$(echo "$line" | sed 's/^[+ ]//')
+                  line_number=$(echo "$line" | cut -d' ' -f1)
+                  changed_line=$(echo "$line" | cut -d' ' -f2- | sed 's/^[+ ]//')
 
-                  echo $line_number
-                  echo $changed_line
+                  # Print the line number and the corresponding changed line to the console
+                  echo "Line $line_number: $changed_line"
                   
                   # Only include lines that are valid Apex statements
                   if [[ $changed_line == *";"* || $changed_line == *"{"* || $changed_line == *"}"* ]]; then
