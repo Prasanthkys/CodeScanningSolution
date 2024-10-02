@@ -1,5 +1,3 @@
-name: SFDX Code Scan Delta
-
 on:
   push:
     branches:
@@ -30,76 +28,64 @@ jobs:
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
 
-      - name: Get changed files
+      - name: Get changed files and lines
         id: get-changes
         run: |
           git fetch --unshallow || true
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-            echo "Fetching changed files between HEAD~1 and HEAD"
-            git diff --name-only HEAD~1 HEAD > changed_files.txt
+            echo "Fetching changed files and lines between HEAD~1 and HEAD"
+            git diff HEAD~1 HEAD --name-only > changed_files.txt
+            git diff HEAD~1 HEAD > changed_lines.diff
           else
             echo "No previous commit to compare to." > changed_files.txt
+            echo "No lines changed." > changed_lines.diff
           fi
           cat changed_files.txt
+          cat changed_lines.diff
 
-      - name: Get changed lines
-        id: get-changed-lines
-        run: |
-          git fetch --unshallow || true
-          if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-            echo "Fetching changed files and lines between HEAD~1 and HEAD"
-            git diff HEAD~1 HEAD --unified=0 -- '*.cls' '*.lwc' > changes.diff
-          else
-            echo "No previous commit to compare to." > changes.diff
-          fi
-          cat changes.diff
-
-      - name: Run SFDX Scanner on Changed Files
-        if: success()
+      - name: Filter Changed Apex or LWC Files
+        id: filter-files
         run: |
           files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
           echo "Files to scan: $files"
-          if [ -n "$files" ]; then
-            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report-full.csv" || { echo "Scanner run failed"; exit 1; }
-          else
+          echo "filtered_files=$files" >> $GITHUB_ENV
+          if [ -z "$files" ]; then
             echo "No relevant files changed."
-            touch scanner-report-full.csv
+            exit 0
+          fi
+
+      - name: Generate Scanner Input for Changed Lines
+        id: prepare-delta
+        run: |
+          if [ -s changed_lines.diff ]; then
+            # Extract only the changed lines (ignoring added/removed indicators)
+            awk '/^\+[^+]/ {print substr($0, 2)}' changed_lines.diff > delta_lines.txt
+            echo "Changed lines:"
+            cat delta_lines.txt
+          else
+            echo "No lines changed." > delta_lines.txt
+          fi
+        shell: bash
+
+      - name: Run SFDX Scanner on Changed Lines
+        if: success()
+        run: |
+          files=$(echo ${{ env.filtered_files }})
+          delta_lines=$(cat delta_lines.txt || true)
+          echo "Running SFDX scanner on changed lines in files: $files"
+          if [ -n "$files" ] && [ -n "$delta_lines" ]; then
+            # You may need a plugin or custom logic to limit scanner run to specific lines
+            # For now, we are scanning the changed files as an approximation
+            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
+          else
+            echo "No relevant lines changed."
+            touch scanner-report.csv
           fi
         env:
           SF_LAZY_LOAD_MODULES: 'true'
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
 
-      - name: Filter Vulnerabilities to Changed Lines
-        if: success()
-        run: |
-            # Extract changed lines and corresponding file paths from the diff
-            git diff --unified=0 -- '*.cls' '*.lwc' > changes.diff
-        
-            # Capture the file names and their corresponding changed lines
-            awk '/^diff --git/ {file=$3} /^\+[0-9]+/ {print file " " substr($0, 2)}' changes.diff > changed_files_with_lines.txt
-            echo "Changed files and lines:"
-            cat changed_files_with_lines.txt
-        
-            # Debug: Output full scanner report before filtering
-            echo "Full Scanner Report before filtering:"
-            cat scanner-report-full.csv
-        
-            # Filter the scanner report based on both file name and approximate line numbers
-            awk -F, 'NR==1 {print $0} NR>1 {
-              while (getline < "changed_files_with_lines.txt") {
-                split($0, changes, " ");
-                file = changes[1];
-                line = changes[2];
-                if ($3 == file && $4 == line) print $0
-              }
-            }' scanner-report-full.csv > scanner-report.csv
-        
-            # Debug: Output filtered scanner report
-            echo "Filtered Scanner Report:"
-            cat scanner-report.csv
-        
-        
       - name: Encode CSV file to Base64
         if: success()
         id: encode_file
@@ -142,7 +128,7 @@ jobs:
         if: success()
         run: |
           if [ -s encoded_report.txt ]; then
-            contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
+            contentDocumentResponse=$(curl -X POST https://your-salesforce-instance-url/services/data/v61.0/sobjects/ContentVersion/ \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
               -H "Content-Type: application/json" \
               -d '{
@@ -159,7 +145,7 @@ jobs:
             fi
             echo "ContentVersionId: $contentVersionId"
             
-            contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
+            contentDocumentResponse=$(curl -X GET https://your-salesforce-instance-url/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
             echo "ContentDocument Response: $contentDocumentResponse"
             
