@@ -63,7 +63,6 @@ jobs:
               echo "Processing file: $file"
 
               # Extracting line numbers and changed lines from the diff
-              # This will extract the starting line number and corresponding changed lines.
               awk '/^@@/ { split($4,a,","); line=a[1]; next } /^[+][^+]/ { print line, $0; line++ }' changes.diff > temp_changed_lines_with_numbers.txt
 
               if [ -s temp_changed_lines_with_numbers.txt ]; then
