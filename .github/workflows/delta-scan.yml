@@ -68,7 +68,7 @@ jobs:
               
               # Extract the actual changed lines and their corresponding line numbers
               changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
-              line_numbers=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d':' -f1)
+              line_numbers=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'-' -f1)
               
               # Debugging: Print the extracted changed lines and line numbers
               echo "Extracted changed lines:"
@@ -88,10 +88,12 @@ jobs:
                 echo "        /* Begin of extracted changed lines */" >> "$temp_file"
                 
                 # Write changed lines with original line numbers as comments
-                IFS=$'\n' read -d '' -r -a lines_array <<< "$changed_lines"
-                IFS=$'\n' read -d '' -r -a numbers_array <<< "$line_numbers"
+                IFS=$'\n' read -r -a lines_array <<< "$changed_lines"
+                IFS=$'\n' read -r -a numbers_array <<< "$line_numbers"
                 for i in "${!lines_array[@]}"; do
-                  echo "        // Original line ${numbers_array[$i]}" >> "$temp_file"
+                  if [ -n "${numbers_array[$i]}" ]; then
+                    echo "        // Original line ${numbers_array[$i]}" >> "$temp_file"
+                  fi
                   echo "        ${lines_array[$i]}" >> "$temp_file"
                 done
 
