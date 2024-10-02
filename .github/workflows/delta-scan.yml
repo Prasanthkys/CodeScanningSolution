@@ -94,8 +94,9 @@ jobs:
       - name: Upload Filtered Scanner Report as Artifact
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ env.FILE_TITLE }}
+          name: filtered-scanner-report
           path: filtered-scanner-report.csv
+
 
       - name: Get Pusher's Email
         id: get-pusher-email
