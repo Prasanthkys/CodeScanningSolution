@@ -1,3 +1,4 @@
+
 on:
   push:
     branches:
@@ -63,7 +64,7 @@ jobs:
               echo "Processing file: $file"
 
               # Extracting line numbers and changed lines from the diff
-              awk '/^@@/ { split($4,a,","); line=a[1]; next } /^[+][^+]/ { print line, $0; line++ }' changes.diff > temp_changed_lines_with_numbers.txt
+              awk '/^@@/ { split($4,a,","); line=a[1]; next } /^[+]/ { print line ": " $0; line++ }' changes.diff | grep -v '+++' > temp_changed_lines_with_numbers.txt
 
               if [ -s temp_changed_lines_with_numbers.txt ]; then
                 temp_file="temp_${file//\//_}"
@@ -75,8 +76,8 @@ jobs:
                 echo "    public static void tempMethod() {" >> "$temp_file"
 
                 while IFS= read -r line; do
-                  line_number=$(echo "$line" | cut -d' ' -f1)
-                  changed_line=$(echo "$line" | cut -d' ' -f2- | sed 's/^[+ ]//')
+                  line_number=$(echo "$line" | cut -d':' -f1)
+                  changed_line=$(echo "$line" | cut -d':' -f2- | sed 's/^[+ ]//')
 
                   # Print the line number and the corresponding changed line to the console
                   echo "Line $line_number: $changed_line"
