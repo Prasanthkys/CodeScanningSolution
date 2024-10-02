@@ -53,6 +53,11 @@ jobs:
               changed_lines=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
               line_numbers=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d':' -f1)
               
+
+              echo $changed_lines
+              echo $line_numbers
+
+              
               # Convert both `changed_lines` and `line_numbers` into arrays
               mapfile -t changed_lines_array <<< "$changed_lines"
               mapfile -t line_numbers_array <<< "$line_numbers"
