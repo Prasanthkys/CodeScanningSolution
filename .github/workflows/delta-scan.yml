@@ -40,7 +40,9 @@ jobs:
             echo "No previous commit to compare to." > changed_files.txt
             echo "No lines changed." > changed_lines.diff
           fi
+          echo "Changed files:"
           cat changed_files.txt
+          echo "Changed lines:"
           cat changed_lines.diff
 
       - name: Filter Changed Apex or LWC Files
@@ -65,19 +67,31 @@ jobs:
             echo "No relevant files changed."
             touch scanner-report.csv
           fi
+        env:
+          SF_LAZY_LOAD_MODULES: 'true'
+          SF_AUTOUPDATE_DISABLE: 'true'
+          SF_DISABLE_AUTOUPDATE: 'true'
 
       - name: Filter Scanner Report for Changed Lines
         if: success()
         run: |
           echo "Filtering the scanner report for changed lines"
+          
+          # Extract only the changed lines from the diff file
           awk '/^\+[^+]/ {print substr($0, 2)}' changed_lines.diff > delta_lines.txt
           
           if [ -s delta_lines.txt ]; then
-            echo "Found changed lines"
-            # Create a temporary filtered report
+            echo "Found changed lines, filtering scanner report..."
+            
+            # Debugging: Print delta lines
+            echo "Changed lines to filter on:"
+            cat delta_lines.txt
+
+            # Initialize filtered report with the header
             header=$(head -n 1 scanner-report.csv)
             echo "$header" > filtered-scanner-report.csv
 
+            # Loop through each row in the scanner report and filter based on changed lines
             while IFS=, read -r problem severity file line column rule description url category engine; do
               line_num=$(echo $line | tr -d '"')
               if grep -q ":$line_num" delta_lines.txt; then
@@ -90,13 +104,16 @@ jobs:
             echo "No lines changed, skipping filtering."
             cp scanner-report.csv filtered-scanner-report.csv
           fi
+          
+          # Debugging: Print the final filtered report
+          echo "Filtered Scanner Report:"
+          cat filtered-scanner-report.csv
 
       - name: Upload Filtered Scanner Report as Artifact
         uses: actions/upload-artifact@v3
         with:
           name: filtered-scanner-report
           path: filtered-scanner-report.csv
-
 
       - name: Get Pusher's Email
         id: get-pusher-email
