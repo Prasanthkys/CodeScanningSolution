@@ -59,12 +59,22 @@ jobs:
               exit 0  # Gracefully exit if no relevant files are changed
             fi
 
+            # Display the full diff for debugging
+            echo "Full diff:"
+            cat changes.diff
+
             while IFS= read -r file; do
               echo "Processing file: $file"
               
               # Extract the actual changed lines and their corresponding line numbers
-              changed_lines=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
+              changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
               line_numbers=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d':' -f1)
+              
+              # Debugging: Print the extracted changed lines and line numbers
+              echo "Extracted changed lines:"
+              echo "$changed_lines"
+              echo "Extracted line numbers:"
+              echo "$line_numbers"
               
               if [ -n "$changed_lines" ]; then
                 echo "Changed lines in $file:"
@@ -123,6 +133,7 @@ jobs:
                 echo "No relevant changes detected in $file."
               fi
             done <<< "$files"
+
         env:
             SF_LAZY_LOAD_MODULES: 'true'
             SF_AUTOUPDATE_DISABLE: 'true'
