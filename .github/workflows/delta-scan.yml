@@ -67,18 +67,26 @@ jobs:
               echo "Processing file: $file"
               
               # Extract the actual changed lines and their corresponding line numbers
-              changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
-              line_numbers=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'-' -f1)
-              
-              # Debugging: Print the extracted changed lines and line numbers
-              echo "Extracted changed lines:"
-              echo "$changed_lines"
-              echo "Extracted line numbers:"
-              echo "$line_numbers"
-              
-              if [ -n "$changed_lines" ]; then
-                echo "Changed lines in $file:"
-                echo "$changed_lines"
+              # Here, we use grep -n to get both line numbers and content, then parse them together
+              changes=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | sed 's/^+//')
+
+              if [ -n "$changes" ]; then
+                echo "Extracted changes (with line numbers):"
+                echo "$changes"
+
+                # Split line numbers and the changed lines
+                line_numbers=()
+                changed_lines=()
+                while IFS= read -r line; do
+                  line_numbers+=("$(echo "$line" | cut -d':' -f1)")
+                  changed_lines+=("$(echo "$line" | cut -d':' -f2-)")
+                done <<< "$changes"
+
+                # Debugging: Print the extracted line numbers and changed lines
+                echo "Extracted line numbers:"
+                printf "%s\n" "${line_numbers[@]}"
+                echo "Extracted changed lines:"
+                printf "%s\n" "${changed_lines[@]}"
                 
                 # Create a temporary file with a valid method structure
                 temp_file="temp_${file//\//_}"
@@ -88,13 +96,11 @@ jobs:
                 echo "        /* Begin of extracted changed lines */" >> "$temp_file"
                 
                 # Write changed lines with original line numbers as comments
-                IFS=$'\n' read -r -a lines_array <<< "$changed_lines"
-                IFS=$'\n' read -r -a numbers_array <<< "$line_numbers"
-                for i in "${!lines_array[@]}"; do
-                  if [ -n "${numbers_array[$i]}" ]; then
-                    echo "        // Original line ${numbers_array[$i]}" >> "$temp_file"
+                for i in "${!changed_lines[@]}"; do
+                  if [ -n "${line_numbers[$i]}" ]; then
+                    echo "        // Original line ${line_numbers[$i]}" >> "$temp_file"
                   fi
-                  echo "        ${lines_array[$i]}" >> "$temp_file"
+                  echo "        ${changed_lines[$i]}" >> "$temp_file"
                 done
 
                 echo "        /* End of extracted changed lines */" >> "$temp_file"
