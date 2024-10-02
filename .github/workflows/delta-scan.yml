@@ -49,6 +49,20 @@ jobs:
 
           cat changes.diff
 
+          # Get changed lines and their corresponding line numbers
+              changed_lines=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
+              line_numbers=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d':' -f1)
+              
+              # Convert both `changed_lines` and `line_numbers` into arrays
+              mapfile -t changed_lines_array <<< "$changed_lines"
+              mapfile -t line_numbers_array <<< "$line_numbers"
+              
+              # Loop through both arrays and print each line with its corresponding number
+              for i in "${!changed_lines_array[@]}"; do
+                echo "Line Number: ${line_numbers_array[$i]}, Changed Line: ${changed_lines_array[$i]}"
+              done
+
+
       - name: Extract changed lines, line numbers, create temp file, and scan
         if: success()
         run: |
@@ -62,13 +76,6 @@ jobs:
 
             while IFS= read -r file; do
               echo "Processing file: $file"
-
-
-              changed_lines=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
-              line_numbers=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d':' -f1)
-
-              echo $changed_lines
-              echo $line_numbers
 
               # Extracting line numbers and changed lines from the diff
               awk '/^@@/ { split($4,a,","); line=a[1]; next } /^[+]/ { print line ": " $0; line++ }' changes.diff | grep -v '+++' > temp_changed_lines_with_numbers.txt
