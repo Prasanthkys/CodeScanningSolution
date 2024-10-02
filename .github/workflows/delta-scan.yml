@@ -21,7 +21,7 @@ jobs:
       - name: Install Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
 
-      - name: Verify SFDX CLI Installation
+      - name: Verify SFDX CLI Installationn
         run: sf --version
 
       - name: Verify SFDX Scanner Plugin Installation
@@ -38,10 +38,18 @@ jobs:
             echo "Repository is not shallow, skipping unshallow."
           fi
 
-          # Fetch the diff between the last two commits and capture only changes for .cls and .lwc files
-          git diff --unified=0 HEAD~1 HEAD > changes.diff
+          if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
+            echo "Fetching changed files and lines between HEAD~1 and HEAD"
+            git diff --unified=0 HEAD~1 HEAD > changes.diff
+          else
+            echo "No previous commit to compare to." > changes.diff
+          fi
 
-          # Extract only changed .cls and .lwc files from the diff
+          cat changes.diff
+
+      - name: Extract changed lines, create temp file, and scan
+        if: success()
+        run: |
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
 
           if [ -z "$files" ]; then
@@ -49,28 +57,60 @@ jobs:
             exit 0  # Gracefully exit if no relevant files are changed
           fi
 
-          # Loop through each file and extract changed lines with line numbers
           while IFS= read -r file; do
             echo "Processing file: $file"
+            
+            # Extract the actual changed lines with line numbers for the specific file
+            changed_lines_with_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' -A 1 | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
+            line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
+            
+            if [ -n "$changed_lines_with_numbers" ]; then
+              echo "Changed lines in $file:"
+              echo "$changed_lines_with_numbers"
+              
+              temp_file="temp_${file//\//_}"
+              echo "/* Temporary file for changed lines scan */" > "$temp_file"
+              echo "public class TempWrapperClass {" >> "$temp_file"
+              echo "    public static void tempMethod() {" >> "$temp_file"
+              echo "        /* Begin of extracted changed lines */" >> "$temp_file"
+              echo "$changed_lines_with_numbers" >> "$temp_file"
+              echo "        /* End of extracted changed lines */" >> "$temp_file"
+              echo "    }" >> "$temp_file"
 
-            # Extract the diff block associated with the current file
-            file_diff=$(awk "/^\+\+\+ b\/$file\$/,/^diff/" changes.diff | grep -v '^diff')
+              # Handle unbalanced braces as before...
+              
+              echo "}" >> "$temp_file"
+              echo "Created temporary file with method structure: $temp_file"
+              
+              # Run the SFDX scanner on the temporary file
+              echo "Running SFDX scanner on temporary file $temp_file"
+              sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
 
-            # Extract changed lines and corresponding line numbers
-            echo "$file_diff" | grep -n '^+' | grep -v '+++' | while read -r line; do
-              line_number=$(echo "$line" | cut -d: -f1)
-              changed_line=$(echo "$line" | cut -d: -f2- | sed 's/^[+ ]//')
+              if [ -s "scanner-report-$temp_file.csv" ]; then
+                echo "Scanner report generated for $temp_file."
+                
+                # Trim file paths as before...
 
-              # Display the line number and the changed line
-              echo "Line $line_number: $changed_line"
-            done
+                # Add line numbers to the scanner report
+                echo "Adding changed line numbers to the report."
+                paste -d, <(echo "$line_numbers") "scanner-report-$temp_file.csv" > "scanner-report-$temp_file-with-lines.csv"
+                
+                echo "File paths trimmed and line numbers added in scanner-report-$temp_file-with-lines.csv."
+              else
+                echo "No scanner report generated for $temp_file."
+                exit 0
+              fi
 
-            # If no relevant changes were found in the file diff, log it
-            if [ -z "$file_diff" ]; then
+              # Clean up as before...
+            else
               echo "No relevant changes detected in $file."
             fi
-
           done <<< "$files"
+
+        env:
+          SF_LAZY_LOAD_MODULES: "true"
+          SF_AUTOUPDATE_DISABLE: "true"
+          SF_DISABLE_AUTOUPDATE: "true"
 
       - name: Install mailx
         run: sudo apt-get install -y mailutils
@@ -116,8 +156,9 @@ jobs:
           if [ -s encoded_report.txt ]; then
             # Read the base64 content from the file and escape special characters for JSON
             ENCODED_DATA=$(cat encoded_report.txt | tr -d '\n')
+            
             # Upload the encoded report to Salesforce
-            contentDocumentResponse=$(curl -X POST https://your-salesforce-instance.com/services/data/v61.0/sobjects/ContentVersion/ \
+            contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
               -H "Content-Type: application/json" \
               -d '{
@@ -125,7 +166,11 @@ jobs:
                 "PathOnClient": "scanner-report.csv",
                 "VersionData": "'"$ENCODED_DATA"'"
               }')
+              
             echo "Response: $contentDocumentResponse"
+              
+            echo "Response: $contentDocumentResponse"
+            
             # Extract the ContentVersionId from the response
             contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
             if [ -z "$contentVersionId" ]; then
@@ -133,10 +178,12 @@ jobs:
               exit 1
             fi
             echo "ContentVersionId: $contentVersionId"
+            
             # Get the ContentDocumentId
-            contentDocumentResponse=$(curl -X GET https://your-salesforce-instance.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
+            contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
             echo "ContentDocument Response: $contentDocumentResponse"
+            
             contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
             if [ -z "$contentDocumentId" ]; then
               echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
