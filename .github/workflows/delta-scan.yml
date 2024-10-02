@@ -1,9 +1,9 @@
-name: Delta-Scan
+name: SFDX Code Scan Delta
 
 on:
   push:
     branches:
-      "**"
+      - '**'
 
 jobs:
   installcli:
@@ -30,61 +30,64 @@ jobs:
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
 
-      - name: Get changed lines from files
+      - name: Get changed files
+        id: get-changes
+        run: |
+          git fetch --unshallow || true
+          if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
+            echo "Fetching changed files between HEAD~1 and HEAD"
+            git diff --name-only HEAD~1 HEAD > changed_files.txt
+          else
+            echo "No previous commit to compare to." > changed_files.txt
+          fi
+          cat changed_files.txt
+
+      - name: Get changed lines
         id: get-changed-lines
         run: |
           git fetch --unshallow || true
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-            echo "Fetching changed lines between HEAD~1 and HEAD"
-            git diff -U0 HEAD~1 HEAD | grep -e "^+++" -e "^@@" > changed_lines.txt
+            echo "Fetching changed files and lines between HEAD~1 and HEAD"
+            git diff HEAD~1 HEAD --unified=0 -- '*.cls' '*.lwc' > changes.diff
           else
-            echo "No previous commit to compare to." > changed_lines.txt
+            echo "No previous commit to compare to." > changes.diff
           fi
-          cat changed_lines.txt
+          cat changes.diff
 
-      - name: Run SFDX Scanner on Changed Files and Filter for Changed Lines
+      - name: Run SFDX Scanner on Changed Files
         if: success()
-        continue-on-error: true  # Allow the job to continue even if violations are found
         run: |
-          # Extract only the file paths, remove the '+++ b/' prefix, and store them in 'changed_files.txt'
-          grep "^+++ b/" changed_lines.txt | sed 's|+++ b/||' > changed_files.txt
           files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
           echo "Files to scan: $files"
           if [ -n "$files" ]; then
-            # Run scanner on all changed files
-            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
-
-            # Post-process scanner-report.csv to keep only the relevant lines
-            touch filtered-report.csv
-            while IFS= read -r line; do
-              file=$(echo $line | grep -oP '^\+\+\+ b/\K.*')
-              changed_line_numbers=$(echo $line | grep -oP '@@ -\K\d+')
-
-              if [ -n "$file" ] && [ -n "$changed_line_numbers" ]; then
-                # Filter the scanner report based on the file and changed line numbers
-                awk -F ',' -v file="$file" -v line="$changed_line_numbers" '$3 ~ file && $4 == line' scanner-report.csv >> filtered-report.csv
-              fi
-            done < changed_lines.txt
-
+            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report-full.csv" || { echo "Scanner run failed"; exit 1; }
           else
             echo "No relevant files changed."
-            touch filtered-report.csv
+            touch scanner-report-full.csv
           fi
         env:
           SF_LAZY_LOAD_MODULES: 'true'
           SF_AUTOUPDATE_DISABLE: 'true'
           SF_DISABLE_AUTOUPDATE: 'true'
 
-
-      - name: Generate Scanner Rule List
+      - name: Filter Vulnerabilities to Changed Lines
         if: success()
         run: |
-          sf scanner:rule:list > scanner-rules.txt || { echo "Failed to generate rule list"; exit 1; }
-          cat scanner-rules.txt > scanner-rules.csv
-        env:
-          SF_LAZY_LOAD_MODULES: 'true'
-          SF_AUTOUPDATE_DISABLE: 'true'
-          SF_DISABLE_AUTOUPDATE: 'true'
+          awk '/^\+\d+/{print NR-1 " " $0}' changes.diff | grep -oP '\d+' > changed_lines.txt
+          echo "Changed lines: $(cat changed_lines.txt)"
+
+          awk -F, 'NR==1 {print $0} NR>1 {for(i in lines) if ($4 == lines[i]) print $0}' lines=$(cat changed_lines.txt | tr '\n' ' ') scanner-report-full.csv > scanner-report.csv
+
+      - name: Encode CSV file to Base64
+        if: success()
+        id: encode_file
+        run: |
+          if [ -f scanner-report.csv ]; then
+            base64 scanner-report.csv | tr -d '\n' > encoded_report.txt
+          else
+            echo "Scanner report CSV file not found."
+            exit 1
+          fi
 
       - name: Install mailx
         run: sudo apt-get install -y mailutils
@@ -95,16 +98,14 @@ jobs:
           REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
           BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
           COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
-          FILE_TITLE="SFDX_Code_Scan_Delta_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}.csv"
+          FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
 
-      - name: Upload Filtered Scanner Report and Rules as Artifacts
+      - name: Upload Scanner Report as Artifact
         uses: actions/upload-artifact@v3
         with:
-          name: SFDX_Code_Scan_Delta
-          path: |
-            filtered-report.csv
-            scanner-rules.csv
+          name: ${{ env.FILE_TITLE }}
+          path: scanner-report.csv
 
       - name: Get Pusher's Email
         id: get-pusher-email
@@ -115,43 +116,31 @@ jobs:
             "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
           echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
 
-      - name: Encode CSV report to base64
-        run: |
-          if [ -s filtered-report.csv ]; then
-            base64 filtered-report.csv > encoded_report.txt
-          else
-            echo "No scanner report found."
-            exit 1
-          fi
-
       - name: Upload CSV Report to Salesforce
         if: success()
         run: |
           if [ -s encoded_report.txt ]; then
-            ENCODED_DATA=$(cat encoded_report.txt | tr -d '\n')
-
             contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
               -H "Content-Type: application/json" \
               -d '{
                 "Title": "'"${{ env.FILE_TITLE }}"'",
-                "PathOnClient": "filtered-report.csv",
-                "VersionData": "'"$ENCODED_DATA"'"
+                "PathOnClient": "scanner-report.csv",
+                "VersionData": "'"$(cat encoded_report.txt)"'"
               }')
-
             echo "Response: $contentDocumentResponse"
-
+            
             contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
             if [ -z "$contentVersionId" ]; then
               echo "Error: Failed to upload file. No ContentVersionId found."
               exit 1
             fi
             echo "ContentVersionId: $contentVersionId"
-
+            
             contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
             echo "ContentDocument Response: $contentDocumentResponse"
-
+            
             contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
             if [ -z "$contentDocumentId" ]; then
               echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
@@ -159,7 +148,21 @@ jobs:
             fi
             echo "ContentDocumentId: $contentDocumentId"
           else
-            echo "No encoded report found, skipping upload."
+            echo "No scanner report generated, skipping upload."
           fi
         env:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
+        shell: bash
+
+      - name: Send Email with actions-send-mail
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: 'smtp.gmail.com'
+          server_port: '587'
+          username: ${{ secrets.GMAIL_EMAIL }}
+          password: ${{ secrets.GMAIL_APP_PASSWORD }}
+          from: ${{ secrets.GMAIL_EMAIL }}
+          subject: 'SFDX Code Scan Delta Report'
+          body: 'Please find the attached SFDX Code Scan Delta Report.'
+          to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
+          attachments: scanner-report.csv
