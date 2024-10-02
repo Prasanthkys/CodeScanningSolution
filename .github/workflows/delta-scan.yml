@@ -22,7 +22,7 @@ jobs:
       - name: Install Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
 
-      - name: Verify SFDX CLI Installationn
+      - name: Verify SFDX CLI Installation
         run: sf --version
 
       - name: Verify SFDX Scanner Plugin Installation
@@ -48,7 +48,7 @@ jobs:
 
           cat changes.diff
 
-      - name: Extract changed lines and line numbers, create temp file, and scan
+      - name: Extract changed lines, line numbers, create temp file, and scan
         if: success()
         run: |
             # Extract only the changed files from the diff for .cls and .lwc files
@@ -66,21 +66,44 @@ jobs:
               grep -A 1000 "$file" changes.diff | grep -E '^@@' -A 100 | grep -E '^\+' | grep -v '+++' > temp_changed_lines_with_numbers.txt
 
               if [ -s temp_changed_lines_with_numbers.txt ]; then
+                temp_file="temp_${file//\//_}"
                 echo "Extracting changed lines and line numbers..."
+
+                # Begin writing the Apex class structure to the temp file
+                echo "/* Temporary file for changed lines scan */" > "$temp_file"
+                echo "public class TempWrapperClass {" >> "$temp_file"
+                echo "    public static void tempMethod() {" >> "$temp_file"
+
                 while IFS= read -r line; do
                   line_number=$(echo "$line" | grep -Eo '^@@ \-[0-9]+,[0-9]+ \+[0-9]+' | sed 's/^@@.*+//')
                   changed_line=$(echo "$line" | sed 's/^[+ ]//')
-                  echo "Line number: $line_number - $changed_line"
                   
-                  # Append the line number and the changed line to the temp file
-                  echo "// Line $line_number" >> "temp_${file//\//_}"
-                  echo "$changed_line" >> "temp_${file//\//_}"
+                  # Only include lines that are valid Apex statements
+                  if [[ $changed_line == *";"* || $changed_line == *"{"* || $changed_line == *"}"* ]]; then
+                    echo "// Line $line_number" >> "$temp_file"
+                    echo "$changed_line" >> "$temp_file"
+                  fi
+
                 done < temp_changed_lines_with_numbers.txt
+
+                # Close the method and class structure
+                echo "    }" >> "$temp_file"
+                echo "}" >> "$temp_file"
+
+                echo "Changed lines with numbers added to temp file: $temp_file"
                 
-                echo "Changed lines with numbers added to temp file."
-                
+                # Check for unbalanced braces (ensure the method and class are closed properly)
+                open_braces=$(grep -o '{' "$temp_file" | wc -l)
+                close_braces=$(grep -o '}' "$temp_file" | wc -l)
+                if [ "$open_braces" -gt "$close_braces" ]; then
+                  remaining_closing_braces=$(($open_braces - $close_braces))
+                  for i in $(seq 1 $remaining_closing_braces); do
+                    echo "}" >> "$temp_file"
+                  done
+                fi
+
                 # Run the SFDX scanner on the temporary file
-                sf scanner:run --target "temp_${file//\//_}" --format "csv" --outfile "scanner-report-${file//\//_}.csv" || { echo "Scanner run failed"; exit 1; }
+                sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-${file//\//_}.csv" || { echo "Scanner run failed"; exit 1; }
                 
                 # Check if the scanner report was generated
                 if [ -s "scanner-report-${file//\//_}.csv" ]; then
@@ -91,9 +114,9 @@ jobs:
                 else
                   echo "No scanner report generated for $file."
                 fi
-                
-                # Clean up the temporary file
-                rm "temp_${file//\//_}"
+
+                # Clean up the temporary file after scanning
+                rm "$temp_file"
               else
                 echo "No relevant changes detected in $file."
               fi
@@ -160,8 +183,6 @@ jobs:
                 
               echo "Response: $contentDocumentResponse"
                 
-              echo "Response: $contentDocumentResponse"
-              
               # Extract the ContentVersionId from the response
               contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
               if [ -z "$contentVersionId" ]; then
