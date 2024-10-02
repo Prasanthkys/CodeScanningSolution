@@ -63,6 +63,13 @@ jobs:
             while IFS= read -r file; do
               echo "Processing file: $file"
 
+
+              changed_lines=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
+              line_numbers=$(grep -n -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d':' -f1)
+
+              echo $changed_lines
+              echo $line_numbers
+
               # Extracting line numbers and changed lines from the diff
               awk '/^@@/ { split($4,a,","); line=a[1]; next } /^[+]/ { print line ": " $0; line++ }' changes.diff | grep -v '+++' > temp_changed_lines_with_numbers.txt
 
