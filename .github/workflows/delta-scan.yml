@@ -77,6 +77,9 @@ jobs:
                 while IFS= read -r line; do
                   line_number=$(echo "$line" | grep -Eo '^@@ \-[0-9]+,[0-9]+ \+[0-9]+' | sed 's/^@@.*+//')
                   changed_line=$(echo "$line" | sed 's/^[+ ]//')
+
+                  echo $line_number
+                  echo $changed_line
                   
                   # Only include lines that are valid Apex statements
                   if [[ $changed_line == *";"* || $changed_line == *"{"* || $changed_line == *"}"* ]]; then
