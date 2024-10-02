@@ -73,16 +73,37 @@ jobs:
       - name: Filter Vulnerabilities to Changed Lines
         if: success()
         run: |
-            # Extract changed lines from the diff (lines that start with a plus sign)
-            awk '/^\+/ {print NR-1}' changes.diff > changed_lines.txt
-            echo "Changed lines: $(cat changed_lines.txt)"
+            # Extract changed lines and the corresponding file paths from the diff
+            git diff --unified=0 -- '*.cls' '*.lwc' > changes.diff
+            awk '/^\+\d+/ {print FILENAME " " NR " " $0}' changes.diff | grep -E '^diff --git|^\+\d+' > changes_info.txt
+            echo "Changes Info:"
+            cat changes_info.txt
         
-            # Read the changed lines into a variable
-            changed_lines=$(cat changed_lines.txt | tr '\n' ' ')
-            echo "Lines to filter: $changed_lines"
+            # Prepare variables to store changed file names and lines
+            touch changed_files_with_lines.txt
         
-            # Filter the CSV based on the changed lines and save it to a new file
-            awk -F, 'NR==1 {print $0} NR>1 {if (index("'"$changed_lines"'", $4)) print $0}' scanner-report-full.csv > scanner-report.csv
+            # Capture the file names and their corresponding changed lines
+            awk '/^diff --git/ {file=$3} /^\+\d+/ {print file " " substr($0, 2)}' changes.diff > changed_files_with_lines.txt
+            echo "Changed files and lines:"
+            cat changed_files_with_lines.txt
+        
+            # Debug: Output full scanner report before filtering
+            echo "Full Scanner Report before filtering:"
+            cat scanner-report-full.csv
+        
+            # Filter the scanner report based on both file name and approximate line numbers
+            awk -F, 'NR==1 {print $0} NR>1 {
+              while (getline < "changed_files_with_lines.txt") {
+                split($0, changes, " ");
+                file = changes[1];
+                line = changes[2];
+                if ($3 == file && $4 == line) print $0
+              }
+            }' scanner-report-full.csv > scanner-report.csv
+        
+            # Debug: Output filtered scanner report
+            echo "Filtered Scanner Report:"
+            cat scanner-report.csv        
         
 
       - name: Encode CSV file to Base64
