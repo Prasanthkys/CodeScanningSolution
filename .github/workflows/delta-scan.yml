@@ -78,8 +78,8 @@ jobs:
           echo "Filtering the scanner report for changed lines"
           
           # Extract only the changed lines from the diff file
-          awk '/^\+[^+]/ {print substr($0, 2)}' changed_lines.diff > delta_lines.txt
-          
+          awk '/^\+[^+]/ {print substr($0, 2)}' changed_lines.diff | grep -oP '(?<=\+)[^\+]*' > delta_lines.txt
+
           if [ -s delta_lines.txt ]; then
             echo "Found changed lines, filtering scanner report..."
             
@@ -91,10 +91,10 @@ jobs:
             header=$(head -n 1 scanner-report.csv)
             echo "$header" > filtered-scanner-report.csv
 
-            # Loop through each row in the scanner report and filter based on changed lines
+            # Compare line numbers in scanner report with delta lines
             while IFS=, read -r problem severity file line column rule description url category engine; do
               line_num=$(echo $line | tr -d '"')
-              if grep -q ":$line_num" delta_lines.txt; then
+              if grep -wq "$line_num" delta_lines.txt; then
                 echo "$problem,$severity,$file,$line,$column,$rule,$description,$url,$category,$engine" >> filtered-scanner-report.csv
               fi
             done < <(tail -n +2 scanner-report.csv)
