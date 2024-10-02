@@ -35,7 +35,7 @@ jobs:
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files and lines between HEAD~1 and HEAD"
             git diff HEAD~1 HEAD --name-only > changed_files.txt
-            git diff HEAD~1 HEAD > changed_lines.diff
+            git diff -U0 HEAD~1 HEAD > changed_lines.diff
           else
             echo "No previous commit to compare to." > changed_files.txt
             echo "No lines changed." > changed_lines.diff
@@ -54,66 +54,48 @@ jobs:
             exit 0
           fi
 
-      - name: Generate Scanner Input for Changed Lines
-        id: prepare-delta
-        run: |
-          if [ -s changed_lines.diff ]; then
-            # Extract only the changed lines (ignoring added/removed indicators)
-            awk '/^\+[^+]/ {print substr($0, 2)}' changed_lines.diff > delta_lines.txt
-            echo "Changed lines:"
-            cat delta_lines.txt
-          else
-            echo "No lines changed." > delta_lines.txt
-          fi
-        shell: bash
-
-      - name: Run SFDX Scanner on Changed Lines
+      - name: Run SFDX Scanner on Files
         if: success()
         run: |
           files=$(echo ${{ env.filtered_files }})
-          delta_lines=$(cat delta_lines.txt || true)
-          echo "Running SFDX scanner on changed lines in files: $files"
-          if [ -n "$files" ] && [ -n "$delta_lines" ]; then
-            # You may need a plugin or custom logic to limit scanner run to specific lines
-            # For now, we are scanning the changed files as an approximation
+          echo "Running SFDX scanner on files: $files"
+          if [ -n "$files" ]; then
             sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
           else
-            echo "No relevant lines changed."
+            echo "No relevant files changed."
             touch scanner-report.csv
           fi
-        env:
-          SF_LAZY_LOAD_MODULES: 'true'
-          SF_AUTOUPDATE_DISABLE: 'true'
-          SF_DISABLE_AUTOUPDATE: 'true'
 
-      - name: Encode CSV file to Base64
+      - name: Filter Scanner Report for Changed Lines
         if: success()
-        id: encode_file
         run: |
-          if [ -f scanner-report.csv ]; then
-            base64 scanner-report.csv | tr -d '\n' > encoded_report.txt
+          echo "Filtering the scanner report for changed lines"
+          awk '/^\+[^+]/ {print substr($0, 2)}' changed_lines.diff > delta_lines.txt
+          
+          if [ -s delta_lines.txt ]; then
+            echo "Found changed lines"
+            # Create a temporary filtered report
+            header=$(head -n 1 scanner-report.csv)
+            echo "$header" > filtered-scanner-report.csv
+
+            while IFS=, read -r problem severity file line column rule description url category engine; do
+              line_num=$(echo $line | tr -d '"')
+              if grep -q ":$line_num" delta_lines.txt; then
+                echo "$problem,$severity,$file,$line,$column,$rule,$description,$url,$category,$engine" >> filtered-scanner-report.csv
+              fi
+            done < <(tail -n +2 scanner-report.csv)
+
+            echo "Filtered report generated."
           else
-            echo "Scanner report CSV file not found."
-            exit 1
+            echo "No lines changed, skipping filtering."
+            cp scanner-report.csv filtered-scanner-report.csv
           fi
 
-      - name: Install mailx
-        run: sudo apt-get install -y mailutils
-
-      - name: Get Repository and Branch Info
-        id: get-info
-        run: |
-          REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
-          BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
-          COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
-          FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
-          echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
-
-      - name: Upload Scanner Report as Artifact
+      - name: Upload Filtered Scanner Report as Artifact
         uses: actions/upload-artifact@v3
         with:
           name: ${{ env.FILE_TITLE }}
-          path: scanner-report.csv
+          path: filtered-scanner-report.csv
 
       - name: Get Pusher's Email
         id: get-pusher-email
@@ -123,44 +105,6 @@ jobs:
           PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
             "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
           echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
-
-      - name: Upload CSV Report to Salesforce
-        if: success()
-        run: |
-          if [ -s encoded_report.txt ]; then
-            contentDocumentResponse=$(curl -X POST https://your-salesforce-instance-url/services/data/v61.0/sobjects/ContentVersion/ \
-              -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
-              -H "Content-Type: application/json" \
-              -d '{
-                "Title": "'"${{ env.FILE_TITLE }}"'",
-                "PathOnClient": "scanner-report.csv",
-                "VersionData": "'"$(cat encoded_report.txt)"'"
-              }')
-            echo "Response: $contentDocumentResponse"
-            
-            contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
-            if [ -z "$contentVersionId" ]; then
-              echo "Error: Failed to upload file. No ContentVersionId found."
-              exit 1
-            fi
-            echo "ContentVersionId: $contentVersionId"
-            
-            contentDocumentResponse=$(curl -X GET https://your-salesforce-instance-url/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
-              -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
-            echo "ContentDocument Response: $contentDocumentResponse"
-            
-            contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
-            if [ -z "$contentDocumentId" ]; then
-              echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
-              exit 1
-            fi
-            echo "ContentDocumentId: $contentDocumentId"
-          else
-            echo "No scanner report generated, skipping upload."
-          fi
-        env:
-          SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
-        shell: bash
 
       - name: Send Email with actions-send-mail
         uses: dawidd6/action-send-mail@v3
@@ -173,4 +117,4 @@ jobs:
           subject: 'SFDX Code Scan Delta Report'
           body: 'Please find the attached SFDX Code Scan Delta Report.'
           to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
-          attachments: scanner-report.csv
+          attachments: filtered-scanner-report.csv
