@@ -87,80 +87,77 @@ jobs:
             echo "Line numbers corresponding to the changed lines in $file:"
             echo "$line_numbers"
 
-            if [ -n "$changed_lines" ]; then
-              # Store the changed lines and their line numbers in the array
-              i=0
-              echo "$changed_lines" | while read -r line; do
-                line_map[$i]=$(echo "$line_numbers" | sed -n "$((i + 1))p")
-                i=$((i + 1))
-              done
+            # Populate the line_map array
+            i=0
+            echo "$changed_lines" | while read -r line; do
+              line_map[$i]=$(echo "$line_numbers" | sed -n "$((i + 1))p")
+              echo "Mapped line $i to original line number: ${line_map[$i]}"  # Debug output
+              i=$((i + 1))
+            done
 
-              # Create a temporary file with a valid method structure
-              temp_file="temp_${file//\//_}"
-              echo "/* Temporary file for changed lines scan */" > "$temp_file"
-              echo "public class TempWrapperClass {" >> "$temp_file"
-              echo "    public static void tempMethod() {" >> "$temp_file"
+            # Create a temporary file with a valid method structure
+            temp_file="temp_${file//\//_}"
+            echo "/* Temporary file for changed lines scan */" > "$temp_file"
+            echo "public class TempWrapperClass {" >> "$temp_file"
+            echo "    public static void tempMethod() {" >> "$temp_file"
 
-              # Keep track of the line number within the temporary class
-              temp_line_number=3  # Starting after the class declaration
+            # Keep track of the line number within the temporary class
+            temp_line_number=3  # Starting after the class declaration
 
-              # Ensure that each line ends with a semicolon if it's not already present
-              echo "$changed_lines" | while read -r line; do
-                if ! echo "$line" | grep -qE ';$'; then
-                  line="${line};"
-                fi
-                echo "        $line" >> "$temp_file"
-                temp_line_number=$((temp_line_number + 1))
-              done
-
-              echo "    }" >> "$temp_file"
-              echo "}" >> "$temp_file"  # Close the class
-
-              echo "Created temporary file with method structure: $temp_file"
-
-              # Run the SFDX scanner on the temporary file
-              sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
-
-              # Check if the scanner report was generated
-              if [ -s "scanner-report-$temp_file.csv" ]; then
-                echo "Scanner report generated for $temp_file."
-                
-                # Trim the file paths in the 'File' column of the generated report
-                echo "Trimming the file paths in scanner report: scanner-report-$temp_file.csv"
-                sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_force-app_main_default_classes_||g' "scanner-report-$temp_file.csv"
-                
-                echo "File paths trimmed in scanner-report-$temp_file.csv."
-                
-                # Now match the violations with the corresponding original file line numbers
-                i=0  # To track the position in the array
-                while IFS=, read -r problem severity file line column rule description url category engine; do
-                  # Replace the line number with the original line number
-                  if [ -n "${line_map[$i]}" ]; then
-                    original_line="${line_map[$i]}"
-                    echo "$problem,$severity,$file,$original_line,$column,$rule,$description,$url,$category,$engine" >> "updated-scanner-report-$temp_file.csv"
-                    i=$((i + 1))
-                  else
-                    # If no match, just append the original row
-                    echo "$problem,$severity,$file,$line,$column,$rule,$description,$url,$category,$engine" >> "updated-scanner-report-$temp_file.csv"
-                  fi
-                done < <(tail -n +2 "scanner-report-$temp_file.csv") # Skip the header while reading the CSV
-
-                # Add the header for the new CSV with the "Original Line Number" column
-                echo "Problem,Severity,File,Line,Column,Rule,Description,URL,Category,Engine" > "final-scanner-report-$temp_file.csv"
-                cat "updated-scanner-report-$temp_file.csv" >> "final-scanner-report-$temp_file.csv"
-
-                echo "Final report with original line numbers generated: final-scanner-report-$temp_file.csv"
-
-              else
-                echo "No scanner report generated for $temp_file."
-                exit 0  # Exit gracefully if no report was generated
+            # Ensure that each line ends with a semicolon if it's not already present
+            echo "$changed_lines" | while read -r line; do
+              if ! echo "$line" | grep -qE ';$'; then
+                line="${line};"
               fi
+              echo "        $line" >> "$temp_file"
+              temp_line_number=$((temp_line_number + 1))
+            done
+
+            echo "    }" >> "$temp_file"
+            echo "}" >> "$temp_file"  # Close the class
+
+            echo "Created temporary file with method structure: $temp_file"
+
+            # Run the SFDX scanner on the temporary file
+            sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
+
+            # Check if the scanner report was generated
+            if [ -s "scanner-report-$temp_file.csv" ]; then
+              echo "Scanner report generated for $temp_file."
               
-              # Clean up the temporary file after scanning
-              rm "$temp_file"
+              # Trim the file paths in the 'File' column of the generated report
+              echo "Trimming the file paths in scanner report: scanner-report-$temp_file.csv"
+              sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_force-app_main_default_classes_||g' "scanner-report-$temp_file.csv"
+              
+              echo "File paths trimmed in scanner-report-$temp_file.csv."
+              
+              # Now match the violations with the corresponding original file line numbers
+              i=0  # To track the position in the array
+              while IFS=, read -r problem severity file line column rule description url category engine; do
+                # Replace the line number with the original line number
+                if [ -n "${line_map[$i]}" ]; then
+                  original_line="${line_map[$i]}"
+                  echo "$problem,$severity,$file,$original_line,$column,$rule,$description,$url,$category,$engine" >> "updated-scanner-report-$temp_file.csv"
+                  i=$((i + 1))
+                else
+                  # If no match, just append the original row
+                  echo "$problem,$severity,$file,$line,$column,$rule,$description,$url,$category,$engine" >> "updated-scanner-report-$temp_file.csv"
+                fi
+              done < <(tail -n +2 "scanner-report-$temp_file.csv") # Skip the header while reading the CSV
+
+              # Add the header for the new CSV with the "Original Line Number" column
+              echo "Problem,Severity,File,Line,Column,Rule,Description,URL,Category,Engine" > "final-scanner-report-$temp_file.csv"
+              cat "updated-scanner-report-$temp_file.csv" >> "final-scanner-report-$temp_file.csv"
+
+              echo "Final report with original line numbers generated: final-scanner-report-$temp_file.csv"
+
             else
-              echo "No relevant changes detected in $file."
+              echo "No scanner report generated for $temp_file."
+              exit 0  # Exit gracefully if no report was generated
             fi
+            
+            # Clean up the temporary file after scanning
+            rm "$temp_file"
           done <<< "$files"
 
         env:
