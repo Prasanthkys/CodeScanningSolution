@@ -70,7 +70,17 @@ jobs:
               
               temp_file="temp_${file//\//_}"
               echo "/* Temporary file for changed lines scan */" > "$temp_file"
+
+              # Add ApexDoc for the temporary wrapper class
+              echo "/**" >> "$temp_file"
+              echo " * @description Temporary wrapper class generated for scanning changed lines." >> "$temp_file"
+              echo " */" >> "$temp_file"
               echo "public class TempWrapperClass {" >> "$temp_file"
+
+              # Add ApexDoc for the temporary method
+              echo "    /**" >> "$temp_file"
+              echo "     * @description Temporary method to encapsulate the changed lines for scanning." >> "$temp_file"
+              echo "     */" >> "$temp_file"
               echo "    public static void tempMethod() {" >> "$temp_file"
               echo "        /* Begin of extracted changed lines */" >> "$temp_file"
               echo "$changed_lines_with_numbers" >> "$temp_file"
@@ -78,8 +88,8 @@ jobs:
               echo "    }" >> "$temp_file"
 
               # Handle unbalanced braces as before...
-              
               echo "}" >> "$temp_file"
+
               echo "Created temporary file with method structure: $temp_file"
               
               # Run the SFDX scanner on the temporary file
