@@ -69,6 +69,9 @@ jobs:
           while IFS= read -r file; do
             echo "Processing file: $file"
             
+            # Remove any surrounding quotes from the file path if present
+            file=$(echo "$file" | tr -d '"')
+            
             # Extract the actual changed lines and line numbers for the specific file
             changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | cut -d'+' -f2-)
             line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
