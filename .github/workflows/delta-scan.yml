@@ -86,9 +86,9 @@ jobs:
               echo "public class TempWrapperClass {" >> "$temp_file"
               echo "    public static void tempMethod() {" >> "$temp_file"
 
-              # Ensure that each line ends with a semicolon, if it's not already present
+              # Ensure that each line ends with a semicolon if it's not already present
               echo "$changed_lines" | while read -r line; do
-                if [[ ! $line =~ ;$ ]]; then
+                if ! echo "$line" | grep -qE ';$'; then
                   line="${line};"
                 fi
                 echo "        $line" >> "$temp_file"
