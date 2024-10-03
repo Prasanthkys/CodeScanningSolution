@@ -18,7 +18,7 @@ public with sharing class AccountInsertClass {
           acc.Rating = 'Hot';
           acc.Industry = 'Agriculture';
           System.debug('Agriculture');
-          System.debug('Hello');
+          System.debug('Hello Bava');
         }
       }
       insert accList;
@@ -49,6 +49,7 @@ public with sharing class AccountInsertClass {
       }
       if (oppList.size() > 0) {
         insert oppList;
+        System.debug('Hello Bava');
       }
     } else {
       throw new CustomException(
