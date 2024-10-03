@@ -50,6 +50,7 @@ jobs:
       - name: Extract changed lines, create temp file, and scan
         if: success()
         run: |
+          # Extract only the changed files from the diff for .cls and .lwc files
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
 
           if [ -z "$files" ]; then
@@ -60,14 +61,14 @@ jobs:
           while IFS= read -r file; do
             echo "Processing file: $file"
             
-            # Extract the actual changed lines with line numbers for the specific file
-            changed_lines_with_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' -A 1 | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
-            line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
-            
-            if [ -n "$changed_lines_with_numbers" ]; then
+            # Extract the actual changed lines for the specific file
+            changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
+
+            if [ -n "$changed_lines" ]; then
               echo "Changed lines in $file:"
-              echo "$changed_lines_with_numbers"
+              echo "$changed_lines"
               
+              # Create a temporary file with a valid method structure
               temp_file="temp_${file//\//_}"
               echo "/* Temporary file for changed lines scan */" > "$temp_file"
 
@@ -95,28 +96,29 @@ jobs:
               # Run the SFDX scanner on the temporary file
               echo "Running SFDX scanner on temporary file $temp_file"
               sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
-
+              
+              # Check if the scanner report was generated
               if [ -s "scanner-report-$temp_file.csv" ]; then
                 echo "Scanner report generated for $temp_file."
                 
-                # Trim file paths as before...
-
-                # Add line numbers to the scanner report
-                echo "Adding changed line numbers to the report."
-                paste -d, <(echo "$line_numbers") "scanner-report-$temp_file.csv" > "scanner-report-$temp_file-with-lines.csv"
+                # Trim the file paths in the 'File' column of the generated report
+                echo "Trimming the file paths in scanner report: scanner-report-$temp_file.csv"
                 
-                echo "File paths trimmed and line numbers added in scanner-report-$temp_file-with-lines.csv."
+                # Use sed to remove the specified path from the 'File' column
+                sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_force-app_main_default_classes_||g' "scanner-report-$temp_file.csv"
+                
+                echo "File paths trimmed in scanner-report-$temp_file.csv."
               else
                 echo "No scanner report generated for $temp_file."
-                exit 0
+                exit 0  # Exit gracefully if no report was generated
               fi
-
-              # Clean up as before...
+              
+              # Clean up the temporary file after scanning
+              rm "$temp_file"
             else
               echo "No relevant changes detected in $file."
             fi
           done <<< "$files"
-
         env:
           SF_LAZY_LOAD_MODULES: "true"
           SF_AUTOUPDATE_DISABLE: "true"
