@@ -18,7 +18,7 @@ public with sharing class AccountInsertClass {
           acc.Rating = 'Hot';
           acc.Industry = 'Agriculture';
           System.debug('Agriculture');
-          System.debug('Happy world');
+          System.debug('Happy');
         }
       }
       insert accList;
