@@ -118,9 +118,8 @@ jobs:
                 # Now match the lines in the report with the actual line numbers using git show
                 echo "Matching violation lines with git show to extract actual line numbers..."
                 while IFS=, read -r problem severity file line column rule description url category engine; do
-                  # Use git show with the full path
-                  full_path="force-app/main/default/classes/$file"
-                  matching_line=$(git show HEAD:"$full_path" | grep -Fn "$line" | cut -d: -f1)
+                  # Use git show with the full path and remove any quotes from the file path
+                  matching_line=$(git show HEAD:"$file" | grep -Fn "$line" | cut -d: -f1)
                   
                   if [ -n "$matching_line" ]; then
                     # Add the line number as a new column "Changed Line"
