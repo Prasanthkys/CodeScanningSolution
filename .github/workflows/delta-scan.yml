@@ -55,6 +55,8 @@ jobs:
         run: |
           # Extract only the changed files from the diff for .cls and .lwc files
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+          echo "changed data::"
+          cat changes.diff
 
           if [ -z "$files" ]; then
             echo "No changed .cls or .lwc files detected."
