@@ -112,11 +112,11 @@ jobs:
                 
                 echo "File paths trimmed in scanner-report-$temp_file.csv."
                 
-                # Now match the lines in the report with the actual line numbers
-                echo "Matching violation lines with changes.diff to extract actual line numbers..."
+                # Now match the lines in the report with the actual line numbers using git show
+                echo "Matching violation lines with git show to extract actual line numbers..."
                 while IFS=, read -r problem severity file line column rule description url category engine; do
-                  # Search for the line in the original file and use corresponding line number
-                  matching_line=$(grep -Fn "$line" "$file" | cut -d: -f1)
+                  # Use git show to extract the corresponding line number from the actual file in the repository
+                  matching_line=$(git show HEAD:"$file" | grep -Fn "$line" | cut -d: -f1)
                   
                   if [ -n "$matching_line" ]; then
                     # Add the line number as a new column "Changed Line"
