@@ -69,7 +69,7 @@ jobs:
           while IFS= read -r file; do
             echo "Processing file: $file"
             
-            # Remove any surrounding quotes from the file path if present
+            # Ensure that the file path doesn't contain unnecessary quotes
             file=$(echo "$file" | tr -d '"')
             
             # Extract the actual changed lines and line numbers for the specific file
@@ -118,8 +118,9 @@ jobs:
                 # Now match the lines in the report with the actual line numbers using git show
                 echo "Matching violation lines with git show to extract actual line numbers..."
                 while IFS=, read -r problem severity file line column rule description url category engine; do
-                  # Use git show to extract the corresponding line number from the actual file in the repository
-                  matching_line=$(git show HEAD:"$file" | grep -Fn "$line" | cut -d: -f1)
+                  # Use git show with the full path
+                  full_path="force-app/main/default/classes/$file"
+                  matching_line=$(git show HEAD:"$full_path" | grep -Fn "$line" | cut -d: -f1)
                   
                   if [ -n "$matching_line" ]; then
                     # Add the line number as a new column "Changed Line"
