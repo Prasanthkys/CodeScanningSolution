@@ -45,88 +45,94 @@ jobs:
             echo "No previous commit to compare to." > changes.diff
           fi
 
-          # Extract and print the changed lines and line numbers from .cls and .lwc files
-          echo "Processing changes for .cls and .lwc files..."
+          # Extract and print only the changed lines and line numbers from .cls and .lwc files
+          echo "Processing changes for .cls and .lwc files only..."
           awk '
-            BEGIN {valid_file=0; line_num=0} 
+            BEGIN {valid_file=0} 
             /^diff --git/ {valid_file=0} 
             /\.cls$|\.lwc$/ {valid_file=1} 
-            /^@@/ && valid_file {
-              split($0, arr, " "); gsub(",", "", arr[2]); 
-              start = substr(arr[2], 2); 
-              next 
-            } 
-            /^[+][^+]/ && valid_file {
-              line_num = start++; 
-              print FILENAME, line_num, ":", $0
-            }
+            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); next} 
+            /^[+][^+]/ && valid_file {print "Line", start++, ":", $0}
           ' changes.diff > changed_cls_lwc_lines.txt
           cat changed_cls_lwc_lines.txt
 
       - name: Extract changed lines, create temp file, and scan
         if: success()
         run: |
-          # Extract only the changed files from the diff for .cls and .lwc files
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
 
           if [ -z "$files" ]; then
             echo "No changed .cls or .lwc files detected."
-            exit 0  # Gracefully exit if no relevant files are changed
+            exit 0
           fi
 
           while IFS= read -r file; do
             echo "Processing file: $file"
             
-            # Extract the actual changed lines and their numbers for the specific file
-            changed_lines=$(awk -v file="$file" '$1 == file {print $2, $3}' changed_cls_lwc_lines.txt)
-            
+            # Extract the actual changed lines and line numbers for the specific file
+            changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | cut -d'+' -f2-)
+            line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
+
+            # Print changed lines and line numbers for debugging
+            echo "Changed lines in $file:"
+            echo "$changed_lines"
+            echo "Line numbers corresponding to the changed lines in $file:"
+            echo "$line_numbers"
+
             if [ -n "$changed_lines" ]; then
-              echo "Changed lines in $file:"
-              echo "$changed_lines"
-              
               # Create a temporary file with a valid method structure
               temp_file="temp_${file//\//_}"
               echo "/* Temporary file for changed lines scan */" > "$temp_file"
               echo "public class TempWrapperClass {" >> "$temp_file"
               echo "    public static void tempMethod() {" >> "$temp_file"
-              echo "        /* Begin of extracted changed lines */" >> "$temp_file"
-              echo "$changed_lines" >> "$temp_file"
-              echo "        /* End of extracted changed lines */" >> "$temp_file"
+
+              # Ensure that each line ends with a semicolon if it's not already present
+              echo "$changed_lines" | while read -r line; do
+                if ! echo "$line" | grep -qE ';$'; then
+                  line="${line};"
+                fi
+                echo "        $line" >> "$temp_file"
+              done
+
               echo "    }" >> "$temp_file"
+              echo "}" >> "$temp_file"  # Close the class
 
-              # Add closing braces if needed
-              open_braces=$(echo "$changed_lines" | grep -o '{' | wc -l)
-              close_braces=$(echo "$changed_lines" | grep -o '}' | wc -l)
-              if [ "$open_braces" -gt "$close_braces" ]; then
-                remaining_closing_braces=$(($open_braces - $close_braces))
-                for i in $(seq 1 $remaining_closing_braces); do
-                  echo "}" >> "$temp_file"
-                done
-              fi
-
-              echo "}" >> "$temp_file"
               echo "Created temporary file with method structure: $temp_file"
-              
+
               # Run the SFDX scanner on the temporary file
-              echo "Running SFDX scanner on temporary file $temp_file"
               sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
-              
+
               # Check if the scanner report was generated
               if [ -s "scanner-report-$temp_file.csv" ]; then
                 echo "Scanner report generated for $temp_file."
                 
-                # Add the "Changed Line" column to the scanner report
-                echo "Adding Changed Line column to scanner report: scanner-report-$temp_file.csv"
-                awk -F, -v OFS=',' 'NR==1 {print $0, "Changed Line"} NR>1 {print $0, "'"$changed_lines"'"}' "scanner-report-$temp_file.csv" > "scanner-report-$temp_file-updated.csv"
-
-                # Replace original report with updated one
-                mv "scanner-report-$temp_file-updated.csv" "scanner-report-$temp_file.csv"
-
                 # Trim the file paths in the 'File' column of the generated report
                 echo "Trimming the file paths in scanner report: scanner-report-$temp_file.csv"
                 sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_force-app_main_default_classes_||g' "scanner-report-$temp_file.csv"
                 
                 echo "File paths trimmed in scanner-report-$temp_file.csv."
+                
+                # Now match the lines in the report with the lines from the diff
+                echo "Matching violation lines with changes.diff to extract line numbers..."
+                while IFS=, read -r problem severity file line column rule description url category engine; do
+                  # Search for the line in changes.diff and extract the corresponding line number
+                  matching_line=$(grep -Fn "$line" changes.diff | cut -d: -f1)
+                  
+                  if [ -n "$matching_line" ]; then
+                    # Add the line number as a new column "Changed Line"
+                    echo "$problem,$severity,$file,$line,$column,$rule,$description,$url,$category,$engine,$matching_line" >> "updated-scanner-report-$temp_file.csv"
+                  else
+                    # If no match, just append the original row
+                    echo "$problem,$severity,$file,$line,$column,$rule,$description,$url,$category,$engine," >> "updated-scanner-report-$temp_file.csv"
+                  fi
+                done < <(tail -n +2 "scanner-report-$temp_file.csv") # Skip the header while reading the CSV
+
+                # Add the header for the new CSV with the "Changed Line" column
+                echo "Problem,Severity,File,Line,Column,Rule,Description,URL,Category,Engine,Changed Line" > "final-scanner-report-$temp_file.csv"
+                cat "updated-scanner-report-$temp_file.csv" >> "final-scanner-report-$temp_file.csv"
+
+                echo "Final report with changed lines generated: final-scanner-report-$temp_file.csv"
+
               else
                 echo "No scanner report generated for $temp_file."
                 exit 0  # Exit gracefully if no report was generated
