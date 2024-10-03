@@ -45,7 +45,10 @@ jobs:
             echo "No previous commit to compare to." > changes.diff
           fi
 
-          cat changes.diff
+          # Extract and print the changed lines and their line numbers
+          echo "Processing changes..."
+          awk '/^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); next} /^+/ && NR > 1 {print "Line", start++, ":", $0}' changes.diff > changed_lines.txt
+          cat changed_lines.txt
 
       - name: Extract changed lines, create temp file, and scan
         if: success()
