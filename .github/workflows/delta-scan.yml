@@ -122,16 +122,20 @@ jobs:
                 # Now match the violations with the corresponding temp class line numbers
                 echo "Matching violation lines with temp class line numbers..."
                 temp_line_number=3  # Reset to the line number in TempWrapperClass starting after class declaration
+                # Loop through the CSV report from the scanner
                 while IFS=, read -r problem severity file line column rule description url category engine; do
-                  # Increment the line number based on temp class structure
+                  # Find the correct line number from the changed lines extracted earlier
+                  matching_line=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
+
                   if [ "$line" != "" ]; then
-                    echo "$problem,$severity,$file,$line,$column,$rule,$description,$url,$category,$engine,$temp_line_number" >> "updated-scanner-report-$temp_file.csv"
-                    temp_line_number=$((temp_line_number + 1))
+                    # Use the matching line from the changes to replace the line number in the report
+                    echo "$problem,$severity,$file,$matching_line,$column,$rule,$description,$url,$category,$engine" >> "updated-scanner-report-$temp_file.csv"
                   else
-                    # If no match, just append the original row
-                    echo "$problem,$severity,$file,$line,$column,$rule,$description,$url,$category,$engine," >> "updated-scanner-report-$temp_file.csv"
+                    # If no line is found, append the original row
+                    echo "$problem,$severity,$file,$line,$column,$rule,$description,$url,$category,$engine" >> "updated-scanner-report-$temp_file.csv"
                   fi
                 done < <(tail -n +2 "scanner-report-$temp_file.csv") # Skip the header while reading the CSV
+
 
                 # Add the header for the new CSV with the "Temp Line Number" column
                 echo "Problem,Severity,File,Line,Column,Rule,Description,URL,Category,Engine,Temp Line Number" > "final-scanner-report-$temp_file.csv"
