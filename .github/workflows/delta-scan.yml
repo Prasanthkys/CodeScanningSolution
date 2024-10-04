@@ -74,7 +74,7 @@ jobs:
 
           while IFS= read -r file; do
             echo "Processing file: $file"
-            
+
             # Ensure that the file path doesn't contain unnecessary quotes
             file=$(echo "$file" | tr -d '"')
 
@@ -90,14 +90,14 @@ jobs:
 
             echo "Changed lines for $file have been mapped."
 
-            # Create a temporary file with the changed lines for the scan
+            # Create a temporary file with a valid Apex structure
             temp_file="temp_${file//\//_}"
             echo "/* Temporary file for changed lines scan */" > "$temp_file"
             echo "public class TempWrapperClass {" >> "$temp_file"
             echo "    public static void tempMethod() {" >> "$temp_file"
 
-            # Append the changed lines to the temp file, ensuring each ends with a semicolon
-            awk '/^[+][^+]/ { line = $0; if (!match(line, /;$/)) line = line ";"; print "        " line }' changes.diff >> "$temp_file"
+            # Append the changed lines to the temp file, ensuring each line ends with a semicolon
+            grep '^[+][^+]' changes.diff | awk '{ line = $0; gsub("^[+]", "", line); if (!match(line, /;$/)) line = line ";"; print "        " line }' >> "$temp_file"
 
             echo "    }" >> "$temp_file"
             echo "}" >> "$temp_file"
@@ -143,8 +143,9 @@ jobs:
               echo "No scanner report generated for $file."
               exit 0  # Exit gracefully if no report was generated
             fi
-            
+
             # Clean up the temporary files after scanning
+            rm "$temp_file"
             rm "$updated_report"
           done <<< "$files"
 
