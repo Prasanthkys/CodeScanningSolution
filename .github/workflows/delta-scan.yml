@@ -81,13 +81,18 @@ jobs:
             changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^\+' | sed 's/^+//')
             line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
 
-            # Populate line_map with only actual changed lines
-            i=0
-            while IFS= read -r line_number; do
-              line_map[$line_number]="Changed"
-              echo "Mapped original line number $line_number to changed line."
-              i=$((i + 1))
-            done <<< "$line_numbers"
+            # Print the current changed line numbers and content
+            echo "Changed line numbers in $file:"
+            echo "$line_numbers"
+            echo "Content of changed lines:"
+            for line_number in $line_numbers; do
+              # Use sed to extract the exact content of the changed line from the file
+              current_line=$(sed -n "${line_number}p" "$file")
+              echo "Line $line_number: $current_line"
+
+              # Map the changed line for later processing
+              line_map[$line_number]="$current_line"
+            done
 
             # Create a unique output file path for the scanner report
             output_report="scanner-report-${file//\//_}.csv"
@@ -105,9 +110,9 @@ jobs:
               while IFS=, read -r problem severity file line column rule description url category engine; do
                 # Include only rows where the line was changed
                 if [ -n "${line_map[$line]}" ]; then
-                  changed_line="$line"  # If it's in the map, it's a changed line, so include it
+                  changed_line="${line_map[$line]}"  # Get the actual changed line content
                   # Append the line to the updated CSV (only include lines corresponding to changed lines)
-                  echo "$problem,$severity,$file,$line,$changed_line,$column,$rule,$description,$url,$category,$engine" >> "updated-$output_report"
+                  echo "$problem,$severity,$file,$line,\"$changed_line\",$column,$rule,$description,$url,$category,$engine" >> "updated-$output_report"
                 else
                   # Skip the row if it's not a changed line
                   echo "Skipping violation at line $line (not a changed line)."
