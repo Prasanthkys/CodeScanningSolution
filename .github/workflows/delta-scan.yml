@@ -1,7 +1,7 @@
-name: Delta-Scan.yml
+name: SFDX Code Scan Delta
 
 on:
-  push:
+  pull_request:
     branches: "**"
 
 jobs:
@@ -29,56 +29,89 @@ jobs:
       - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
 
-      - name: Get changed files and line numbers
+      - name: Get changed files and lines (for .cls and .lwc files)
         id: get-changes
         run: |
-          # Skip the unshallow fetch if it's a complete repository
+          # Check if the repository is shallow and unshallow if necessary
           if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
-            git fetch --unshallow || true
+            echo "Repository is shallow, unshallowing..."
+            git fetch --unshallow
+          else
+            echo "Repository is not shallow, skipping unshallow."
           fi
-
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-            echo "Fetching changed files between HEAD~1 and HEAD"
-            git diff --name-only HEAD~1 HEAD > changed_files.txt
+            echo "Fetching changed files and lines between HEAD~1 and HEAD"
+            git diff --unified=0 HEAD~1 HEAD > changes.diff
+          else
+            echo "No previous commit to compare to." > changes.diff
+          fi
+          # Extract and print only the changed lines and line numbers from .cls and .lwc files
+          echo "Processing changes for .cls and .lwc files only..."
+          awk '
+            BEGIN {valid_file=0} 
+            /^diff --git/ {valid_file=0} 
+            /\.cls$|\.lwc$/ {valid_file=1} 
+            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); next} 
+            /^[+][^+]/ && valid_file {print "Line", start++, ":", $0}
+          ' changes.diff > changed_cls_lwc_lines.txt
+          cat changed_cls_lwc_lines.txt
+      - name: Extract changed lines, create temp file, and scan
+        if: success()
+        run: |
+          files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+          if [ -z "$files" ]; then
+            echo "No changed .cls or .lwc files detected."
+            exit 0
+          fi
+          # Declare an array to map the line numbers
+          declare -A line_map
+          while IFS= read -r file; do
+            echo "Processing file: $file"
             
-            echo "Fetching line numbers of changes between HEAD~1 and HEAD"
-            # Extract only the changed line numbers
-            git diff -U0 HEAD~1 HEAD | grep -E '^@@ ' | sed -e 's/^.*@@ -\([0-9]*\),[0-9]* +\([0-9]*\),[0-9]* @@.*$/\2/' > changed_line_numbers.txt
-          else
-            echo "No previous commit to compare to." > changed_files.txt
-            echo "No previous commit to compare to." > changed_line_numbers.txt
-          fi
-
-          echo "Changed files:"
-          cat changed_files.txt
-
-          echo "Changed line numbers:"
-          cat changed_line_numbers.txt
-
-      - name: Run SFDX Scanner on Changed Files
-        if: success()
-        run: |
-          files=$(cat changed_files.txt | grep -E '\.cls$|\.lwc$' || true)
-          echo "Files to scan: $files"
-          if [ -n "$files" ]; then
-            sf scanner:run --target "$files" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
-          else
-            echo "No relevant files changed."
-            touch scanner-report.csv
-          fi
-        env:
-          SF_LAZY_LOAD_MODULES: "true"
-          SF_AUTOUPDATE_DISABLE: "true"
-          SF_DISABLE_AUTOUPDATE: "true"
-
-      - name: Generate Scanner Rule List
-        if: success()
-        run: |
-          # Run the command without --format
-          sf scanner:rule:list > scanner-rules.txt || { echo "Failed to generate rule list"; exit 1; }
-          # Optionally process `scanner-rules.txt` to convert to CSV if necessary
-          # Example processing step (customize based on actual output):
-          cat scanner-rules.txt > scanner-rules.csv
+            # Ensure that the file path doesn't contain unnecessary quotes
+            file=$(echo "$file" | tr -d '"')
+            
+            # Extract the actual changed lines and line numbers for the specific file
+            changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^\+' | sed 's/^+//')
+            line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
+            # Populate line_map with only actual changed lines
+            i=0
+            while IFS= read -r line_number; do
+              line_map[$line_number]="Changed"
+              echo "Mapped original line number $line_number to changed line."
+              i=$((i + 1))
+            done <<< "$line_numbers"
+            # Create a unique output file path for the scanner report
+            output_report="scanner-report-${file//\//_}.csv"
+            echo "Running scanner on $file. Output report: $output_report"
+            # Run the SFDX scanner on the actual file and specify the output file path
+            sf scanner:run --target "$file" --format "csv" --outfile "$output_report" || { echo "Scanner run failed"; exit 1; }
+            # Check if the scanner report was generated
+            if [ -s "$output_report" ]; then
+              echo "Scanner report generated: $output_report."
+              # Prepare to update the scanner report with changed line info
+              i=0
+              while IFS=, read -r problem severity file line column rule description url category engine; do
+                if [ -n "${line_map[$line]}" ]; then
+                  changed_line="$line"  # If it's in the map, use the line number as the changed line
+                else
+                  changed_line="N/A"  # If not in the map, mark it as N/A
+                fi
+                # Append the line to the updated CSV
+                echo "$problem,$severity,$file,$line,$changed_line,$column,$rule,$description,$url,$category,$engine" >> "updated-$output_report"
+              done < <(tail -n +2 "$output_report")  # Skip the header
+              # Add the header for the updated CSV
+              echo "Problem,Severity,File,Line,Changed Line,Column,Rule,Description,URL,Category,Engine" > "final-$output_report"
+              cat "updated-$output_report" >> "final-$output_report"
+              echo "Final report generated with correct changed line numbers: final-$output_report"
+            else
+              echo "Error: Scanner report not generated for $file."
+              exit 1
+            fi
+            
+            # Clean up
+            rm "$output_report"
+          done <<< "$files"
         env:
           SF_LAZY_LOAD_MODULES: "true"
           SF_AUTOUPDATE_DISABLE: "true"
@@ -100,8 +133,7 @@ jobs:
         with:
           name: SFDX_Code_Scan_Delta
           path: |
-            scanner-report.csv
-            scanner-rules.csv
+            final-scanner-report-*.csv
       - name: Get Pusher's Email
         id: get-pusher-email
         run: |
@@ -110,16 +142,15 @@ jobs:
           PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
             "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
           echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
-
       - name: Encode CSV report to base64
         run: |
-          if [ -s scanner-report.csv ]; then
-            base64 scanner-report.csv > encoded_report.txt
+          report_file=$(find . -name "final-scanner-report-*.csv" | head -n 1)
+          if [ -s "$report_file" ]; then
+            base64 "$report_file" > encoded_report.txt
           else
             echo "No scanner report found."
-            exit 1
+            exit 0  # Gracefully exit if no report was found
           fi
-
       - name: Upload CSV Report to Salesforce
         if: success()
         run: |
@@ -133,12 +164,12 @@ jobs:
               -H "Content-Type: application/json" \
               -d '{
                 "Title": "'"${{ env.FILE_TITLE }}"'",
-                "PathOnClient": "scanner-report.csv",
+                "PathOnClient": "final-scanner-report.csv",
                 "VersionData": "'"$ENCODED_DATA"'"
               }')
               
             echo "Response: $contentDocumentResponse"
-            
+              
             # Extract the ContentVersionId from the response
             contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
             if [ -z "$contentVersionId" ]; then
