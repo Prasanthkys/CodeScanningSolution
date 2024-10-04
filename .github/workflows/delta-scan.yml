@@ -134,19 +134,20 @@ jobs:
               # Now match the violations with the corresponding original file line numbers
               i=0  # To track the position in the array
               while IFS=, read -r problem severity file line column rule description url category engine; do
-                # Replace the line number with the original line number
+                # Replace the line number with the original line number and add the Changed Line column
                 if [ -n "${line_map[$i]}" ]; then
                   original_line="${line_map[$i]}"
-                  echo "$problem,$severity,$file,$original_line,$column,$rule,$description,$url,$category,$engine" >> "updated-scanner-report-$temp_file.csv"
+                  changed_line="$original_line"  # Store the changed line number
+                  echo "$problem,$severity,$file,$original_line,$changed_line,$column,$rule,$description,$url,$category,$engine" >> "updated-scanner-report-$temp_file.csv"
                   i=$((i + 1))
                 else
-                  # If no match, just append the original row
-                  echo "$problem,$severity,$file,$line,$column,$rule,$description,$url,$category,$engine" >> "updated-scanner-report-$temp_file.csv"
+                  # If no match, just append the original row without changed line info
+                  echo "$problem,$severity,$file,$line,N/A,$column,$rule,$description,$url,$category,$engine" >> "updated-scanner-report-$temp_file.csv"
                 fi
               done < <(tail -n +2 "scanner-report-$temp_file.csv") # Skip the header while reading the CSV
 
-              # Add the header for the new CSV with the "Original Line Number" column
-              echo "Problem,Severity,File,Line,Column,Rule,Description,URL,Category,Engine" > "final-scanner-report-$temp_file.csv"
+              # Add the header for the new CSV with the "Changed Line" column
+              echo "Problem,Severity,File,Line,Changed Line,Column,Rule,Description,URL,Category,Engine" > "final-scanner-report-$temp_file.csv"
               cat "updated-scanner-report-$temp_file.csv" >> "final-scanner-report-$temp_file.csv"
 
               echo "Final report with original line numbers generated: final-scanner-report-$temp_file.csv"
