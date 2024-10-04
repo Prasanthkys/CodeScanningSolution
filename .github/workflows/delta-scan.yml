@@ -78,24 +78,34 @@ jobs:
             # Ensure that the file path doesn't contain unnecessary quotes
             file=$(echo "$file" | tr -d '"')
 
-            # Extract the actual changed lines and line numbers for the specific file
-            awk '/^@@/ { split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); next } /^[+][^+]/ {print "Line " start++ ": " $0}' changes.diff > changed_cls_lwc_lines.txt
-            
+            # Extract the actual added or modified lines and line numbers for the specific file
+            awk '
+              /^@@/ { split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); next } 
+              /^[+][^+]/ {print "Line " start++ ": " $0}' changes.diff > changed_cls_lwc_lines.txt
+
             # Populate the line_map array with changed line numbers
-            grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | while read -r line; do
-              # Extract line number and corresponding changed line
-              changed_line_number=$(echo "$line" | awk '{ print $2 }')
-              changed_line=$(echo "$line" | awk '{ print $1 }')
+            awk '
+              /^@@/ { split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); next } 
+              /^[+][^+]/ { line_map[start++]=$0 }' changes.diff
 
-              line_map["$changed_line"]=$changed_line_number
-              echo "Mapped $changed_line_number to $changed_line" # Debugging output
-            done <<< "$files"
+            echo "Changed lines for $file have been mapped."
 
-            # Generate a temporary file name based on the path
+            # Create a temporary file with the changed lines for the scan
             temp_file="temp_${file//\//_}"
+            echo "/* Temporary file for changed lines scan */" > "$temp_file"
+            echo "public class TempWrapperClass {" >> "$temp_file"
+            echo "    public static void tempMethod() {" >> "$temp_file"
 
-            # Run the SFDX scanner on the file and generate a report
-            sf scanner:run --target "$file" --format "csv" --outfile "scanner-report-${file//\//_}.csv" || { echo "Scanner run failed"; exit 1; }
+            # Append the changed lines to the temp file, ensuring each ends with a semicolon
+            awk '/^[+][^+]/ { line = $0; if (!match(line, /;$/)) line = line ";"; print "        " line }' changes.diff >> "$temp_file"
+
+            echo "    }" >> "$temp_file"
+            echo "}" >> "$temp_file"
+
+            echo "Temporary file created with changed lines: $temp_file"
+
+            # Run the SFDX scanner on the temporary file and generate a report
+            sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-${file//\//_}.csv" || { echo "Scanner run failed"; exit 1; }
 
             # Check if the scanner report was generated
             if [ -s "scanner-report-${file//\//_}.csv" ]; then
