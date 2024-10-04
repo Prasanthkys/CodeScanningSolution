@@ -82,18 +82,20 @@ jobs:
           # Extract and print only the changed line numbers from .cls files
           echo "Processing changes for .cls files only..."
           awk '
-            BEGIN {valid_file=0} 
+            BEGIN {valid_file=0; start_line=0} 
             /^diff --git/ {valid_file=0} 
             /\.cls$/ {valid_file=1} 
             /^@@/ && valid_file {
+              # Extract the correct start line from the diff header (2nd element)
               split($0, arr, " "); 
               gsub(",", "", arr[2]); 
               start_line = substr(arr[2], 2);
+              print "Found change block starting at line:", start_line;  # Debug print to check the start line
               next
             } 
             /^[+][^+]/ && valid_file {
-              print start_line;  # Output the correct starting line number
-              start_line++;      # Increment correctly
+              print "Changed line at:", start_line;  # Print the correct line number
+              start_line++;  # Increment line number correctly
             }
           ' changes.diff > changed_cls_line_numbers.txt
 
