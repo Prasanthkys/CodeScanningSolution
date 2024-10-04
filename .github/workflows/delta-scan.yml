@@ -61,7 +61,8 @@ jobs:
       - name: Extract changed lines, create temp file, and scan
         if: success()
         run: |
-          files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///' | awk '{ print $2 }')
+          # Fetch the list of changed .cls and .lwc files
+          files=$(grep -E '^diff --git a/.*(\.cls|\.lwc)$' changes.diff | sed 's/diff --git a\///' | awk '{ print $1 }')
 
           if [ -z "$files" ]; then
             echo "No changed .cls or .lwc files detected."
@@ -80,7 +81,7 @@ jobs:
             # Extract the actual changed lines and line numbers for the specific file
             awk '/^@@/ { split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); next } /^[+][^+]/ {print "Line " start++ ": " $0}' changes.diff > changed_cls_lwc_lines.txt
             
-            # Populate the line_map array
+            # Populate the line_map array with changed line numbers
             grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | while read -r line; do
               # Extract line number and corresponding changed line
               changed_line_number=$(echo "$line" | awk '{ print $2 }')
