@@ -92,7 +92,8 @@ jobs:
               next
             } 
             /^[+][^+]/ && valid_file {
-              print start_line++;
+              print start_line;  # Output the correct starting line number
+              start_line++;      # Increment correctly
             }
           ' changes.diff > changed_cls_line_numbers.txt
 
