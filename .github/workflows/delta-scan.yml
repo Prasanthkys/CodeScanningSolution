@@ -96,13 +96,19 @@ jobs:
             echo "public class TempWrapperClass {" >> "$temp_file"
             echo "    public static void tempMethod() {" >> "$temp_file"
 
-            # Append the changed lines to the temp file, ensuring each line ends with a semicolon
+            # Append the changed lines to the temp file, ensuring each line ends with a semicolon and is valid Apex code
             grep '^[+][^+]' changes.diff | awk '{ line = $0; gsub("^[+]", "", line); if (!match(line, /;$/)) line = line ";"; print "        " line }' >> "$temp_file"
 
             echo "    }" >> "$temp_file"
             echo "}" >> "$temp_file"
 
             echo "Temporary file created with changed lines: $temp_file"
+
+            # Validate that the file contains valid Apex code
+            if ! apex_validate "$temp_file"; then
+              echo "Apex validation failed for the temporary file."
+              exit 1
+            fi
 
             # Run the SFDX scanner on the temporary file and generate a report
             sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-${file//\//_}.csv" || { echo "Scanner run failed"; exit 1; }
