@@ -89,11 +89,16 @@ jobs:
               i=$((i + 1))
             done <<< "$line_numbers"
 
-            # Run the SFDX scanner on the actual file
-            sf scanner:run --target "$file" --format "csv" --outfile "scanner-report-$file.csv" || { echo "Scanner run failed"; exit 1; }
+            # Create a unique output file path for the scanner report
+            output_report="scanner-report-${file//\//_}.csv"
+            echo "Running scanner on $file. Output report: $output_report"
 
-            if [ -s "scanner-report-$file.csv" ]; then
-              echo "Scanner report generated for $file."
+            # Run the SFDX scanner on the actual file and specify the output file path
+            sf scanner:run --target "$file" --format "csv" --outfile "$output_report" || { echo "Scanner run failed"; exit 1; }
+
+            # Check if the scanner report was generated
+            if [ -s "$output_report" ]; then
+              echo "Scanner report generated: $output_report."
 
               # Prepare to update the scanner report with changed line info
               i=0
@@ -104,22 +109,22 @@ jobs:
                   changed_line="N/A"  # If not in the map, mark it as N/A
                 fi
                 # Append the line to the updated CSV
-                echo "$problem,$severity,$file,$line,$changed_line,$column,$rule,$description,$url,$category,$engine" >> "updated-scanner-report-$file.csv"
-              done < <(tail -n +2 "scanner-report-$file.csv")  # Skip the header
+                echo "$problem,$severity,$file,$line,$changed_line,$column,$rule,$description,$url,$category,$engine" >> "updated-$output_report"
+              done < <(tail -n +2 "$output_report")  # Skip the header
 
               # Add the header for the updated CSV
-              echo "Problem,Severity,File,Line,Changed Line,Column,Rule,Description,URL,Category,Engine" > "final-scanner-report-$file.csv"
-              cat "updated-scanner-report-$file.csv" >> "final-scanner-report-$file.csv"
+              echo "Problem,Severity,File,Line,Changed Line,Column,Rule,Description,URL,Category,Engine" > "final-$output_report"
+              cat "updated-$output_report" >> "final-$output_report"
 
-              echo "Final report generated with correct changed line numbers: final-scanner-report-$file.csv"
+              echo "Final report generated with correct changed line numbers: final-$output_report"
 
             else
-              echo "No scanner report generated for $file."
-              exit 0
+              echo "Error: Scanner report not generated for $file."
+              exit 1
             fi
             
             # Clean up
-            rm "$temp_file"
+            rm "$output_report"
           done <<< "$files"
 
         env:
