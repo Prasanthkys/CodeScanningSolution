@@ -100,23 +100,25 @@ jobs:
             if [ -s "$output_report" ]; then
               echo "Scanner report generated: $output_report."
 
-              # Prepare to update the scanner report with changed line info
+              # Prepare to update the scanner report with only changed line data
               i=0
               while IFS=, read -r problem severity file line column rule description url category engine; do
+                # Include only rows where the line was changed
                 if [ -n "${line_map[$line]}" ]; then
-                  changed_line="$line"  # If it's in the map, use the line number as the changed line
+                  changed_line="$line"  # If it's in the map, it's a changed line, so include it
+                  # Append the line to the updated CSV (only include lines corresponding to changed lines)
+                  echo "$problem,$severity,$file,$line,$changed_line,$column,$rule,$description,$url,$category,$engine" >> "updated-$output_report"
                 else
-                  changed_line="N/A"  # If not in the map, mark it as N/A
+                  # Skip the row if it's not a changed line
+                  echo "Skipping violation at line $line (not a changed line)."
                 fi
-                # Append the line to the updated CSV
-                echo "$problem,$severity,$file,$line,$changed_line,$column,$rule,$description,$url,$category,$engine" >> "updated-$output_report"
               done < <(tail -n +2 "$output_report")  # Skip the header
 
               # Add the header for the updated CSV
               echo "Problem,Severity,File,Line,Changed Line,Column,Rule,Description,URL,Category,Engine" > "final-$output_report"
               cat "updated-$output_report" >> "final-$output_report"
 
-              echo "Final report generated with correct changed line numbers: final-$output_report"
+              echo "Final report generated with only changed line violations: final-$output_report"
 
             else
               echo "Error: Scanner report not generated for $file."
