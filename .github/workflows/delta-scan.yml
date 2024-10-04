@@ -78,7 +78,7 @@ jobs:
             file=$(echo "$file" | tr -d '"')
             
             # Extract the actual changed lines and line numbers for the specific file
-            changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | cut -d'+' -f2-)
+            changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^\+' | sed 's/^+//')
             line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
 
             # Print changed lines and line numbers for debugging
