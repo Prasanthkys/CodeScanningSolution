@@ -105,7 +105,7 @@ jobs:
             if [ -s "$output_report" ]; then
               echo "Scanner report generated: $output_report."
 
-              # Prepare to update the scanner report with only changed line data
+              # Prepare to filter the scanner report to include only the changed lines
               i=0
               while IFS=, read -r problem severity file line column rule description url category engine; do
                 # Include only rows where the line was changed
