@@ -17,9 +17,6 @@ public with sharing class AccountInsertClass {
           acc.Description = 'Happy Welcome';
           acc.Rating = 'Hot';
           acc.Industry = 'Agriculture';
-          System.debug('hello');
-          System.debug('Good');
-          System.debug('Morning');
         }
       }
       insert accList;
@@ -47,6 +44,7 @@ public with sharing class AccountInsertClass {
         opp.StageName = 'Prospecting';
         opp.AccountId = acc.Id;
         oppList.add(opp);
+        System.debug('Hello World');
       }
       if (oppList.size() > 0) {
         insert oppList;
