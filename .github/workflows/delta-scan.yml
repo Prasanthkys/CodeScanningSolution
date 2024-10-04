@@ -1,7 +1,7 @@
 name: SFDX Code Scan Delta
 
 on:
-  push:
+  pull_request:
     branches: "**"
 
 jobs:
@@ -126,7 +126,7 @@ jobs:
               echo "Scanner report generated for $temp_file."
               
               # Trim the file paths in the 'File' column of the generated report
-              echo "Trimming the file paths in scanner report: scanner-report-$temp_file.csv"
+              echo "Trimming the file paths in scanner-report-$temp_file.csv"
               sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_force-app_main_default_classes_||g' "scanner-report-$temp_file.csv"
               
               echo "File paths trimmed in scanner-report-$temp_file.csv."
