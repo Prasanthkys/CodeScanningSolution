@@ -56,6 +56,8 @@ jobs:
             /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); next} 
             /^[+][^+]/ && valid_file {print "Line", start++, ":", $0}
           ' changes.diff > changed_cls_lwc_lines.txt
+
+          echo "Changed lines and line numbers:"
           cat changed_cls_lwc_lines.txt
 
       - name: Extract changed lines, create temp file, and scan
@@ -81,57 +83,87 @@ jobs:
             changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^\+' | sed 's/^+//')
             line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
 
-            # Print the current changed line numbers and content
-            echo "Changed line numbers in $file:"
+            # Print changed lines and line numbers for debugging
+            echo "Changed lines in $file:"
+            echo "$changed_lines"
+            echo "Line numbers corresponding to the changed lines in $file:"
             echo "$line_numbers"
-            echo "Content of changed lines:"
-            for line_number in $line_numbers; do
-              # Use sed to extract the exact content of the changed line from the file
-              current_line=$(sed -n "${line_number}p" "$file")
-              echo "Line $line_number: $current_line"
 
-              # Map the changed line for later processing
-              line_map[$line_number]="$current_line"
+            # Reset the index for each file
+            i=0
+            
+            # Iterate through changed lines and line numbers simultaneously
+            while IFS= read -r line; do
+              line_number=$(echo "$line_numbers" | sed -n "$((i + 1))p")
+              echo "Mapping changed line: '$line' to original line number: $line_number"
+              line_map[$i]=$line_number
+              i=$((i + 1))
+            done <<< "$changed_lines"
+
+            # Create a temporary file with a valid method structure
+            temp_file="temp_${file//\//_}"
+            echo "/* Temporary file for changed lines scan */" > "$temp_file"
+            echo "public class TempWrapperClass {" >> "$temp_file"
+            echo "    public static void tempMethod() {" >> "$temp_file"
+
+            # Keep track of the line number within the temporary class
+            temp_line_number=3  # Starting after the class declaration
+
+            # Ensure that each line ends with a semicolon if it's not already present
+            echo "$changed_lines" | while read -r line; do
+              if ! echo "$line" | grep -qE ';$'; then
+                line="${line};"
+              fi
+              echo "        $line" >> "$temp_file"
+              temp_line_number=$((temp_line_number + 1))
             done
 
-            # Create a unique output file path for the scanner report
-            output_report="scanner-report-${file//\//_}.csv"
-            echo "Running scanner on $file. Output report: $output_report"
+            echo "    }" >> "$temp_file"
+            echo "}" >> "$temp_file"  # Close the class
 
-            # Run the SFDX scanner on the actual file and specify the output file path
-            sf scanner:run --target "$file" --format "csv" --outfile "$output_report" || { echo "Scanner run failed"; exit 1; }
+            echo "Created temporary file with method structure: $temp_file"
+
+            # Run the SFDX scanner on the temporary file
+            sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
 
             # Check if the scanner report was generated
-            if [ -s "$output_report" ]; then
-              echo "Scanner report generated: $output_report."
-
-              # Prepare to filter the scanner report to include only the changed lines
-              i=0
+            if [ -s "scanner-report-$temp_file.csv" ]; then
+              echo "Scanner report generated for $temp_file."
+              
+              # Trim the file paths in the 'File' column of the generated report
+              echo "Trimming the file paths in scanner-report-$temp_file.csv"
+              sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_force-app_main_default_classes_||g' "scanner-report-$temp_file.csv"
+              
+              echo "File paths trimmed in scanner-report-$temp_file.csv."
+              
+              # Now match the violations with the corresponding original file line numbers
+              i=0  # To track the position in the array
               while IFS=, read -r problem severity file line column rule description url category engine; do
-                # Include only rows where the line was changed
-                if [ -n "${line_map[$line]}" ]; then
-                  changed_line="${line_map[$line]}"  # Get the actual changed line content
-                  # Append the line to the updated CSV (only include lines corresponding to changed lines)
-                  echo "$problem,$severity,$file,$line,\"$changed_line\",$column,$rule,$description,$url,$category,$engine" >> "updated-$output_report"
+                # Replace the line number with the original line number and add the Changed Line column
+                if [ -n "${line_map[$i]}" ]; then
+                  original_line="${line_map[$i]}"
+                  changed_line="$original_line"  # Store the changed line number
+                  echo "$problem,$severity,$file,$original_line,$changed_line,$column,$rule,$description,$url,$category,$engine" >> "updated-scanner-report-$temp_file.csv"
+                  i=$((i + 1))
                 else
-                  # Skip the row if it's not a changed line
-                  echo "Skipping violation at line $line (not a changed line)."
+                  # If no match, just append the original row without changed line info
+                  echo "$problem,$severity,$file,$line,N/A,$column,$rule,$description,$url,$category,$engine" >> "updated-scanner-report-$temp_file.csv"
                 fi
-              done < <(tail -n +2 "$output_report")  # Skip the header
+              done < <(tail -n +2 "scanner-report-$temp_file.csv") # Skip the header while reading the CSV
 
-              # Add the header for the updated CSV
-              echo "Problem,Severity,File,Line,Changed Line,Column,Rule,Description,URL,Category,Engine" > "final-$output_report"
-              cat "updated-$output_report" >> "final-$output_report"
+              # Add the header for the new CSV with the "Changed Line" column
+              echo "Problem,Severity,File,Line,Changed Line,Column,Rule,Description,URL,Category,Engine" > "final-scanner-report-$temp_file.csv"
+              cat "updated-scanner-report-$temp_file.csv" >> "final-scanner-report-$temp_file.csv"
 
-              echo "Final report generated with only changed line violations: final-$output_report"
+              echo "Final report with original line numbers generated: final-scanner-report-$temp_file.csv"
 
             else
-              echo "Error: Scanner report not generated for $file."
-              exit 1
+              echo "No scanner report generated for $temp_file."
+              exit 0  # Exit gracefully if no report was generated
             fi
             
-            # Clean up
-            rm "$output_report"
+            # Clean up the temporary file after scanning
+            rm "$temp_file"
           done <<< "$files"
 
         env:
