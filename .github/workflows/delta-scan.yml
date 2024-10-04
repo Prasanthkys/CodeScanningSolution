@@ -80,29 +80,31 @@ jobs:
             echo "No previous commit to compare to." > changes.diff
           fi
 
+          # Grep for .cls file changes and store it in a temporary file
+          grep -A 5 '.cls$' changes.diff > cls_changes.diff
+
           # Extract and print only the changed line numbers from .cls files
           echo "Processing changes for .cls files only..."
           awk '
             BEGIN {valid_file=0; start_line=0} 
-            # Detect start of a new diff block
+            # Detect diff header
             /^diff --git/ {valid_file=0} 
-            # Enable processing for .cls files
+            # Enable processing only for .cls files
             /\.cls$/ {valid_file=1} 
-            # Handle @@ lines which mark start of a new change block
+            # Detect @@ change block headers to extract starting line number
             /^@@/ && valid_file {
-              # Extract and reset the start line for each new block
               split($0, arr, " "); 
               gsub(",", "", arr[2]); 
-              start_line = substr(arr[2], 2);
-              print "Found change block starting at line:", start_line;  # Debug print for start line
+              start_line = substr(arr[2], 2); # Capture the starting line from @@ header
+              print "Found change block starting at line:", start_line;
               next
             } 
-            # Print changed line numbers
+            # Print the actual changed lines
             /^[+][^+]/ && valid_file {
-              print "Changed line at:", start_line;  # Print the correct line number
-              start_line++;  # Increment line number correctly for next changed line
+              print "Changed line at:", start_line; # Print the line number
+              start_line++; # Increment the line number for the next change
             }
-          ' changes.diff > changed_cls_line_numbers.txt
+          ' cls_changes.diff > changed_cls_line_numbers.txt
 
           # Output the changed line numbers for .cls files
           echo "Changed line numbers for .cls files:"
