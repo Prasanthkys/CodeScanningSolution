@@ -87,13 +87,16 @@ jobs:
             echo "Line numbers corresponding to the changed lines in $file:"
             echo "$line_numbers"
 
-            # Populate the line_map array
+            # Reset the index for each file
             i=0
-            echo "$changed_lines" | while read -r line; do
-              line_map[$i]=$(echo "$line_numbers" | sed -n "$((i + 1))p")
-              echo "Mapped line $i to original line number: ${line_map[$i]}"  # Debug output
+            
+            # Iterate through changed lines and line numbers simultaneously
+            while IFS= read -r line; do
+              line_number=$(echo "$line_numbers" | sed -n "$((i + 1))p")
+              echo "Mapping changed line: '$line' to original line number: $line_number"
+              line_map[$i]=$line_number
               i=$((i + 1))
-            done
+            done <<< "$changed_lines"
 
             # Create a temporary file with a valid method structure
             temp_file="temp_${file//\//_}"
