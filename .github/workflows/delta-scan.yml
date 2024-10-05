@@ -36,14 +36,14 @@ jobs:
           # Check if the repository is shallow and unshallow if necessary
           if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
             echo "Repository is shallow, unshallowing..."
-            git fetch --unshallow
+            git fetch --unshallow || { echo "Failed to unshallow the repository"; exit 1; }
           else
             echo "Repository is not shallow, skipping unshallow."
           fi
 
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files and lines between HEAD~1 and HEAD"
-            git diff --unified=0 HEAD~1 HEAD > changes.diff
+            git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
           else
             echo "No previous commit to compare to." > changes.diff
           fi
