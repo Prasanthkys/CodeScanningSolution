@@ -110,12 +110,12 @@ jobs:
         run: |
           # Extract relevant line numbers for filtering (remove any empty lines and format)
           current_line_number_list=$(grep 'Line' changed_cls_lwc_lines.txt | awk '{print $2}' | tr '\n' ' ')
-          echo "Current_Line_Number_List: $current_line_number_list"
+          echo "Current_Line_Number_List (before formatting): $current_line_number_list"
 
-          # Ensure there are no leading/trailing spaces in the line number list
-          current_line_number_list=$(echo $current_line_number_list | xargs)
+          # Ensure there are no leading/trailing spaces and properly format the line number list
+          current_line_number_list=$(echo $current_line_number_list | sed 's/ \+/ /g' | xargs)
 
-          echo "Filtering scanner report for the following line numbers: $current_line_number_list"
+          echo "Current_Line_Number_List (after formatting): $current_line_number_list"
 
           # Use FPAT to correctly parse the CSV columns, treating each quoted field as a separate field
           awk -v lines="$current_line_number_list" '
@@ -127,7 +127,7 @@ jobs:
             }
           }
           NR == 1 || (substr($4, 2, length($4)-2) in valid) {  # Check if Line (stripped of quotes) is in valid lines
-            print $0;  # Only print matching rows, no debug output
+            print $0;  # Only print matching rows
           }
           ' scanner-report.csv > filtered-scanner-report.csv
 
