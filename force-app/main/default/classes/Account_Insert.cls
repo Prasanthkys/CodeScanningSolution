@@ -17,8 +17,6 @@ public with sharing class AccountInsertClass {
           acc.Description = 'Happy Welcome';
           acc.Rating = 'Hot';
           acc.Industry = 'Agriculture';
-          System.debug('Hello Hi');
-          System.debug('Hi Hello');
         }
       }
       insert accList;
@@ -68,7 +66,6 @@ public with sharing class AccountInsertClass {
       for (Account acc : accList) {
         if (Schema.sObjectType.Account.fields.Description.isUpdateable()) {
           acc.Description = 'Happy Welcome Account';
-          System.debug('Hi');
         }
       }
       insert accList;
