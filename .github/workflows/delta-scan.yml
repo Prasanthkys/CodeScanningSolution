@@ -1,5 +1,3 @@
-name: SFDX Code Scan Delta
-
 on:
   push:
     branches:
@@ -108,6 +106,25 @@ jobs:
 
           done <<< "$files"
 
+      - name: Filter Scanner Report by Line Numbers
+        run: |
+          # Assuming 'scanner-report.csv' is generated, let's filter it
+          # Extract relevant line numbers for filtering
+          current_line_number_list=$(grep 'Line' changed_cls_lwc_lines.txt | awk '{print $2}')
+
+          # Filter the scanner report based on these line numbers
+          awk -v lines="$current_line_number_list" '
+          BEGIN {
+            split(lines, arr, " ");
+            for (i in arr) valid[arr[i]] = 1;
+          }
+          NR == 1 || valid[$4] {
+            print $0;
+          }
+          ' scanner-report.csv > filtered-scanner-report.csv
+
+          cat filtered-scanner-report.csv
+
       - name: Install mailx
         run: sudo apt-get install -y mailutils
 
@@ -120,11 +137,11 @@ jobs:
           FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
 
-      - name: Upload Scanner Report as Artifact
+      - name: Upload Filtered Scanner Report as Artifact
         uses: actions/upload-artifact@v3
         with:
           name: ${{ env.FILE_TITLE }}
-          path: scanner-report.csv
+          path: filtered-scanner-report.csv
 
       - name: Get Pusher's Email
         id: get-pusher-email
@@ -144,7 +161,7 @@ jobs:
               -H "Content-Type: application/json" \
               -d '{
                 "Title": "'"${{ env.FILE_TITLE }}"'",
-                "PathOnClient": "scanner-report.csv",
+                "PathOnClient": "filtered-scanner-report.csv",
                 "VersionData": "'"$(cat encoded_report.txt)"'"
               }')
             echo "Response: $contentDocumentResponse"
@@ -152,7 +169,7 @@ jobs:
             contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
             if [ -z "$contentVersionId" ]; then
               echo "Error: Failed to upload file. No ContentVersionId found."
-              exit 1
+              exit 1;
             fi
             echo "ContentVersionId: $contentVersionId"
             
@@ -163,7 +180,7 @@ jobs:
             contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
             if [ -z "$contentDocumentId" ]; then
               echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
-              exit 1
+              exit 1;
             fi
             echo "ContentDocumentId: $contentDocumentId"
           else
@@ -184,4 +201,4 @@ jobs:
           subject: "SFDX Code Scan Delta Report"
           body: "Please find the attached SFDX Code Scan Delta Report."
           to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
-          attachments: scanner-report.csv
+          attachments: filtered-scanner-report.csv
