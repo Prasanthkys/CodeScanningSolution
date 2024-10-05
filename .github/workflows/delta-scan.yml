@@ -48,6 +48,12 @@ jobs:
             echo "No previous commit to compare to." > changes.diff
           fi
 
+          # Check if diff has any content
+          if [ ! -s changes.diff ]; then
+            echo "No changes detected between HEAD~1 and HEAD."
+            exit 0
+          fi
+
           # Extract and print only the changed lines and line numbers from .cls and .lwc files
           echo "Processing changes for .cls and .lwc files only..."
           awk '
@@ -57,12 +63,21 @@ jobs:
             /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  
             /^[+][^+]/ && valid_file {print "Line", start + line_offset++, ":", substr($0, 2)}  
           ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
+
+          # Check if any relevant changes were found in .cls or .lwc files
+          if [ ! -s changed_cls_lwc_lines.txt ]; then
+            echo "No changes detected in .cls or .lwc files."
+            exit 0
+          fi
+
           cat changed_cls_lwc_lines.txt
 
       - name: Run SFDX Scanner on Changed Files and Lines
         run: |
+          # Get the changed .cls and .lwc files from the diff
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
 
+          # Check if files were found
           if [ -z "$files" ]; then
             echo "No changed .cls or .lwc files detected."
             exit 0
@@ -71,9 +86,13 @@ jobs:
           # Declare an array to store the line numbers
           declare -a line_numbers_array=()
 
+          # Loop through each changed file
           while IFS= read -r file; do
             echo "Processing file: $file"
-            file=$(echo "$file" | tr -d '"')
+            
+            file=$(echo "$file" | tr -d '"') # Clean up the file path
+
+            # Extract the actual changed lines and line numbers for the specific file
             changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^\+' | sed 's/^+//')
             line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
 
@@ -82,17 +101,18 @@ jobs:
             echo "Line numbers corresponding to the changed lines in $file:"
             echo "$line_numbers"
 
+            # Reset the index for each file
             current_line_number=$(echo "$line_numbers" | head -1)
             echo "Starting line number: $current_line_number"
 
+            # Iterate through changed lines
             while IFS= read -r line; do
               echo "Mapping changed line: '$line' to original line number: $current_line_number"
               echo "Running SFDX Scanner on file: $file at line number: $current_line_number..."
-              
-              # Run the SFDX scanner
+
+              # Run the SFDX scanner on each file and line
               sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || {
-                echo "No issues found or scanner failed for $file, skipping further processing."
-                exit 0
+                echo "Scanner run failed or no issues found for $file, continuing with other files."
               }
 
               # Store the current line number in the array
@@ -102,25 +122,32 @@ jobs:
 
           done <<< "$files"
 
+          # Store the line numbers array in a file for later use
           echo "${line_numbers_array[*]}" > line_numbers.txt
           cat line_numbers.txt
 
       - name: Filter Scanner Report by Line Numbers
         run: |
+          # Read the line numbers from the file
           current_line_number_list=$(cat line_numbers.txt)
+          echo "Current_Line_Number_List: $current_line_number_list"
+
+          # Ensure there are no leading/trailing spaces in the line number list
           current_line_number_list=$(echo $current_line_number_list | xargs)
+
           echo "Filtering scanner report for the following line numbers: $current_line_number_list"
 
+          # Use FPAT to correctly parse the CSV columns, treating each quoted field as a separate field
           awk -v lines="$current_line_number_list" '
           BEGIN {
-            FPAT = "([^,]+)|(\"[^\"]+\")";  
+            FPAT = "([^,]+)|(\"[^\"]+\")";  # Define how to match CSV fields
             split(lines, arr, " ");
             for (i in arr) {
-              valid[arr[i]] = 1;  
+              valid[arr[i]] = 1;  # Treat line numbers as strings
             }
           }
-          NR == 1 || (substr($4, 2, length($4)-2) in valid) {  
-            print $0;  
+          NR == 1 || (substr($4, 2, length($4)-2) in valid) {  # Check if Line (stripped of quotes) is in valid lines
+            print $0;  # Only print matching rows, no debug output
           }
           ' scanner-report.csv > filtered-scanner-report.csv
 
