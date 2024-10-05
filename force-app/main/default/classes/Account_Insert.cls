@@ -48,6 +48,7 @@ public with sharing class AccountInsertClass {
       }
       if (oppList.size() > 0) {
         insert oppList;
+        System.debug('Hello Welcome');
       }
     } else {
       throw new CustomException(
