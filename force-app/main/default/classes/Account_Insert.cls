@@ -19,6 +19,7 @@ public with sharing class AccountInsertClass {
           acc.Industry = 'Agriculture';
           System.debug('Hello');
           System.debug('Hi');
+          System.debug('Hello Hi');
         }
       }
       insert accList;
