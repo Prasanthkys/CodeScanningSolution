@@ -44,9 +44,6 @@ public with sharing class AccountInsertClass {
         opp.StageName = 'Prospecting';
         opp.AccountId = acc.Id;
         oppList.add(opp);
-        System.debug('Hello');
-        System.debug('Hi');
-        System.debug('Happy Days');
       }
       if (oppList.size() > 0) {
         insert oppList;
@@ -69,7 +66,6 @@ public with sharing class AccountInsertClass {
       for (Account acc : accList) {
         if (Schema.sObjectType.Account.fields.Description.isUpdateable()) {
           acc.Description = 'Happy Welcome Account';
-          System.debug('Welcome');
         }
       }
       insert accList;
