@@ -54,9 +54,9 @@ jobs:
             BEGIN {valid_file=0} 
             /^diff --git/ {valid_file=0} 
             /\.cls$|\.lwc$/ {valid_file=1} 
-            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); next} 
-            /^[+][^+]/ && valid_file {print "Line", start++, ":", substr($0, 2)}  # Remove leading "+"
-          ' changes.diff > changed_cls_lwc_lines.txt
+            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  # Capture start and reset offset
+            /^[+][^+]/ && valid_file {print "Line", start + line_offset++, ":", substr($0, 2)}  # Increment line number for new lines
+          ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt  # Exclude '+++' lines that indicate file paths
           cat changed_cls_lwc_lines.txt
 
       - name: Run SFDX Scanner on Changed Files and Lines
