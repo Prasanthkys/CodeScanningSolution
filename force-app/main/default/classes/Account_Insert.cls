@@ -20,6 +20,7 @@ public with sharing class AccountInsertClass {
           System.debug('Hello Hi');
           System.debug('Hello');
           System.debug('Hi');
+          System.debug('Hi Hello');
         }
       }
       insert accList;

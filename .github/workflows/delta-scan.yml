@@ -55,7 +55,7 @@ jobs:
             /^diff --git/ {valid_file=0} 
             /\.cls$|\.lwc$/ {valid_file=1} 
             /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); next} 
-            /^[+][^+]/ && valid_file {print "New Line", start++, ":", $0}
+            /^[+][^+]/ && valid_file {print "Line", start++, ":", $0}
           ' changes.diff > changed_cls_lwc_lines.txt
           cat changed_cls_lwc_lines.txt
 
@@ -111,7 +111,7 @@ jobs:
       - name: Filter Scanner Report by Line Numbers
         run: |
           # Extract relevant line numbers for filtering (remove any empty lines and format)
-          current_line_number_list=$(grep 'New Line' changed_cls_lwc_lines.txt | awk '{print $3}' | tr '\n' ' ')
+          current_line_number_list=$(grep 'Line' changed_cls_lwc_lines.txt | awk '{print $2}' | tr '\n' ' ')
           echo "Current_Line_Number_List: $current_line_number_list"
 
           # Ensure there are no leading/trailing spaces in the line number list
