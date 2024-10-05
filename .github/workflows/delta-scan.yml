@@ -69,8 +69,8 @@ jobs:
             exit 0
           fi
 
-          # Declare an array to map the line numbers
-          declare -A line_map
+          # Declare an array to store the line numbers
+          declare -a line_numbers_array=()
 
           while IFS= read -r file; do
             echo "Processing file: $file"
@@ -102,16 +102,23 @@ jobs:
               echo "Running SFDX Scanner on file: $file at line number: $current_line_number..."
               sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
 
+              # Store the current line number in the array
+              line_numbers_array+=("$current_line_number")
+
               # Increment the line number for the next `+` line
               current_line_number=$((current_line_number + 1))
             done <<< "$changed_lines"
 
           done <<< "$files"
 
+          # Store the line numbers array in a file for later use
+          echo "${line_numbers_array[*]}" > line_numbers.txt
+          cat line_numbers.txt
+
       - name: Filter Scanner Report by Line Numbers
         run: |
-          # Extract relevant line numbers for filtering (remove any empty lines and format)
-          current_line_number_list=$(grep 'Line' changed_cls_lwc_lines.txt | awk '{print $2}' | tr '\n' ' ')
+          # Read the line numbers from the file
+          current_line_number_list=$(cat line_numbers.txt)
           echo "Current_Line_Number_List: $current_line_number_list"
 
           # Ensure there are no leading/trailing spaces in the line number list
