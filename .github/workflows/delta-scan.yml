@@ -75,14 +75,18 @@ jobs:
 
           done <<< "$files"
 
-      # Step to upload the unfiltered scanner report
-      - name: Upload Scanner Report as Artifact
+      # Step to upload the unfiltered scanner report and the changed lines file
+      - name: Upload Scanner Report and Changed Lines File as Artifacts
         uses: actions/upload-artifact@v3
         with:
           name: "scanner-report"
           path: scanner-report.csv
+      - name: Upload Changed Lines as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: "changed-lines"
+          path: changed_cls_lwc_lines.txt
 
-  # Separate job for downloading the artifact and filtering the report
   filter-and-upload:
     needs: installcli
     runs-on: ubuntu-latest
@@ -93,6 +97,12 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: "scanner-report"
+          path: .
+
+      - name: Download Changed Lines Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: "changed-lines"
           path: .
 
       - name: Filter Scanner Report by Line Numbers
