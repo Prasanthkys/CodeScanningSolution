@@ -112,8 +112,8 @@ jobs:
           current_line_number_list=$(grep 'Line' changed_cls_lwc_lines.txt | awk '{print $2}' | tr '\n' ' ')
           echo "Current_Line_Number_List (before formatting): $current_line_number_list"
 
-          # Ensure there are no leading/trailing spaces and properly format the line number list
-          current_line_number_list=$(echo $current_line_number_list | sed 's/ \+/ /g' | xargs)
+          # Fix to avoid concatenation: Ensure proper separation of line numbers
+          current_line_number_list=$(echo $current_line_number_list | sed 's/[^0-9 ]//g' | xargs)
 
           echo "Current_Line_Number_List (after formatting): $current_line_number_list"
 
