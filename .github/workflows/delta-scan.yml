@@ -124,17 +124,12 @@ jobs:
             split(lines, arr, " ");
             for (i in arr) {
               valid[arr[i]] = 1;  # Treat line numbers as strings
-              print "Valid line: " arr[i];  # Debugging: print each valid line number
             }
           }
           NR == 1 || (substr($4, 2, length($4)-2) in valid) {  # Check if Line (stripped of quotes) is in valid lines
-            print "Matching line: " substr($4, 2, length($4)-2);  # Debugging: print each line being checked
-            print $0;
+            print $0;  # Only print matching rows, no debug output
           }
           ' scanner-report.csv > filtered-scanner-report.csv
-
-          echo "Scanner Report:"
-          cat scanner-report.csv
 
           echo "Filtered scanner report:"
           cat filtered-scanner-report.csv
