@@ -100,8 +100,10 @@ jobs:
               echo "Running SFDX Scanner on file: $file at line number: $current_line_number..."
               sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
 
-              # Increment the line number for the next `+` line
-              current_line_number=$((current_line_number + 1))
+              # Only increment line number if this is not the end of the diff
+              if [[ "$line" != "" ]]; then
+                current_line_number=$((current_line_number + 1))
+              fi
             done <<< "$changed_lines"
 
           done <<< "$files"
