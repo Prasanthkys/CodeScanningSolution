@@ -46,7 +46,7 @@ public with sharing class AccountInsertClass {
         oppList.add(opp);
         System.debug('Hello');
         System.debug('Hi');
-        System.debug('Happy');
+        System.debug('Happy Days');
       }
       if (oppList.size() > 0) {
         insert oppList;

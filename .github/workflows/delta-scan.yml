@@ -89,33 +89,24 @@ jobs:
             echo "$line_numbers"
 
             # Reset the index for each file
-            i=0
-            
-            # Iterate through changed lines and line numbers simultaneously
+            current_line_number=$(echo "$line_numbers" | head -1)
+            echo "Starting line number: $current_line_number"
+
+            # Iterate through changed lines
             while IFS= read -r line; do
-              line_number=$(echo "$line_numbers" | sed -n "$((i + 1))p")
-              echo "Mapping changed line: '$line' to original line number: $line_number"
-              echo "Changed Line Number: $line_number"
-              line_map[$i]=$line_number
-              i=$((i + 1))
+              # Print the current line number and changed line
+              echo "Mapping changed line: '$line' to original line number: $current_line_number"
+              echo "Changed Line Number: $current_line_number"
+
+              # Run the SFDX scanner for the changed line (or entire file depending on capabilities)
+              echo "Running SFDX Scanner on file: $file at line number: $current_line_number..."
+              sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
+
+              # Increment the line number for the next `+` line
+              current_line_number=$((current_line_number + 1))
             done <<< "$changed_lines"
 
-            # Run the SFDX scanner only on the specific lines
-            echo "Running SFDX Scanner on file: $file for the changed lines..."
-            sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
-
           done <<< "$files"
-
-      - name: Encode CSV file to Base64
-        if: success()
-        id: encode_file
-        run: |
-          if [ -f scanner-report.csv ]; then
-            base64 scanner-report.csv | tr -d '\n' > encoded_report.txt
-          else
-            echo "Scanner report CSV file not found."
-            exit 1
-          fi
 
       - name: Install mailx
         run: sudo apt-get install -y mailutils
