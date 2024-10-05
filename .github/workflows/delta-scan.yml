@@ -123,6 +123,8 @@ jobs:
           }
           ' scanner-report.csv > filtered-scanner-report.csv
 
+          cat scanner-report.csv
+
           cat filtered-scanner-report.csv
 
       - name: Install mailx
