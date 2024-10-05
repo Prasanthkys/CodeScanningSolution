@@ -31,23 +31,16 @@ jobs:
       - name: Get changed files and lines (for .cls and .lwc files)
         id: get-changes
         run: |
-          # Check if the repository is shallow and unshallow if necessary
           if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
-            echo "Repository is shallow, unshallowing..."
             git fetch --unshallow
-          else
-            echo "Repository is not shallow, skipping unshallow."
           fi
 
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-            echo "Fetching changed files and lines between HEAD~1 and HEAD"
             git diff --unified=0 HEAD~1 HEAD > changes.diff
           else
             echo "No previous commit to compare to." > changes.diff
           fi
 
-          # Extract and print only the changed lines and line numbers from .cls and .lwc files
-          echo "Processing changes for .cls and .lwc files only..."
           awk '
             BEGIN {valid_file=0} 
             /^diff --git/ {valid_file=0} 
@@ -67,75 +60,66 @@ jobs:
             exit 0
           fi
 
-          # Declare an array to map the line numbers
           declare -A line_map
 
           while IFS= read -r file; do
-            echo "Processing file: $file"
-            
-            # Ensure that the file path doesn't contain unnecessary quotes
             file=$(echo "$file" | tr -d '"')
-            
-            # Extract the actual changed lines and line numbers for the specific file
             changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^\+' | sed 's/^+//')
             line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
-
-            # Print changed lines and line numbers for debugging
-            echo "Changed lines in $file:"
-            echo "$changed_lines"
-            echo "Line numbers corresponding to the changed lines in $file:"
-            echo "$line_numbers"
-
-            # Reset the index for each file
             current_line_number=$(echo "$line_numbers" | head -1)
-            echo "Starting line number: $current_line_number"
 
-            # Iterate through changed lines
             while IFS= read -r line; do
-              # Print the current line number and changed line
-              echo "Mapping changed line: '$line' to original line number: $current_line_number"
-              echo "Changed Line Number: $current_line_number"
-
-              # Run the SFDX scanner for the changed line (or entire file depending on capabilities)
-              echo "Running SFDX Scanner on file: $file at line number: $current_line_number..."
               sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
-
-              # Increment the line number for the next `+` line
               current_line_number=$((current_line_number + 1))
             done <<< "$changed_lines"
 
           done <<< "$files"
 
+      # Step to upload the unfiltered scanner report
+      - name: Upload Scanner Report as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: "scanner-report"
+          path: scanner-report.csv
+
+  # Separate job for downloading the artifact and filtering the report
+  filter-and-upload:
+    needs: installcli
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download Scanner Report Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: "scanner-report"
+          path: .
+
       - name: Filter Scanner Report by Line Numbers
         run: |
-          # Extract relevant line numbers for filtering (remove any empty lines and format)
           current_line_number_list=$(grep 'Line' changed_cls_lwc_lines.txt | awk '{print $2}' | tr '\n' ' ')
-          echo "Current_Line_Number_List (before formatting): $current_line_number_list"
-
-          # Fix to avoid concatenation: Ensure proper separation of line numbers
           current_line_number_list=$(echo $current_line_number_list | sed 's/[^0-9 ]//g' | xargs)
-
-          echo "Current_Line_Number_List (after formatting): $current_line_number_list"
-
-          # Use FPAT to correctly parse the CSV columns, treating each quoted field as a separate field
           awk -v lines="$current_line_number_list" '
           BEGIN {
-            FPAT = "([^,]+)|(\"[^\"]+\")";  # Define how to match CSV fields
+            FPAT = "([^,]+)|(\"[^\"]+\")";
             split(lines, arr, " ");
             for (i in arr) {
-              valid[arr[i]] = 1;  # Treat line numbers as strings
+              valid[arr[i]] = 1;
             }
           }
-          NR == 1 || (substr($4, 2, length($4)-2) in valid) {  # Check if Line (stripped of quotes) is in valid lines
-            print $0;  # Only print matching rows
+          NR == 1 || (substr($4, 2, length($4)-2) in valid) {
+            print $0;
           }
           ' scanner-report.csv > filtered-scanner-report.csv
 
-          echo "Filtered scanner report:"
           cat filtered-scanner-report.csv
 
-      - name: Install mailx
-        run: sudo apt-get install -y mailutils
+      # Upload filtered scanner report
+      - name: Upload Filtered Scanner Report as Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: "filtered-scanner-report"
+          path: filtered-scanner-report.csv
 
       - name: Get Repository and Branch Info
         id: get-info
@@ -146,59 +130,7 @@ jobs:
           FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
 
-      - name: Upload Filtered Scanner Report as Artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ env.FILE_TITLE }}
-          path: filtered-scanner-report.csv
-
-      - name: Get Pusher's Email
-        id: get-pusher-email
-        run: |
-          COMMIT_SHA=${{ github.sha }}
-          REPO=${{ github.repository }}
-          PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
-            "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
-          echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
-
-      - name: Upload CSV Report to Salesforce
-        if: success()
-        run: |
-          if [ -s encoded_report.txt ]; then
-            contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
-              -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
-              -H "Content-Type: application/json" \
-              -d '{
-                "Title": "'"${{ env.FILE_TITLE }}"'",
-                "PathOnClient": "filtered-scanner-report.csv",
-                "VersionData": "'"$(cat encoded_report.txt)"'"
-              }')
-            echo "Response: $contentDocumentResponse"
-            
-            contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
-            if [ -z "$contentVersionId" ]; then
-              echo "Error: Failed to upload file. No ContentVersionId found."
-              exit 1;
-            fi
-            echo "ContentVersionId: $contentVersionId"
-            
-            contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
-              -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
-            echo "ContentDocument Response: $contentDocumentResponse"
-            
-            contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
-            if [ -z "$contentDocumentId" ]; then
-              echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
-              exit 1;
-            fi
-            echo "ContentDocumentId: $contentDocumentId"
-          else
-            echo "No scanner report generated, skipping upload."
-          fi
-        env:
-          SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
-        shell: bash
-
+      # Send Email with filtered report
       - name: Send Email with actions-send-mail
         uses: dawidd6/action-send-mail@v3
         with:
@@ -208,6 +140,6 @@ jobs:
           password: ${{ secrets.GMAIL_APP_PASSWORD }}
           from: ${{ secrets.GMAIL_EMAIL }}
           subject: "SFDX Code Scan Delta Report"
-          body: "Please find the attached SFDX Code Scan Delta Report."
+          body: "Please find the attached filtered SFDX Code Scan Delta Report."
           to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
           attachments: filtered-scanner-report.csv
