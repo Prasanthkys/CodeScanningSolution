@@ -108,9 +108,15 @@ jobs:
 
       - name: Filter Scanner Report by Line Numbers
         run: |
-          # Assuming 'scanner-report.csv' is generated, let's filter it
-          # Extract relevant line numbers for filtering
-          current_line_number_list=$(grep 'Line' changed_cls_lwc_lines.txt | awk '{print $2}')
+          # Extract relevant line numbers for filtering (remove any empty lines and format)
+          current_line_number_list=$(grep 'Line' changed_cls_lwc_lines.txt | awk '{print $2}' | tr '\n' ' ')
+          echo "Current_line_number_list: $current_line_number_list"
+
+          # Ensure there are no leading/trailing spaces in the line number list
+          current_line_number_list=$(echo $current_line_number_list | xargs)
+          echo "Current_line_number_list: $current_line_number_list"
+
+          echo "Filtering scanner report for the following line numbers: $current_line_number_list"
 
           # Filter the scanner report based on these line numbers
           awk -v lines="$current_line_number_list" '
@@ -123,8 +129,10 @@ jobs:
           }
           ' scanner-report.csv > filtered-scanner-report.csv
 
+          echo "Scanner Report:"
           cat scanner-report.csv
 
+          echo "Filtered scanner report:"
           cat filtered-scanner-report.csv
 
       - name: Install mailx
