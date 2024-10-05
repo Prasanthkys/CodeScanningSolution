@@ -117,17 +117,18 @@ jobs:
 
           echo "Filtering scanner report for the following line numbers: $current_line_number_list"
 
-          # Filter the scanner report based on these line numbers, treating line numbers as strings
+          # Use FPAT to correctly parse the CSV columns, treating each quoted field as a separate field
           awk -v lines="$current_line_number_list" '
           BEGIN {
+            FPAT = "([^,]+)|(\"[^\"]+\")";  # Define how to match CSV fields
             split(lines, arr, " ");
             for (i in arr) {
               valid[arr[i]] = 1;  # Treat line numbers as strings
               print "Valid line: " arr[i];  # Debugging: print each valid line number
             }
           }
-          NR == 1 || ($4 in valid) {  # Check if Line ($4) is in valid lines
-            print "Matching line: " $4;  # Debugging: print each line from the CSV being checked
+          NR == 1 || (substr($4, 2, length($4)-2) in valid) {  # Check if Line (stripped of quotes) is in valid lines
+            print "Matching line: " substr($4, 2, length($4)-2);  # Debugging: print each line being checked
             print $0;
           }
           ' scanner-report.csv > filtered-scanner-report.csv
