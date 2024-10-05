@@ -94,6 +94,7 @@ jobs:
             while IFS= read -r line; do
               line_number=$(echo "$line_numbers" | sed -n "$((i + 1))p")
               echo "Mapping changed line: '$line' to original line number: $line_number"
+              echo "Changed Line Number: $line_number"
               line_map[$i]=$line_number
               i=$((i + 1))
             done <<< "$changed_lines"
