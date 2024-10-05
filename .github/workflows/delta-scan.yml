@@ -55,7 +55,7 @@ jobs:
             /^diff --git/ {valid_file=0} 
             /\.cls$|\.lwc$/ {valid_file=1} 
             /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); next} 
-            /^[+][^+]/ && valid_file {print "Line", start++, ":", $0}
+            /^[+][^+]/ && valid_file {print "Line", start++, ":", substr($0, 2)}  # Remove leading "+"
           ' changes.diff > changed_cls_lwc_lines.txt
           cat changed_cls_lwc_lines.txt
 
