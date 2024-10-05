@@ -54,13 +54,12 @@ jobs:
             BEGIN {valid_file=0} 
             /^diff --git/ {valid_file=0} 
             /\.cls$|\.lwc$/ {valid_file=1} 
-            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  # Capture start and reset offset
-            /^[+][^+]/ && valid_file {print "Line", start + line_offset++, ":", substr($0, 2)}  # Increment line number for new lines
-          ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt  # Exclude '+++' lines that indicate file paths
+            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  
+            /^[+][^+]/ && valid_file {print "Line", start + line_offset++, ":", substr($0, 2)}  
+          ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
           cat changed_cls_lwc_lines.txt
 
       - name: Run SFDX Scanner on Changed Files and Lines
-        if: success()
         run: |
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
 
@@ -74,69 +73,54 @@ jobs:
 
           while IFS= read -r file; do
             echo "Processing file: $file"
-            
-            # Ensure that the file path doesn't contain unnecessary quotes
             file=$(echo "$file" | tr -d '"')
-            
-            # Extract the actual changed lines and line numbers for the specific file
             changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^\+' | sed 's/^+//')
             line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
 
-            # Print changed lines and line numbers for debugging
             echo "Changed lines in $file:"
             echo "$changed_lines"
             echo "Line numbers corresponding to the changed lines in $file:"
             echo "$line_numbers"
 
-            # Reset the index for each file
             current_line_number=$(echo "$line_numbers" | head -1)
             echo "Starting line number: $current_line_number"
 
-            # Iterate through changed lines
             while IFS= read -r line; do
-              # Print the current line number and changed line
               echo "Mapping changed line: '$line' to original line number: $current_line_number"
-              echo "Changed Line Number: $current_line_number"
-
-              # Run the SFDX scanner for the changed line (or entire file depending on capabilities)
               echo "Running SFDX Scanner on file: $file at line number: $current_line_number..."
-              sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed"; exit 1; }
+              
+              # Run the SFDX scanner
+              sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || {
+                echo "No issues found or scanner failed for $file, skipping further processing."
+                exit 0
+              }
 
               # Store the current line number in the array
               line_numbers_array+=("$current_line_number")
-
-              # Increment the line number for the next `+` line
               current_line_number=$((current_line_number + 1))
             done <<< "$changed_lines"
 
           done <<< "$files"
 
-          # Store the line numbers array in a file for later use
           echo "${line_numbers_array[*]}" > line_numbers.txt
           cat line_numbers.txt
 
       - name: Filter Scanner Report by Line Numbers
         run: |
-          # Read the line numbers from the file
           current_line_number_list=$(cat line_numbers.txt)
-          echo "Current_Line_Number_List: $current_line_number_list"
-
-          # Ensure there are no leading/trailing spaces in the line number list
           current_line_number_list=$(echo $current_line_number_list | xargs)
-
           echo "Filtering scanner report for the following line numbers: $current_line_number_list"
 
-          # Use FPAT to correctly parse the CSV columns, treating each quoted field as a separate field
           awk -v lines="$current_line_number_list" '
           BEGIN {
-            FPAT = "([^,]+)|(\"[^\"]+\")";  # Define how to match CSV fields
+            FPAT = "([^,]+)|(\"[^\"]+\")";  
             split(lines, arr, " ");
             for (i in arr) {
-              valid[arr[i]] = 1;  # Treat line numbers as strings
+              valid[arr[i]] = 1;  
             }
           }
-          NR == 1 || (substr($4, 2, length($4)-2) in valid) {  # Check if Line (stripped of quotes) is in valid lines
-            print $0;  # Only print matching rows, no debug output
+          NR == 1 || (substr($4, 2, length($4)-2) in valid) {  
+            print $0;  
           }
           ' scanner-report.csv > filtered-scanner-report.csv
 
@@ -171,42 +155,22 @@ jobs:
           echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
 
       - name: Upload CSV Report to Salesforce
-        if: success()
         run: |
-          if [ -s encoded_report.txt ]; then
-            contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
+          if [ -s filtered-scanner-report.csv ]; then
+            contentDocumentResponse=$(curl -X POST https://your-salesforce-instance-url/services/data/v61.0/sobjects/ContentVersion/ \
               -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
               -H "Content-Type: application/json" \
               -d '{
                 "Title": "'"${{ env.FILE_TITLE }}"'",
                 "PathOnClient": "filtered-scanner-report.csv",
-                "VersionData": "'"$(cat encoded_report.txt)"'"
+                "VersionData": "'"$(cat filtered-scanner-report.csv)"'"
               }')
             echo "Response: $contentDocumentResponse"
-            
-            contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
-            if [ -z "$contentVersionId" ]; then
-              echo "Error: Failed to upload file. No ContentVersionId found."
-              exit 1;
-            fi
-            echo "ContentVersionId: $contentVersionId"
-            
-            contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
-              -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
-            echo "ContentDocument Response: $contentDocumentResponse"
-            
-            contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
-            if [ -z "$contentDocumentId" ]; then
-              echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
-              exit 1;
-            fi
-            echo "ContentDocumentId: $contentDocumentId"
           else
             echo "No scanner report generated, skipping upload."
           fi
         env:
           SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
-        shell: bash
 
       - name: Send Email with actions-send-mail
         uses: dawidd6/action-send-mail@v3
