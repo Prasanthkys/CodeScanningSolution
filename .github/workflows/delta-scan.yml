@@ -123,7 +123,7 @@ jobs:
             echo "Created temporary file with method structure: $temp_file"
 
             # Run the SFDX scanner on the temporary file
-            sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
+            sf scanner:run --target "$file" --format "csv" --outfile "scanner-report-$file.csv" || { echo "Scanner run failed"; exit 1; }
 
             # Check if the scanner report was generated
             if [ -s "scanner-report-$temp_file.csv" ]; then
