@@ -37,7 +37,7 @@ git diff --unified=0 --cached > changes.diff
 while IFS= read -r file; do
   echo "Processing file: $file"
 
-  # Remove leading slashes to make it compatible with file path and handle file name properly
+  # Remove leading slashes to make it compatible with file path
   clean_file=$(echo "$file" | sed 's#^\(\./\|/##')
 
   # Extract the changed lines and corresponding line numbers
@@ -70,9 +70,9 @@ while IFS= read -r file; do
   # Read the changed lines from the file for filtering
   changed_lines=$(cut -d':' -f1 changed_cls_lwc_lines.txt | tr '\n' ' ')
 
-  # Filter the scanner report based on the changed lines (Fix jq usage)
+  # Filter the scanner report based on the changed lines
   echo "Filtering scanner report for $file by changed lines..."
-  jq --argjson lines "[$changed_lines]" '
+  jq --argfile lines <(echo "$changed_lines" | jq -R . | jq -s .) '
     .[] | select(.violations[]?.line as $line | $lines | index($line) != null)
   ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.json"
 

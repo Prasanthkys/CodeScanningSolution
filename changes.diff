@@ -1,630 +1,1207 @@
 diff --git a/.husky/pre-commit b/.husky/pre-commit
-index 4433528..439f404 100644
+index 439f404..0247104 100644
 --- a/.husky/pre-commit
 +++ b/.husky/pre-commit
-@@ -4,6 +4 @@
--# if git diff --name-only --cached | grep -q ".husky/pre-commit\|.husky/post-commit"; then
--#   echo "Error: pre-commit and post-commit files cannot be modified."
--#   exit 1
--# fi
--# chmod 544 .husky/pre-commit
--# chmod 544 .husky/post-commit
-+# ...
-@@ -12,8 +7 @@
--if ! command -v husky &> /dev/null
--then
--    echo "Husky is not installed. Installing Husky..."
--    npm install husky --save-dev
--    npx husky install
--else
--    echo "Husky is already installed successfully."
--fi
-+# ...
-@@ -36,6 +24,16 @@ git diff --unified=0 --cached > changes.diff
--# Loop through each changed file
--while IFS= read -r file; do
--  echo "Processing file: $file"
--
--  # Remove leading slashes to make it compatible with file path
--  clean_file=$(echo "$file" | sed 's#^\(\./\|/##')
-+# Extract and print only the changed lines and line numbers from .cls and .lwc files
-+echo "Processing changes for .cls and .lwc files only..."
-+awk '
-+  BEGIN {valid_file=0; file=""}
-+  /^diff --git/ {valid_file=0}
-+  /^diff --git a\/.* b\/(.*)/ {file=$3; sub(/^b\//,"",file)}
-+  $0 ~ /\.cls$|\.lwc$/ {valid_file=1}
-+  /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}
-+  /^[+][^+]/ && valid_file {print file, start + line_offset++, ":", substr($0, 2)}
-+' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
-+
-+# Check if any relevant changes were found in .cls or .lwc files
-+if [ ! -s changed_cls_lwc_lines.txt ]; then
-+  echo "No changes detected in .cls or .lwc files."
-+  exit 0
+@@ -4 +4,6 @@
+-# ...
++# if git diff --name-only --cached | grep -q ".husky/pre-commit\|.husky/post-commit"; then
++#   echo "Error: pre-commit and post-commit files cannot be modified."
++#   exit 1
++# fi
++# chmod 544 .husky/pre-commit
++# chmod 544 .husky/post-commit
+@@ -7 +12,8 @@
+-# ...
++if ! command -v husky &> /dev/null
++then
++    echo "Husky is not installed. Installing Husky..."
++    npm install husky --save-dev
++    npx husky install
++else
++    echo "Husky is already installed successfully."
 +fi
-@@ -43,8 +41 @@ while IFS= read -r file; do
--  # Extract the changed lines and corresponding line numbers
--  awk '
--    BEGIN {valid_file=0} 
--    /^diff --git/ {valid_file=0} 
--    $0 ~ /\.cls$|\.lwc$/ {valid_file=1} 
--    /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  
--    /^[+][^+]/ && valid_file {print start + line_offset++, ":", substr($0, 2)}  
--  ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
-+cat changed_cls_lwc_lines.txt
-@@ -52,5 +43,5 @@ while IFS= read -r file; do
--  # If no lines are found for this file, skip it
--  if [ ! -s changed_cls_lwc_lines.txt ]; then
--    echo "No changed lines found in $file"
--    continue
--  fi
-+# Process each file
-+for file in $changed_files; do
+@@ -24,16 +36,3 @@ git diff --unified=0 --cached > changes.diff
+-# Extract and print only the changed lines and line numbers from .cls and .lwc files
+-echo "Processing changes for .cls and .lwc files only..."
+-awk '
+-  BEGIN {valid_file=0; file=""}
+-  /^diff --git/ {valid_file=0}
+-  /^diff --git a\/.* b\/(.*)/ {file=$3; sub(/^b\//,"",file)}
+-  $0 ~ /\.cls$|\.lwc$/ {valid_file=1}
+-  /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}
+-  /^[+][^+]/ && valid_file {print file, start + line_offset++, ":", substr($0, 2)}
+-' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
+-
+-# Check if any relevant changes were found in .cls or .lwc files
+-if [ ! -s changed_cls_lwc_lines.txt ]; then
+-  echo "No changes detected in .cls or .lwc files."
+-  exit 0
+-fi
++# Loop through each changed file
++while IFS= read -r file; do
 +  echo "Processing file: $file"
-+  clean_file=$(basename "$file")
-+  echo "Clean file: $clean_file"
-@@ -70,2 +61,10 @@ while IFS= read -r file; do
--  # Read the changed lines from the file for filtering
--  changed_lines=$(cut -d':' -f1 changed_cls_lwc_lines.txt | tr '\n' ' ')
-+  # Extract line numbers for this file
-+  line_numbers=$(grep "^$file " changed_cls_lwc_lines.txt | cut -d':' -f1 | awk '{print $2}' | tr '\n' ' ')
+@@ -41 +40,2 @@ fi
+-cat changed_cls_lwc_lines.txt
++  # Remove leading slashes to make it compatible with file path and handle file name properly
++  clean_file=$(echo "$file" | sed 's#^\(\./\|/##')
+@@ -43,5 +43,14 @@ cat changed_cls_lwc_lines.txt
+-# Process each file
+-for file in $changed_files; do
+-  echo "Processing file: $file"
+-  clean_file=$(basename "$file")
+-  echo "Clean file: $clean_file"
++  # Extract the changed lines and corresponding line numbers
++  awk '
++    BEGIN {valid_file=0} 
++    /^diff --git/ {valid_file=0} 
++    $0 ~ /\.cls$|\.lwc$/ {valid_file=1} 
++    /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  
++    /^[+][^+]/ && valid_file {print start + line_offset++, ":", substr($0, 2)}  
++  ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
 +
-+  if [ -z "$line_numbers" ]; then
++  # If no lines are found for this file, skip it
++  if [ ! -s changed_cls_lwc_lines.txt ]; then
 +    echo "No changed lines found in $file"
 +    continue
 +  fi
-+
-+  # Generate the select expression for jq
-+  select_expression=$(echo "$line_numbers" | awk '{for(i=1;i<=NF;i++) printf ".line == %s%s", $i, (i<NF ? " or " : "")}')
-@@ -75,2 +74,2 @@ while IFS= read -r file; do
--  jq --argfile lines <(echo "$changed_lines" | jq -R . | jq -s .) '
--    .[] | select(.violations[]?.line as $line | $lines | index($line) != null)
-+  jq '
-+    .[] | .violations[]? | select('"$select_expression"')
-@@ -87,2 +86 @@ while IFS= read -r file; do
+@@ -61,10 +70,2 @@ for file in $changed_files; do
+-  # Extract line numbers for this file
+-  line_numbers=$(grep "^$file " changed_cls_lwc_lines.txt | cut -d':' -f1 | awk '{print $2}' | tr '\n' ' ')
 -
--done <<< "$changed_files"
-+done
-@@ -101 +99 @@ jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final
--severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' scanner-reports/final-filtered-scanner-report.json)
-+severity_fail_count=$(jq '[.[].severity | select(. == 3)] | length' scanner-reports/final-filtered-scanner-report.json)
+-  if [ -z "$line_numbers" ]; then
+-    echo "No changed lines found in $file"
+-    continue
+-  fi
+-
+-  # Generate the select expression for jq
+-  select_expression=$(echo "$line_numbers" | awk '{for(i=1;i<=NF;i++) printf ".line == %s%s", $i, (i<NF ? " or " : "")}')
++  # Read the changed lines from the file for filtering
++  changed_lines=$(cut -d':' -f1 changed_cls_lwc_lines.txt | tr '\n' ' ')
+@@ -72 +73 @@ for file in $changed_files; do
+-  # Filter the scanner report based on the changed lines
++  # Filter the scanner report based on the changed lines (Fix jq usage)
+@@ -74,2 +75,2 @@ for file in $changed_files; do
+-  jq '
+-    .[] | .violations[]? | select('"$select_expression"')
++  jq --argjson lines "[$changed_lines]" '
++    .[] | select(.violations[]?.line as $line | $lines | index($line) != null)
+@@ -86 +87,2 @@ for file in $changed_files; do
+-done
++
++done <<< "$changed_files"
+@@ -99 +101 @@ jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final
+-severity_fail_count=$(jq '[.[].severity | select(. == 3)] | length' scanner-reports/final-filtered-scanner-report.json)
++severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' scanner-reports/final-filtered-scanner-report.json)
 diff --git a/changed_cls_lwc_lines.txt b/changed_cls_lwc_lines.txt
-new file mode 100644
-index 0000000..1210cb6
---- /dev/null
+index 1210cb6..072966c 100644
+--- a/changed_cls_lwc_lines.txt
 +++ b/changed_cls_lwc_lines.txt
-@@ -0,0 +1,4 @@
-+108 : index 14cff41..9a5148a 100644
-+1119 : @@ -70 +70 @@ public with sharing class AccountInsertClass {
-+1120 : -          System.debug('Hello Hi');
-+70 :           System.debug('Hi');
+@@ -1,4 +1,134 @@
+-108 : index 14cff41..9a5148a 100644
+-1119 : @@ -70 +70 @@ public with sharing class AccountInsertClass {
+-1120 : -          System.debug('Hello Hi');
+-70 :           System.debug('Hi');
++a/changes.diff 0 : @@ -3 +43 @@ new file mode 100644
++a/changes.diff 1 : -index 0000000..9b8d99e
++a/changes.diff 2 : @@ -5,102 +45,121 @@ index 0000000..9b8d99e
++a/changes.diff 3 : -+++ b/.husky/pre-commit
++a/changes.diff 4 : -@@ -0,0 +1,100 @@
++a/changes.diff 5 : -+#!/bin/bash
++a/changes.diff 6 : -+
++a/changes.diff 7 : -+# Prevent modification of Husky files
++a/changes.diff 8 : -+# if git diff --name-only --cached | grep -q ".husky/pre-commit\|.husky/post-commit"; then
++a/changes.diff 9 : -+#   echo "Error: pre-commit and post-commit files cannot be modified."
++a/changes.diff 10 : -+#   exit 1
++a/changes.diff 11 : -+# fi
++a/changes.diff 12 : -+# chmod 544 .husky/pre-commit
++a/changes.diff 13 : -+# chmod 544 .husky/post-commit
++a/changes.diff 14 : -+
++a/changes.diff 15 : -+# Check if Husky is installed
++a/changes.diff 16 : -+if ! command -v husky &> /dev/null
++a/changes.diff 17 : -+then
++a/changes.diff 18 : -+    echo "Husky is not installed. Installing Husky..."
++a/changes.diff 19 : -+    npm install husky --save-dev
++a/changes.diff 20 : -+    npx husky install
++a/changes.diff 21 : -+else
++a/changes.diff 22 : -+    echo "Husky is already installed Successfully."
++a/changes.diff 23 : -+fi
++a/changes.diff 24 : -+
++a/changes.diff 25 : -+# Get the list of changed Apex (.cls) or LWC files
++a/changes.diff 26 : -+changed_files=$(git diff --cached --name-only | grep -E '\.cls$|\.lwc$')
++a/changes.diff 27 : -+
++a/changes.diff 28 : -+# Check if there are any relevant changes
++a/changes.diff 29 : -+if [ -z "$changed_files" ]; then
++a/changes.diff 30 : -+  echo "No relevant changes to scan in the files."
++a/changes.diff 31 : -+  exit 0
++a/changes.diff 32 : -+fi
++a/changes.diff 33 : -+
++a/changes.diff 34 : -+# Extract the changed lines and corresponding line numbers from the diff for each file
++a/changes.diff 35 : -+git diff --unified=0 --cached > changes.diff
++a/changes.diff 36 : -+
++a/changes.diff 37 : -+# Loop through each changed file
++a/changes.diff 38 : -+while IFS= read -r file; do
++a/changes.diff 39 : -+  echo "Processing file: $file"
++a/changes.diff 40 : -+
++a/changes.diff 41 : -+  # Extract line numbers from the diff for this file
++a/changes.diff 42 : -+  changed_lines=$(awk -v file="$file" '
++a/changes.diff 43 : -+    BEGIN {inside=0}
++a/changes.diff 44 : -+    /^diff --git/ {inside=0}
++a/changes.diff 45 : -+    $0 ~ file {inside=1}
++a/changes.diff 46 : -+    inside && /^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); print start}
++a/changes.diff 47 : -+  ' changes.diff)
++a/changes.diff 48 : -+
++a/changes.diff 49 : -+  # If no line numbers were found for this file, skip it
++a/changes.diff 50 : -+  if [ -z "$changed_lines" ]; then
++a/changes.diff 51 : -+    echo "No changed lines found in $file"
++a/changes.diff 52 : -+    continue
++a/changes.diff 53 : -+  fi
++a/changes.diff 54 : -+
++a/changes.diff 55 : -+  # Run the SFDX scanner on the file and generate the report
++a/changes.diff 56 : -+  sf scanner:run --target "$file" --format "json" --outfile "scanner-report-$file.json"
++a/changes.diff 57 : -+
++a/changes.diff 58 : -+  # Ensure that the scanner report was generated
++a/changes.diff 59 : -+  if [ ! -f "scanner-report-$file.json" ]; then
++a/changes.diff 60 : -+    echo "Scanner report for $file not found."
++a/changes.diff 61 : -+    continue
++a/changes.diff 62 : -+  fi
++a/changes.diff 63 : -+
++a/changes.diff 64 : -+  # Filter the scanner report based on the changed lines
++a/changes.diff 65 : -+  echo "Filtering scanner report for $file by changed lines..."
++a/changes.diff 66 : -+  jq --argfile lines <(echo "$changed_lines" | jq -R . | jq -s .) '
++a/changes.diff 67 : -+    .[] | select(.violations[]?.line as $line | $lines | index($line) != null)
++a/changes.diff 68 : -+  ' "scanner-report-$file.json" > "filtered-scanner-report-$file.json"
++a/changes.diff 69 : -+
++a/changes.diff 70 : -+  # If no filtered report is found, skip
++a/changes.diff 71 : -+  if [ ! -s "filtered-scanner-report-$file.json" ]; then
++a/changes.diff 72 : -+    echo "No issues found for the changed lines in $file"
++a/changes.diff 73 : -+    continue
++a/changes.diff 74 : -+  fi
++a/changes.diff 75 : -+
++a/changes.diff 76 : -+  echo "Filtered scanner report for $file:"
++a/changes.diff 77 : -+  cat "filtered-scanner-report-$file.json"
++a/changes.diff 78 : -+
++a/changes.diff 79 : -+done <<< "$changed_files"
++a/changes.diff 80 : -+
++a/changes.diff 81 : -+# Check if any filtered reports were generated
++a/changes.diff 82 : -+filtered_reports=$(ls filtered-scanner-report-*.json 2> /dev/null)
++a/changes.diff 83 : -+if [ -z "$filtered_reports" ]; then
++a/changes.diff 84 : -+  echo "No vulnerabilities found in the changed lines. Proceeding with commit."
++a/changes.diff 85 : -+  exit 0
++a/changes.diff 86 : -+fi
++a/changes.diff 87 : -+
++a/changes.diff 88 : -+# Combine all filtered reports into one final report
++a/changes.diff 89 : -+jq -s '.' filtered-scanner-report-*.json > final-filtered-scanner-report.json
++a/changes.diff 90 : -+
++a/changes.diff 91 : -+# Parse the final filtered scanner report and check for severity 3 issues
++a/changes.diff 92 : -+severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' final-filtered-scanner-report.json)
++a/changes.diff 93 : -+
++a/changes.diff 94 : -+# Output the fail count for debugging
++a/changes.diff 95 : -+echo "Severity Fail Count: $severity_fail_count"
++a/changes.diff 96 : -+
++a/changes.diff 97 : -+# Block commit if there are severity 3 issues
++a/changes.diff 98 : -+if [ "$severity_fail_count" -gt 0 ]; then
++a/changes.diff 99 : -+  echo "Blocking your commit due to vulnerabilities found with severity 3."
++a/changes.diff 100 : -+  exit 1
++a/changes.diff 101 : -+else
++a/changes.diff 102 : -+  echo "No vulnerabilities found in changed lines. Proceeding with commit."
++a/changes.diff 103 : -+  exit 0
++a/changes.diff 104 : -+fi
++a/changes.diff 105 : @@ -108 +167 @@ diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/
++a/changes.diff 106 : -index 1e62ed4..14cff41 100644
++a/changes.diff 107 : @@ -111,9 +170,3 @@ index 1e62ed4..14cff41 100644
++a/changes.diff 108 : -@@ -69,0 +70 @@ public with sharing class AccountInsertClass {
++a/changes.diff 109 : -+          System.debug('Hello Hi');
++a/changes.diff 110 : -diff --git a/scanner-report.json b/scanner-report.json
++a/changes.diff 111 : -new file mode 100644
++a/changes.diff 112 : -index 0000000..8a298a1
++a/changes.diff 113 : ---- /dev/null
++a/changes.diff 114 : -+++ b/scanner-report.json
++a/changes.diff 115 : -@@ -0,0 +1 @@
++a/changes.diff 116 : -+[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
++a/changes.diff 167 : index 9a5148a..1ec7a54 100644
++a/changes.diff 1712 : -          System.debug('Hello');
++a/changes.diff 1713 : diff --git a/scanner-reports/filtered-scanner-report-.json b/scanner-reports/filtered-scanner-report-.json
++a/changes.diff 1714 : new file mode 100644
++a/changes.diff 1715 : index 0000000..e69de29
++a/changes.diff 1716 : diff --git a/scanner-reports/final-filtered-scanner-report.json b/scanner-reports/final-filtered-scanner-report.json
++a/changes.diff 1717 : new file mode 100644
++a/changes.diff 1718 : index 0000000..fe51488
++a/changes.diff 1719 : --- /dev/null
++a/changes.diff 1720 : @@ -0,0 +1 @@
++a/changes.diff 1721 : diff --git a/scanner-reports/scanner-report-.json b/scanner-reports/scanner-report-.json
++a/changes.diff 1722 : new file mode 100644
++a/changes.diff 1723 : index 0000000..e670f52
++a/changes.diff 1724 : --- /dev/null
++a/changes.diff 1725 : @@ -0,0 +1 @@
++a/changes.diff 1726 : \ No newline at end of file
++a/force-app/main/default/classes/Account_Insert.cls 70 :           System.debug('Hi Hello');
 diff --git a/changes.diff b/changes.diff
-index 2bddfca..b1d3858 100644
+index b1d3858..6223d95 100644
 --- a/changes.diff
 +++ b/changes.diff
 @@ -2 +2 @@ diff --git a/.husky/pre-commit b/.husky/pre-commit
--index 9b8d99e..d68baeb 100644
-+index d68baeb..4433528 100644
-@@ -5,3 +5,22 @@ index 9b8d99e..d68baeb 100644
--@@ -29,0 +30,3 @@ fi
--+# Create a directory for scanner reports if it doesn't exist
--+mkdir -p scanner-reports
-+@@ -18 +18 @@ else
-+-    echo "Husky is already installed Successfully."
-++    echo "Husky is already installed successfully."
-+@@ -43,10 +43,11 @@ while IFS= read -r file; do
-+-  # Extract line numbers from the diff for this file
-+-  changed_lines=$(awk -v file="$file" '
-+-    BEGIN {inside=0}
-+-    /^diff --git/ {inside=0}
-+-    $0 ~ file {inside=1}
-+-    inside && /^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); print start}
-+-  ' changes.diff)
+-index d68baeb..4433528 100644
++index 4433528..439f404 100644
+@@ -5,11 +5,22 @@ index d68baeb..4433528 100644
+-@@ -18 +18 @@ else
+--    echo "Husky is already installed Successfully."
+-+    echo "Husky is already installed successfully."
+-@@ -43,10 +43,11 @@ while IFS= read -r file; do
+--  # Extract line numbers from the diff for this file
+--  changed_lines=$(awk -v file="$file" '
+--    BEGIN {inside=0}
+--    /^diff --git/ {inside=0}
+--    $0 ~ file {inside=1}
+--    inside && /^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); print start}
+--  ' changes.diff)
++@@ -4,6 +4 @@
++-# if git diff --name-only --cached | grep -q ".husky/pre-commit\|.husky/post-commit"; then
++-#   echo "Error: pre-commit and post-commit files cannot be modified."
++-#   exit 1
++-# fi
++-# chmod 544 .husky/pre-commit
++-# chmod 544 .husky/post-commit
+++# ...
++@@ -12,8 +7 @@
++-if ! command -v husky &> /dev/null
++-then
++-    echo "Husky is not installed. Installing Husky..."
++-    npm install husky --save-dev
++-    npx husky install
++-else
++-    echo "Husky is already installed successfully."
++-fi
+++# ...
++@@ -36,6 +24,16 @@ git diff --unified=0 --cached > changes.diff
++-# Loop through each changed file
++-while IFS= read -r file; do
++-  echo "Processing file: $file"
+@@ -17,10 +28,12 @@ index d68baeb..4433528 100644
+--  # If no line numbers were found for this file, skip it
+--  if [ -z "$changed_lines" ]; then
+-+  # Extract the changed lines and corresponding line numbers
+-+  awk '
+-+    BEGIN {valid_file=0} 
+-+    /^diff --git/ {valid_file=0} 
+-+    $0 ~ /\.cls$|\.lwc$/ {valid_file=1} 
+-+    /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  
+-+    /^[+][^+]/ && valid_file {print start + line_offset++, ":", substr($0, 2)}  
+-+  ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
++-  # Remove leading slashes to make it compatible with file path
++-  clean_file=$(echo "$file" | sed 's#^\(\./\|/##')
+++# Extract and print only the changed lines and line numbers from .cls and .lwc files
+++echo "Processing changes for .cls and .lwc files only..."
+++awk '
+++  BEGIN {valid_file=0; file=""}
+++  /^diff --git/ {valid_file=0}
+++  /^diff --git a\/.* b\/(.*)/ {file=$3; sub(/^b\//,"",file)}
+++  $0 ~ /\.cls$|\.lwc$/ {valid_file=1}
+++  /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}
+++  /^[+][^+]/ && valid_file {print file, start + line_offset++, ":", substr($0, 2)}
+++' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
+@@ -28,5 +41,31 @@ index d68baeb..4433528 100644
+-+  # If no lines are found for this file, skip it
+-+  if [ ! -s changed_cls_lwc_lines.txt ]; then
+-@@ -68,0 +70,3 @@ while IFS= read -r file; do
+-+  # Read the changed lines from the file for filtering
+-+  changed_lines=$(cut -d':' -f1 changed_cls_lwc_lines.txt | tr '\n' ' ')
+++# Check if any relevant changes were found in .cls or .lwc files
+++if [ ! -s changed_cls_lwc_lines.txt ]; then
+++  echo "No changes detected in .cls or .lwc files."
+++  exit 0
+++fi
++@@ -43,8 +41 @@ while IFS= read -r file; do
++-  # Extract the changed lines and corresponding line numbers
++-  awk '
++-    BEGIN {valid_file=0} 
++-    /^diff --git/ {valid_file=0} 
++-    $0 ~ /\.cls$|\.lwc$/ {valid_file=1} 
++-    /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  
++-    /^[+][^+]/ && valid_file {print start + line_offset++, ":", substr($0, 2)}  
++-  ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
+++cat changed_cls_lwc_lines.txt
++@@ -52,5 +43,5 @@ while IFS= read -r file; do
++-  # If no lines are found for this file, skip it
++-  if [ ! -s changed_cls_lwc_lines.txt ]; then
++-    echo "No changed lines found in $file"
++-    continue
++-  fi
+++# Process each file
+++for file in $changed_files; do
+++  echo "Processing file: $file"
+++  clean_file=$(basename "$file")
+++  echo "Clean file: $clean_file"
++@@ -70,2 +61,10 @@ while IFS= read -r file; do
++-  # Read the changed lines from the file for filtering
++-  changed_lines=$(cut -d':' -f1 changed_cls_lwc_lines.txt | tr '\n' ' ')
+++  # Extract line numbers for this file
+++  line_numbers=$(grep "^$file " changed_cls_lwc_lines.txt | cut -d':' -f1 | awk '{print $2}' | tr '\n' ' ')
+@@ -33,0 +73,29 @@ index d68baeb..4433528 100644
+++  if [ -z "$line_numbers" ]; then
+++    echo "No changed lines found in $file"
+++    continue
+++  fi
+++
+++  # Generate the select expression for jq
+++  select_expression=$(echo "$line_numbers" | awk '{for(i=1;i<=NF;i++) printf ".line == %s%s", $i, (i<NF ? " or " : "")}')
++@@ -75,2 +74,2 @@ while IFS= read -r file; do
++-  jq --argfile lines <(echo "$changed_lines" | jq -R . | jq -s .) '
++-    .[] | select(.violations[]?.line as $line | $lines | index($line) != null)
+++  jq '
+++    .[] | .violations[]? | select('"$select_expression"')
++@@ -87,2 +86 @@ while IFS= read -r file; do
 +-
-+-  # If no line numbers were found for this file, skip it
-+-  if [ -z "$changed_lines" ]; then
-++  # Extract the changed lines and corresponding line numbers
-++  awk '
-++    BEGIN {valid_file=0} 
-++    /^diff --git/ {valid_file=0} 
-++    $0 ~ /\.cls$|\.lwc$/ {valid_file=1} 
-++    /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  
-++    /^[+][^+]/ && valid_file {print start + line_offset++, ":", substr($0, 2)}  
-++  ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
-@@ -9,3 +28,5 @@ index 9b8d99e..d68baeb 100644
--@@ -36,0 +40,3 @@ while IFS= read -r file; do
--+  # Remove leading slashes to make it compatible with file path
--+  clean_file=$(echo "$file" | sed 's#^\(\./\|/##')
-++  # If no lines are found for this file, skip it
-++  if [ ! -s changed_cls_lwc_lines.txt ]; then
-+@@ -68,0 +70,3 @@ while IFS= read -r file; do
-++  # Read the changed lines from the file for filtering
-++  changed_lines=$(cut -d':' -f1 changed_cls_lwc_lines.txt | tr '\n' ' ')
-@@ -13,28 +33,0 @@ index 9b8d99e..d68baeb 100644
--@@ -50,0 +57,3 @@ while IFS= read -r file; do
--+  # Define the output path for the scanner report
--+  output_file="scanner-reports/scanner-report-${clean_file}.json"
--+
--@@ -52 +61 @@ while IFS= read -r file; do
---  sf scanner:run --target "$file" --format "json" --outfile "scanner-report-$file.json"
--+  sf scanner:run --target "$file" --format "json" --outfile "$output_file"
--@@ -55 +64 @@ while IFS= read -r file; do
---  if [ ! -f "scanner-report-$file.json" ]; then
--+  if [ ! -f "$output_file" ]; then
--@@ -64 +73 @@ while IFS= read -r file; do
---  ' "scanner-report-$file.json" > "filtered-scanner-report-$file.json"
--+  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.json"
--@@ -67 +76 @@ while IFS= read -r file; do
---  if [ ! -s "filtered-scanner-report-$file.json" ]; then
--+  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.json" ]; then
--@@ -73 +82 @@ while IFS= read -r file; do
---  cat "filtered-scanner-report-$file.json"
--+  cat "scanner-reports/filtered-scanner-report-${clean_file}.json"
--@@ -78 +87 @@ done <<< "$changed_files"
---filtered_reports=$(ls filtered-scanner-report-*.json 2> /dev/null)
--+filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.json 2> /dev/null)
--@@ -85 +94 @@ fi
---jq -s '.' filtered-scanner-report-*.json > final-filtered-scanner-report.json
--+jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final-filtered-scanner-report.json
--@@ -88 +97 @@ jq -s '.' filtered-scanner-report-*.json > final-filtered-scanner-report.json
---severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' final-filtered-scanner-report.json)
--+severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' scanner-reports/final-filtered-scanner-report.json)
-@@ -42,3 +35,2 @@ diff --git a/changes.diff b/changes.diff
++-done <<< "$changed_files"
+++done
++@@ -101 +99 @@ jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final
++-severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' scanner-reports/final-filtered-scanner-report.json)
+++severity_fail_count=$(jq '[.[].severity | select(. == 3)] | length' scanner-reports/final-filtered-scanner-report.json)
++diff --git a/changed_cls_lwc_lines.txt b/changed_cls_lwc_lines.txt
++new file mode 100644
++index 0000000..1210cb6
++--- /dev/null
+++++ b/changed_cls_lwc_lines.txt
++@@ -0,0 +1,4 @@
+++108 : index 14cff41..9a5148a 100644
+++1119 : @@ -70 +70 @@ public with sharing class AccountInsertClass {
+++1120 : -          System.debug('Hello Hi');
+++70 :           System.debug('Hi');
+@@ -35 +103 @@ diff --git a/changes.diff b/changes.diff
+-index dd57583..2bddfca 100644
++index 2bddfca..b1d3858 100644
+@@ -38,105 +106,42 @@ index dd57583..2bddfca 100644
+-@@ -1,0 +2,40 @@ diff --git a/.husky/pre-commit b/.husky/pre-commit
+-+index 9b8d99e..d68baeb 100644
+-+--- a/.husky/pre-commit
+-++++ b/.husky/pre-commit
+-+@@ -29,0 +30,3 @@ fi
+-++# Create a directory for scanner reports if it doesn't exist
+-++mkdir -p scanner-reports
+-++
+-+@@ -36,0 +40,3 @@ while IFS= read -r file; do
+-++  # Remove leading slashes to make it compatible with file path
+-++  clean_file=$(echo "$file" | sed 's#^\(\./\|/##')
+-++
+-+@@ -50,0 +57,3 @@ while IFS= read -r file; do
+-++  # Define the output path for the scanner report
+-++  output_file="scanner-reports/scanner-report-${clean_file}.json"
+-++
+-+@@ -52 +61 @@ while IFS= read -r file; do
+-+-  sf scanner:run --target "$file" --format "json" --outfile "scanner-report-$file.json"
+-++  sf scanner:run --target "$file" --format "json" --outfile "$output_file"
+-+@@ -55 +64 @@ while IFS= read -r file; do
+-+-  if [ ! -f "scanner-report-$file.json" ]; then
+-++  if [ ! -f "$output_file" ]; then
+-+@@ -64 +73 @@ while IFS= read -r file; do
+-+-  ' "scanner-report-$file.json" > "filtered-scanner-report-$file.json"
+-++  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.json"
+-+@@ -67 +76 @@ while IFS= read -r file; do
+-+-  if [ ! -s "filtered-scanner-report-$file.json" ]; then
+-++  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.json" ]; then
+-+@@ -73 +82 @@ while IFS= read -r file; do
+-+-  cat "filtered-scanner-report-$file.json"
+-++  cat "scanner-reports/filtered-scanner-report-${clean_file}.json"
+-+@@ -78 +87 @@ done <<< "$changed_files"
+-+-filtered_reports=$(ls filtered-scanner-report-*.json 2> /dev/null)
+-++filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.json 2> /dev/null)
+-+@@ -85 +94 @@ fi
+-+-jq -s '.' filtered-scanner-report-*.json > final-filtered-scanner-report.json
+-++jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final-filtered-scanner-report.json
+-+@@ -88 +97 @@ jq -s '.' filtered-scanner-report-*.json > final-filtered-scanner-report.json
+-+-severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' final-filtered-scanner-report.json)
+-++severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' scanner-reports/final-filtered-scanner-report.json)
+-+diff --git a/changes.diff b/changes.diff
+-@@ -3 +43 @@ new file mode 100644
+--index 0000000..9b8d99e
+-+index 0000000..dd57583
+-@@ -5,102 +45,121 @@ index 0000000..9b8d99e
+--+++ b/.husky/pre-commit
+--@@ -0,0 +1,100 @@
+--+#!/bin/bash
+--+
+--+# Prevent modification of Husky files
+--+# if git diff --name-only --cached | grep -q ".husky/pre-commit\|.husky/post-commit"; then
+--+#   echo "Error: pre-commit and post-commit files cannot be modified."
+--+#   exit 1
+--+# fi
+--+# chmod 544 .husky/pre-commit
+--+# chmod 544 .husky/post-commit
+--+
+--+# Check if Husky is installed
+--+if ! command -v husky &> /dev/null
+--+then
+--+    echo "Husky is not installed. Installing Husky..."
+--+    npm install husky --save-dev
+--+    npx husky install
+--+else
+--+    echo "Husky is already installed Successfully."
+--+fi
+--+
+--+# Get the list of changed Apex (.cls) or LWC files
+--+changed_files=$(git diff --cached --name-only | grep -E '\.cls$|\.lwc$')
+--+
+--+# Check if there are any relevant changes
+--+if [ -z "$changed_files" ]; then
+--+  echo "No relevant changes to scan in the files."
+--+  exit 0
+--+fi
+--+
+--+# Extract the changed lines and corresponding line numbers from the diff for each file
+--+git diff --unified=0 --cached > changes.diff
+--+
+--+# Loop through each changed file
+--+while IFS= read -r file; do
+--+  echo "Processing file: $file"
+--+
+--+  # Extract line numbers from the diff for this file
+--+  changed_lines=$(awk -v file="$file" '
+--+    BEGIN {inside=0}
+--+    /^diff --git/ {inside=0}
+--+    $0 ~ file {inside=1}
+--+    inside && /^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); print start}
+--+  ' changes.diff)
+--+
+--+  # If no line numbers were found for this file, skip it
+--+  if [ -z "$changed_lines" ]; then
+--+    echo "No changed lines found in $file"
+--+    continue
+--+  fi
+--+
+--+  # Run the SFDX scanner on the file and generate the report
+--+  sf scanner:run --target "$file" --format "json" --outfile "scanner-report-$file.json"
+--+
+--+  # Ensure that the scanner report was generated
+--+  if [ ! -f "scanner-report-$file.json" ]; then
+--+    echo "Scanner report for $file not found."
+--+    continue
+--+  fi
++@@ -2 +2 @@ diff --git a/.husky/pre-commit b/.husky/pre-commit
++-index 9b8d99e..d68baeb 100644
+++index d68baeb..4433528 100644
++@@ -5,3 +5,22 @@ index 9b8d99e..d68baeb 100644
++-@@ -29,0 +30,3 @@ fi
++-+# Create a directory for scanner reports if it doesn't exist
++-+mkdir -p scanner-reports
+++@@ -18 +18 @@ else
+++-    echo "Husky is already installed Successfully."
++++    echo "Husky is already installed successfully."
+++@@ -43,10 +43,11 @@ while IFS= read -r file; do
+++-  # Extract line numbers from the diff for this file
+++-  changed_lines=$(awk -v file="$file" '
+++-    BEGIN {inside=0}
+++-    /^diff --git/ {inside=0}
+++-    $0 ~ file {inside=1}
+++-    inside && /^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); print start}
+++-  ' changes.diff)
+++-
+++-  # If no line numbers were found for this file, skip it
+++-  if [ -z "$changed_lines" ]; then
++++  # Extract the changed lines and corresponding line numbers
++++  awk '
++++    BEGIN {valid_file=0} 
++++    /^diff --git/ {valid_file=0} 
++++    $0 ~ /\.cls$|\.lwc$/ {valid_file=1} 
++++    /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  
++++    /^[+][^+]/ && valid_file {print start + line_offset++, ":", substr($0, 2)}  
++++  ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
++@@ -9,3 +28,5 @@ index 9b8d99e..d68baeb 100644
++-@@ -36,0 +40,3 @@ while IFS= read -r file; do
++-+  # Remove leading slashes to make it compatible with file path
++-+  clean_file=$(echo "$file" | sed 's#^\(\./\|/##')
++++  # If no lines are found for this file, skip it
++++  if [ ! -s changed_cls_lwc_lines.txt ]; then
+++@@ -68,0 +70,3 @@ while IFS= read -r file; do
++++  # Read the changed lines from the file for filtering
++++  changed_lines=$(cut -d':' -f1 changed_cls_lwc_lines.txt | tr '\n' ' ')
++@@ -13,28 +33,0 @@ index 9b8d99e..d68baeb 100644
++-@@ -50,0 +57,3 @@ while IFS= read -r file; do
++-+  # Define the output path for the scanner report
++-+  output_file="scanner-reports/scanner-report-${clean_file}.json"
+@@ -144,169 +149,25 @@ index dd57583..2bddfca 100644
+--+  # Filter the scanner report based on the changed lines
+--+  echo "Filtering scanner report for $file by changed lines..."
+--+  jq --argfile lines <(echo "$changed_lines" | jq -R . | jq -s .) '
+--+    .[] | select(.violations[]?.line as $line | $lines | index($line) != null)
+--+  ' "scanner-report-$file.json" > "filtered-scanner-report-$file.json"
+--+
+--+  # If no filtered report is found, skip
+--+  if [ ! -s "filtered-scanner-report-$file.json" ]; then
+--+    echo "No issues found for the changed lines in $file"
+--+    continue
+--+  fi
+--+
+--+  echo "Filtered scanner report for $file:"
+--+  cat "filtered-scanner-report-$file.json"
+--+
+--+done <<< "$changed_files"
+--+
+--+# Check if any filtered reports were generated
+--+filtered_reports=$(ls filtered-scanner-report-*.json 2> /dev/null)
+--+if [ -z "$filtered_reports" ]; then
+--+  echo "No vulnerabilities found in the changed lines. Proceeding with commit."
+--+  exit 0
+--+fi
+--+
+--+# Combine all filtered reports into one final report
+--+jq -s '.' filtered-scanner-report-*.json > final-filtered-scanner-report.json
+--+
+--+# Parse the final filtered scanner report and check for severity 3 issues
+--+severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' final-filtered-scanner-report.json)
+--+
+--+# Output the fail count for debugging
+--+echo "Severity Fail Count: $severity_fail_count"
+--+
+--+# Block commit if there are severity 3 issues
+--+if [ "$severity_fail_count" -gt 0 ]; then
+--+  echo "Blocking your commit due to vulnerabilities found with severity 3."
+--+  exit 1
+--+else
+--+  echo "No vulnerabilities found in changed lines. Proceeding with commit."
+--+  exit 0
+--+fi
+-++++ b/changes.diff
+-+@@ -0,0 +1,119 @@
+-++diff --git a/.husky/pre-commit b/.husky/pre-commit
+-++new file mode 100644
+-++index 0000000..9b8d99e
+-++--- /dev/null
+-+++++ b/.husky/pre-commit
+-++@@ -0,0 +1,100 @@
+-+++#!/bin/bash
+-+++
+-+++# Prevent modification of Husky files
+-+++# if git diff --name-only --cached | grep -q ".husky/pre-commit\|.husky/post-commit"; then
+-+++#   echo "Error: pre-commit and post-commit files cannot be modified."
+-+++#   exit 1
+-+++# fi
+-+++# chmod 544 .husky/pre-commit
+-+++# chmod 544 .husky/post-commit
+-+++
+-+++# Check if Husky is installed
+-+++if ! command -v husky &> /dev/null
+-+++then
+-+++    echo "Husky is not installed. Installing Husky..."
+-+++    npm install husky --save-dev
+-+++    npx husky install
+-+++else
+-+++    echo "Husky is already installed Successfully."
+-+++fi
+-+++
+-+++# Get the list of changed Apex (.cls) or LWC files
+-+++changed_files=$(git diff --cached --name-only | grep -E '\.cls$|\.lwc$')
+-+++
+-+++# Check if there are any relevant changes
+-+++if [ -z "$changed_files" ]; then
+-+++  echo "No relevant changes to scan in the files."
+-+++  exit 0
+-+++fi
+-+++
+-+++# Extract the changed lines and corresponding line numbers from the diff for each file
+-+++git diff --unified=0 --cached > changes.diff
+-+++
+-+++# Loop through each changed file
+-+++while IFS= read -r file; do
+-+++  echo "Processing file: $file"
+-+++
+-+++  # Extract line numbers from the diff for this file
+-+++  changed_lines=$(awk -v file="$file" '
+-+++    BEGIN {inside=0}
+-+++    /^diff --git/ {inside=0}
+-+++    $0 ~ file {inside=1}
+-+++    inside && /^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); print start}
+-+++  ' changes.diff)
+-+++
+-+++  # If no line numbers were found for this file, skip it
+-+++  if [ -z "$changed_lines" ]; then
+-+++    echo "No changed lines found in $file"
+-+++    continue
+-+++  fi
+-+++
+-+++  # Run the SFDX scanner on the file and generate the report
+-+++  sf scanner:run --target "$file" --format "json" --outfile "scanner-report-$file.json"
+-+++
+-+++  # Ensure that the scanner report was generated
+-+++  if [ ! -f "scanner-report-$file.json" ]; then
+-+++    echo "Scanner report for $file not found."
+-+++    continue
+-+++  fi
+-+++
+-+++  # Filter the scanner report based on the changed lines
+-+++  echo "Filtering scanner report for $file by changed lines..."
+-+++  jq --argfile lines <(echo "$changed_lines" | jq -R . | jq -s .) '
+-+++    .[] | select(.violations[]?.line as $line | $lines | index($line) != null)
+-+++  ' "scanner-report-$file.json" > "filtered-scanner-report-$file.json"
+-+++
+-+++  # If no filtered report is found, skip
+-+++  if [ ! -s "filtered-scanner-report-$file.json" ]; then
+-+++    echo "No issues found for the changed lines in $file"
+-+++    continue
+-+++  fi
+-+++
+-+++  echo "Filtered scanner report for $file:"
+-+++  cat "filtered-scanner-report-$file.json"
+-+++
+-+++done <<< "$changed_files"
+-+++
+-+++# Check if any filtered reports were generated
+-+++filtered_reports=$(ls filtered-scanner-report-*.json 2> /dev/null)
+-+++if [ -z "$filtered_reports" ]; then
+-+++  echo "No vulnerabilities found in the changed lines. Proceeding with commit."
+-+++  exit 0
+-+++fi
+-+++
+-+++# Combine all filtered reports into one final report
+-+++jq -s '.' filtered-scanner-report-*.json > final-filtered-scanner-report.json
+-+++
+-+++# Parse the final filtered scanner report and check for severity 3 issues
+-+++severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' final-filtered-scanner-report.json)
+-+++
+-+++# Output the fail count for debugging
+-+++echo "Severity Fail Count: $severity_fail_count"
+-+++
+-+++# Block commit if there are severity 3 issues
+-+++if [ "$severity_fail_count" -gt 0 ]; then
+-+++  echo "Blocking your commit due to vulnerabilities found with severity 3."
+-+++  exit 1
+-+++else
+-+++  echo "No vulnerabilities found in changed lines. Proceeding with commit."
+-+++  exit 0
+-+++fi
+-++diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/default/classes/Account_Insert.cls
+-++index 1e62ed4..14cff41 100644
+-++--- a/force-app/main/default/classes/Account_Insert.cls
+-+++++ b/force-app/main/default/classes/Account_Insert.cls
+-++@@ -69,0 +70 @@ public with sharing class AccountInsertClass {
+-+++          System.debug('Hello Hi');
+-++diff --git a/scanner-report.json b/scanner-report.json
+-++new file mode 100644
+-++index 0000000..8a298a1
+-++--- /dev/null
+-+++++ b/scanner-report.json
+-++@@ -0,0 +1 @@
+-+++[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
+-@@ -108 +167 @@ diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/
+--index 1e62ed4..14cff41 100644
+-+index 14cff41..9a5148a 100644
+-@@ -111,9 +170,3 @@ index 1e62ed4..14cff41 100644
+--@@ -69,0 +70 @@ public with sharing class AccountInsertClass {
+--+          System.debug('Hello Hi');
+--diff --git a/scanner-report.json b/scanner-report.json
++-@@ -52 +61 @@ while IFS= read -r file; do
++--  sf scanner:run --target "$file" --format "json" --outfile "scanner-report-$file.json"
++-+  sf scanner:run --target "$file" --format "json" --outfile "$output_file"
++-@@ -55 +64 @@ while IFS= read -r file; do
++--  if [ ! -f "scanner-report-$file.json" ]; then
++-+  if [ ! -f "$output_file" ]; then
++-@@ -64 +73 @@ while IFS= read -r file; do
++--  ' "scanner-report-$file.json" > "filtered-scanner-report-$file.json"
++-+  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.json"
++-@@ -67 +76 @@ while IFS= read -r file; do
++--  if [ ! -s "filtered-scanner-report-$file.json" ]; then
++-+  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.json" ]; then
++-@@ -73 +82 @@ while IFS= read -r file; do
++--  cat "filtered-scanner-report-$file.json"
++-+  cat "scanner-reports/filtered-scanner-report-${clean_file}.json"
++-@@ -78 +87 @@ done <<< "$changed_files"
++--filtered_reports=$(ls filtered-scanner-report-*.json 2> /dev/null)
++-+filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.json 2> /dev/null)
++-@@ -85 +94 @@ fi
++--jq -s '.' filtered-scanner-report-*.json > final-filtered-scanner-report.json
++-+jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final-filtered-scanner-report.json
++-@@ -88 +97 @@ jq -s '.' filtered-scanner-report-*.json > final-filtered-scanner-report.json
++--severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' final-filtered-scanner-report.json)
++-+severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' scanner-reports/final-filtered-scanner-report.json)
++@@ -42,3 +35,2 @@ diff --git a/changes.diff b/changes.diff
+@@ -314 +175 @@ index dd57583..2bddfca 100644
+--index 0000000..8a298a1
++-index 0000000..dd57583
+@@ -316,6 +177,429 @@ index dd57583..2bddfca 100644
+--+++ b/scanner-report.json
+--@@ -0,0 +1 @@
+--+[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
+-+@@ -70 +70 @@ public with sharing class AccountInsertClass {
+-+-          System.debug('Hello Hi');
+-++          System.debug('Hello');
+++index dd57583..2bddfca 100644
+++--- a/changes.diff
++@@ -46,5 +38,3 @@ index 0000000..dd57583
++-@@ -0,0 +1,119 @@
++-+diff --git a/.husky/pre-commit b/.husky/pre-commit
++-+new file mode 100644
++-+index 0000000..9b8d99e
++-+--- /dev/null
+++@@ -1,0 +2,40 @@ diff --git a/.husky/pre-commit b/.husky/pre-commit
++++index 9b8d99e..d68baeb 100644
++++--- a/.husky/pre-commit
++@@ -52,53 +42,3 @@ index 0000000..dd57583
++-+@@ -0,0 +1,100 @@
++-++#!/bin/bash
++-++
++-++# Prevent modification of Husky files
++-++# if git diff --name-only --cached | grep -q ".husky/pre-commit\|.husky/post-commit"; then
++-++#   echo "Error: pre-commit and post-commit files cannot be modified."
++-++#   exit 1
++-++# fi
++-++# chmod 544 .husky/pre-commit
++-++# chmod 544 .husky/post-commit
++-++
++-++# Check if Husky is installed
++-++if ! command -v husky &> /dev/null
++-++then
++-++    echo "Husky is not installed. Installing Husky..."
++-++    npm install husky --save-dev
++-++    npx husky install
++-++else
++-++    echo "Husky is already installed Successfully."
++-++fi
++-++
++-++# Get the list of changed Apex (.cls) or LWC files
++-++changed_files=$(git diff --cached --name-only | grep -E '\.cls$|\.lwc$')
++-++
++-++# Check if there are any relevant changes
++-++if [ -z "$changed_files" ]; then
++-++  echo "No relevant changes to scan in the files."
++-++  exit 0
++-++fi
++-++
++-++# Extract the changed lines and corresponding line numbers from the diff for each file
++-++git diff --unified=0 --cached > changes.diff
++-++
++-++# Loop through each changed file
++-++while IFS= read -r file; do
++-++  echo "Processing file: $file"
++-++
++-++  # Extract line numbers from the diff for this file
++-++  changed_lines=$(awk -v file="$file" '
++-++    BEGIN {inside=0}
++-++    /^diff --git/ {inside=0}
++-++    $0 ~ file {inside=1}
++-++    inside && /^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); print start}
++-++  ' changes.diff)
++-++
++-++  # If no line numbers were found for this file, skip it
++-++  if [ -z "$changed_lines" ]; then
++-++    echo "No changed lines found in $file"
++-++    continue
++-++  fi
++-++
++-++  # Run the SFDX scanner on the file and generate the report
++-++  sf scanner:run --target "$file" --format "json" --outfile "scanner-report-$file.json"
++++@@ -29,0 +30,3 @@ fi
+++++# Create a directory for scanner reports if it doesn't exist
+++++mkdir -p scanner-reports
++@@ -106,5 +46,3 @@ index 0000000..dd57583
++-++  # Ensure that the scanner report was generated
++-++  if [ ! -f "scanner-report-$file.json" ]; then
++-++    echo "Scanner report for $file not found."
++-++    continue
++-++  fi
++++@@ -36,0 +40,3 @@ while IFS= read -r file; do
+++++  # Remove leading slashes to make it compatible with file path
+++++  clean_file=$(echo "$file" | sed 's#^\(\./\|/##')
++@@ -112,5 +50,3 @@ index 0000000..dd57583
++-++  # Filter the scanner report based on the changed lines
++-++  echo "Filtering scanner report for $file by changed lines..."
++-++  jq --argfile lines <(echo "$changed_lines" | jq -R . | jq -s .) '
++-++    .[] | select(.violations[]?.line as $line | $lines | index($line) != null)
++-++  ' "scanner-report-$file.json" > "filtered-scanner-report-$file.json"
++++@@ -50,0 +57,3 @@ while IFS= read -r file; do
+++++  # Define the output path for the scanner report
+++++  output_file="scanner-reports/scanner-report-${clean_file}.json"
++@@ -118,48 +54,268 @@ index 0000000..dd57583
++-++  # If no filtered report is found, skip
++-++  if [ ! -s "filtered-scanner-report-$file.json" ]; then
++-++    echo "No issues found for the changed lines in $file"
++-++    continue
++-++  fi
++-++
++-++  echo "Filtered scanner report for $file:"
++-++  cat "filtered-scanner-report-$file.json"
++-++
++-++done <<< "$changed_files"
++-++
++-++# Check if any filtered reports were generated
++-++filtered_reports=$(ls filtered-scanner-report-*.json 2> /dev/null)
++-++if [ -z "$filtered_reports" ]; then
++-++  echo "No vulnerabilities found in the changed lines. Proceeding with commit."
++-++  exit 0
++-++fi
++-++
++-++# Combine all filtered reports into one final report
++-++jq -s '.' filtered-scanner-report-*.json > final-filtered-scanner-report.json
++-++
++-++# Parse the final filtered scanner report and check for severity 3 issues
++-++severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' final-filtered-scanner-report.json)
++-++
++-++# Output the fail count for debugging
++-++echo "Severity Fail Count: $severity_fail_count"
++-++
++-++# Block commit if there are severity 3 issues
++-++if [ "$severity_fail_count" -gt 0 ]; then
++-++  echo "Blocking your commit due to vulnerabilities found with severity 3."
++-++  exit 1
++-++else
++-++  echo "No vulnerabilities found in changed lines. Proceeding with commit."
++-++  exit 0
++-++fi
++-+diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/default/classes/Account_Insert.cls
++-+index 1e62ed4..14cff41 100644
++-+--- a/force-app/main/default/classes/Account_Insert.cls
++-++++ b/force-app/main/default/classes/Account_Insert.cls
++-+@@ -69,0 +70 @@ public with sharing class AccountInsertClass {
++-++          System.debug('Hello Hi');
++-+diff --git a/scanner-report.json b/scanner-report.json
++-+new file mode 100644
++-+index 0000000..8a298a1
++-+--- /dev/null
++-++++ b/scanner-report.json
++-+@@ -0,0 +1 @@
++-++[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
++++@@ -52 +61 @@ while IFS= read -r file; do
++++-  sf scanner:run --target "$file" --format "json" --outfile "scanner-report-$file.json"
+++++  sf scanner:run --target "$file" --format "json" --outfile "$output_file"
++++@@ -55 +64 @@ while IFS= read -r file; do
++++-  if [ ! -f "scanner-report-$file.json" ]; then
+++++  if [ ! -f "$output_file" ]; then
++++@@ -64 +73 @@ while IFS= read -r file; do
++++-  ' "scanner-report-$file.json" > "filtered-scanner-report-$file.json"
+++++  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.json"
++++@@ -67 +76 @@ while IFS= read -r file; do
++++-  if [ ! -s "filtered-scanner-report-$file.json" ]; then
+++++  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.json" ]; then
++++@@ -73 +82 @@ while IFS= read -r file; do
++++-  cat "filtered-scanner-report-$file.json"
+++++  cat "scanner-reports/filtered-scanner-report-${clean_file}.json"
++++@@ -78 +87 @@ done <<< "$changed_files"
++++-filtered_reports=$(ls filtered-scanner-report-*.json 2> /dev/null)
+++++filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.json 2> /dev/null)
++++@@ -85 +94 @@ fi
++++-jq -s '.' filtered-scanner-report-*.json > final-filtered-scanner-report.json
+++++jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final-filtered-scanner-report.json
++++@@ -88 +97 @@ jq -s '.' filtered-scanner-report-*.json > final-filtered-scanner-report.json
++++-severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' final-filtered-scanner-report.json)
+++++severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' scanner-reports/final-filtered-scanner-report.json)
++++diff --git a/changes.diff b/changes.diff
+++@@ -3 +43 @@ new file mode 100644
+++-index 0000000..9b8d99e
++++index 0000000..dd57583
+++@@ -5,102 +45,121 @@ index 0000000..9b8d99e
+++-+++ b/.husky/pre-commit
+++-@@ -0,0 +1,100 @@
+++-+#!/bin/bash
+++-+
+++-+# Prevent modification of Husky files
+++-+# if git diff --name-only --cached | grep -q ".husky/pre-commit\|.husky/post-commit"; then
+++-+#   echo "Error: pre-commit and post-commit files cannot be modified."
+++-+#   exit 1
+++-+# fi
+++-+# chmod 544 .husky/pre-commit
+++-+# chmod 544 .husky/post-commit
+++-+
+++-+# Check if Husky is installed
+++-+if ! command -v husky &> /dev/null
+++-+then
+++-+    echo "Husky is not installed. Installing Husky..."
+++-+    npm install husky --save-dev
+++-+    npx husky install
+++-+else
+++-+    echo "Husky is already installed Successfully."
+++-+fi
+++-+
+++-+# Get the list of changed Apex (.cls) or LWC files
+++-+changed_files=$(git diff --cached --name-only | grep -E '\.cls$|\.lwc$')
+++-+
+++-+# Check if there are any relevant changes
+++-+if [ -z "$changed_files" ]; then
+++-+  echo "No relevant changes to scan in the files."
+++-+  exit 0
+++-+fi
+++-+
+++-+# Extract the changed lines and corresponding line numbers from the diff for each file
+++-+git diff --unified=0 --cached > changes.diff
+++-+
+++-+# Loop through each changed file
+++-+while IFS= read -r file; do
+++-+  echo "Processing file: $file"
+++-+
+++-+  # Extract line numbers from the diff for this file
+++-+  changed_lines=$(awk -v file="$file" '
+++-+    BEGIN {inside=0}
+++-+    /^diff --git/ {inside=0}
+++-+    $0 ~ file {inside=1}
+++-+    inside && /^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); print start}
+++-+  ' changes.diff)
+++-+
+++-+  # If no line numbers were found for this file, skip it
+++-+  if [ -z "$changed_lines" ]; then
+++-+    echo "No changed lines found in $file"
+++-+    continue
+++-+  fi
+++-+
+++-+  # Run the SFDX scanner on the file and generate the report
+++-+  sf scanner:run --target "$file" --format "json" --outfile "scanner-report-$file.json"
+++-+
+++-+  # Ensure that the scanner report was generated
+++-+  if [ ! -f "scanner-report-$file.json" ]; then
+++-+    echo "Scanner report for $file not found."
+++-+    continue
+++-+  fi
+++-+
+++-+  # Filter the scanner report based on the changed lines
+++-+  echo "Filtering scanner report for $file by changed lines..."
+++-+  jq --argfile lines <(echo "$changed_lines" | jq -R . | jq -s .) '
+++-+    .[] | select(.violations[]?.line as $line | $lines | index($line) != null)
+++-+  ' "scanner-report-$file.json" > "filtered-scanner-report-$file.json"
+++-+
+++-+  # If no filtered report is found, skip
+++-+  if [ ! -s "filtered-scanner-report-$file.json" ]; then
+++-+    echo "No issues found for the changed lines in $file"
+++-+    continue
+++-+  fi
+++-+
+++-+  echo "Filtered scanner report for $file:"
+++-+  cat "filtered-scanner-report-$file.json"
+++-+
+++-+done <<< "$changed_files"
+++-+
+++-+# Check if any filtered reports were generated
+++-+filtered_reports=$(ls filtered-scanner-report-*.json 2> /dev/null)
+++-+if [ -z "$filtered_reports" ]; then
+++-+  echo "No vulnerabilities found in the changed lines. Proceeding with commit."
+++-+  exit 0
+++-+fi
+++-+
+++-+# Combine all filtered reports into one final report
+++-+jq -s '.' filtered-scanner-report-*.json > final-filtered-scanner-report.json
+++-+
+++-+# Parse the final filtered scanner report and check for severity 3 issues
+++-+severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' final-filtered-scanner-report.json)
+++-+
+++-+# Output the fail count for debugging
+++-+echo "Severity Fail Count: $severity_fail_count"
+++-+
+++-+# Block commit if there are severity 3 issues
+++-+if [ "$severity_fail_count" -gt 0 ]; then
+++-+  echo "Blocking your commit due to vulnerabilities found with severity 3."
+++-+  exit 1
+++-+else
+++-+  echo "No vulnerabilities found in changed lines. Proceeding with commit."
+++-+  exit 0
+++-+fi
+++++++ b/changes.diff
++++@@ -0,0 +1,119 @@
+++++diff --git a/.husky/pre-commit b/.husky/pre-commit
+++++new file mode 100644
+++++index 0000000..9b8d99e
+++++--- /dev/null
++++++++ b/.husky/pre-commit
+++++@@ -0,0 +1,100 @@
++++++#!/bin/bash
++++++
++++++# Prevent modification of Husky files
++++++# if git diff --name-only --cached | grep -q ".husky/pre-commit\|.husky/post-commit"; then
++++++#   echo "Error: pre-commit and post-commit files cannot be modified."
++++++#   exit 1
++++++# fi
++++++# chmod 544 .husky/pre-commit
++++++# chmod 544 .husky/post-commit
++++++
++++++# Check if Husky is installed
++++++if ! command -v husky &> /dev/null
++++++then
++++++    echo "Husky is not installed. Installing Husky..."
++++++    npm install husky --save-dev
++++++    npx husky install
++++++else
++++++    echo "Husky is already installed Successfully."
++++++fi
++++++
++++++# Get the list of changed Apex (.cls) or LWC files
++++++changed_files=$(git diff --cached --name-only | grep -E '\.cls$|\.lwc$')
++++++
++++++# Check if there are any relevant changes
++++++if [ -z "$changed_files" ]; then
++++++  echo "No relevant changes to scan in the files."
++++++  exit 0
++++++fi
++++++
++++++# Extract the changed lines and corresponding line numbers from the diff for each file
++++++git diff --unified=0 --cached > changes.diff
++++++
++++++# Loop through each changed file
++++++while IFS= read -r file; do
++++++  echo "Processing file: $file"
++++++
++++++  # Extract line numbers from the diff for this file
++++++  changed_lines=$(awk -v file="$file" '
++++++    BEGIN {inside=0}
++++++    /^diff --git/ {inside=0}
++++++    $0 ~ file {inside=1}
++++++    inside && /^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); print start}
++++++  ' changes.diff)
++++++
++++++  # If no line numbers were found for this file, skip it
++++++  if [ -z "$changed_lines" ]; then
++++++    echo "No changed lines found in $file"
++++++    continue
++++++  fi
++++++
++++++  # Run the SFDX scanner on the file and generate the report
++++++  sf scanner:run --target "$file" --format "json" --outfile "scanner-report-$file.json"
++++++
++++++  # Ensure that the scanner report was generated
++++++  if [ ! -f "scanner-report-$file.json" ]; then
++++++    echo "Scanner report for $file not found."
++++++    continue
++++++  fi
++++++
++++++  # Filter the scanner report based on the changed lines
++++++  echo "Filtering scanner report for $file by changed lines..."
++++++  jq --argfile lines <(echo "$changed_lines" | jq -R . | jq -s .) '
++++++    .[] | select(.violations[]?.line as $line | $lines | index($line) != null)
++++++  ' "scanner-report-$file.json" > "filtered-scanner-report-$file.json"
++++++
++++++  # If no filtered report is found, skip
++++++  if [ ! -s "filtered-scanner-report-$file.json" ]; then
++++++    echo "No issues found for the changed lines in $file"
++++++    continue
++++++  fi
++++++
++++++  echo "Filtered scanner report for $file:"
++++++  cat "filtered-scanner-report-$file.json"
++++++
++++++done <<< "$changed_files"
++++++
++++++# Check if any filtered reports were generated
++++++filtered_reports=$(ls filtered-scanner-report-*.json 2> /dev/null)
++++++if [ -z "$filtered_reports" ]; then
++++++  echo "No vulnerabilities found in the changed lines. Proceeding with commit."
++++++  exit 0
++++++fi
++++++
++++++# Combine all filtered reports into one final report
++++++jq -s '.' filtered-scanner-report-*.json > final-filtered-scanner-report.json
++++++
++++++# Parse the final filtered scanner report and check for severity 3 issues
++++++severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' final-filtered-scanner-report.json)
++++++
++++++# Output the fail count for debugging
++++++echo "Severity Fail Count: $severity_fail_count"
++++++
++++++# Block commit if there are severity 3 issues
++++++if [ "$severity_fail_count" -gt 0 ]; then
++++++  echo "Blocking your commit due to vulnerabilities found with severity 3."
++++++  exit 1
++++++else
++++++  echo "No vulnerabilities found in changed lines. Proceeding with commit."
++++++  exit 0
++++++fi
+++++diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/default/classes/Account_Insert.cls
+++++index 1e62ed4..14cff41 100644
+++++--- a/force-app/main/default/classes/Account_Insert.cls
++++++++ b/force-app/main/default/classes/Account_Insert.cls
+++++@@ -69,0 +70 @@ public with sharing class AccountInsertClass {
++++++          System.debug('Hello Hi');
+++++diff --git a/scanner-report.json b/scanner-report.json
+++++new file mode 100644
+++++index 0000000..8a298a1
+++++--- /dev/null
++++++++ b/scanner-report.json
+++++@@ -0,0 +1 @@
++++++[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
+++@@ -108 +167 @@ diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/
+++-index 1e62ed4..14cff41 100644
++++index 14cff41..9a5148a 100644
+++@@ -111,9 +170,3 @@ index 1e62ed4..14cff41 100644
+++-@@ -69,0 +70 @@ public with sharing class AccountInsertClass {
+++-+          System.debug('Hello Hi');
+++-diff --git a/scanner-report.json b/scanner-report.json
+++-new file mode 100644
+++-index 0000000..8a298a1
+++---- /dev/null
+++-+++ b/scanner-report.json
+++-@@ -0,0 +1 @@
+++-+[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
++++@@ -70 +70 @@ public with sharing class AccountInsertClass {
++++-          System.debug('Hello Hi');
+++++          System.debug('Hello');
++@@ -167 +323 @@ diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/
++-index 14cff41..9a5148a 100644
+++index 9a5148a..1ec7a54 100644
++@@ -171,2 +327,20 @@ index 14cff41..9a5148a 100644
++--          System.debug('Hello Hi');
++-+          System.debug('Hello');
+++-          System.debug('Hello');
++++          System.debug('Hi');
+++diff --git a/scanner-reports/filtered-scanner-report-.json b/scanner-reports/filtered-scanner-report-.json
+++new file mode 100644
+++index 0000000..e69de29
+++diff --git a/scanner-reports/final-filtered-scanner-report.json b/scanner-reports/final-filtered-scanner-report.json
+++new file mode 100644
+++index 0000000..fe51488
+++--- /dev/null
++++++ b/scanner-reports/final-filtered-scanner-report.json
+++@@ -0,0 +1 @@
++++[]
+++diff --git a/scanner-reports/scanner-report-.json b/scanner-reports/scanner-report-.json
+++new file mode 100644
+++index 0000000..e670f52
+++--- /dev/null
++++++ b/scanner-reports/scanner-report-.json
+++@@ -0,0 +1 @@
++++[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
+++\ No newline at end of file
+@@ -323 +607 @@ diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/
+-index 9a5148a..1ec7a54 100644
++index 1ec7a54..870d508 100644
+@@ -327,2 +611,2 @@ index 9a5148a..1ec7a54 100644
+--          System.debug('Hello');
+-+          System.debug('Hi');
++-          System.debug('Hi');
+++          System.debug('Hi Hello');
+@@ -330,2 +614,2 @@ diff --git a/scanner-reports/filtered-scanner-report-.json b/scanner-reports/fil
 -new file mode 100644
--index 0000000..dd57583
+-index 0000000..e69de29
++deleted file mode 100644
++index e69de29..0000000
+@@ -333,6 +617,6 @@ diff --git a/scanner-reports/final-filtered-scanner-report.json b/scanner-report
+-new file mode 100644
+-index 0000000..fe51488
 ---- /dev/null
-+index dd57583..2bddfca 100644
-+--- a/changes.diff
-@@ -46,5 +38,3 @@ index 0000000..dd57583
--@@ -0,0 +1,119 @@
--+diff --git a/.husky/pre-commit b/.husky/pre-commit
--+new file mode 100644
--+index 0000000..9b8d99e
--+--- /dev/null
-+@@ -1,0 +2,40 @@ diff --git a/.husky/pre-commit b/.husky/pre-commit
-++index 9b8d99e..d68baeb 100644
-++--- a/.husky/pre-commit
-@@ -52,53 +42,3 @@ index 0000000..dd57583
--+@@ -0,0 +1,100 @@
--++#!/bin/bash
--++
--++# Prevent modification of Husky files
--++# if git diff --name-only --cached | grep -q ".husky/pre-commit\|.husky/post-commit"; then
--++#   echo "Error: pre-commit and post-commit files cannot be modified."
--++#   exit 1
--++# fi
--++# chmod 544 .husky/pre-commit
--++# chmod 544 .husky/post-commit
--++
--++# Check if Husky is installed
--++if ! command -v husky &> /dev/null
--++then
--++    echo "Husky is not installed. Installing Husky..."
--++    npm install husky --save-dev
--++    npx husky install
--++else
--++    echo "Husky is already installed Successfully."
--++fi
--++
--++# Get the list of changed Apex (.cls) or LWC files
--++changed_files=$(git diff --cached --name-only | grep -E '\.cls$|\.lwc$')
--++
--++# Check if there are any relevant changes
--++if [ -z "$changed_files" ]; then
--++  echo "No relevant changes to scan in the files."
--++  exit 0
--++fi
--++
--++# Extract the changed lines and corresponding line numbers from the diff for each file
--++git diff --unified=0 --cached > changes.diff
--++
--++# Loop through each changed file
--++while IFS= read -r file; do
--++  echo "Processing file: $file"
--++
--++  # Extract line numbers from the diff for this file
--++  changed_lines=$(awk -v file="$file" '
--++    BEGIN {inside=0}
--++    /^diff --git/ {inside=0}
--++    $0 ~ file {inside=1}
--++    inside && /^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); print start}
--++  ' changes.diff)
--++
--++  # If no line numbers were found for this file, skip it
--++  if [ -z "$changed_lines" ]; then
--++    echo "No changed lines found in $file"
--++    continue
--++  fi
--++
--++  # Run the SFDX scanner on the file and generate the report
--++  sf scanner:run --target "$file" --format "json" --outfile "scanner-report-$file.json"
-++@@ -29,0 +30,3 @@ fi
-+++# Create a directory for scanner reports if it doesn't exist
-+++mkdir -p scanner-reports
-@@ -106,5 +46,3 @@ index 0000000..dd57583
--++  # Ensure that the scanner report was generated
--++  if [ ! -f "scanner-report-$file.json" ]; then
--++    echo "Scanner report for $file not found."
--++    continue
--++  fi
-++@@ -36,0 +40,3 @@ while IFS= read -r file; do
-+++  # Remove leading slashes to make it compatible with file path
-+++  clean_file=$(echo "$file" | sed 's#^\(\./\|/##')
-@@ -112,5 +50,3 @@ index 0000000..dd57583
--++  # Filter the scanner report based on the changed lines
--++  echo "Filtering scanner report for $file by changed lines..."
--++  jq --argfile lines <(echo "$changed_lines" | jq -R . | jq -s .) '
--++    .[] | select(.violations[]?.line as $line | $lines | index($line) != null)
--++  ' "scanner-report-$file.json" > "filtered-scanner-report-$file.json"
-++@@ -50,0 +57,3 @@ while IFS= read -r file; do
-+++  # Define the output path for the scanner report
-+++  output_file="scanner-reports/scanner-report-${clean_file}.json"
-@@ -118,48 +54,268 @@ index 0000000..dd57583
--++  # If no filtered report is found, skip
--++  if [ ! -s "filtered-scanner-report-$file.json" ]; then
--++    echo "No issues found for the changed lines in $file"
--++    continue
--++  fi
--++
--++  echo "Filtered scanner report for $file:"
--++  cat "filtered-scanner-report-$file.json"
--++
--++done <<< "$changed_files"
--++
--++# Check if any filtered reports were generated
--++filtered_reports=$(ls filtered-scanner-report-*.json 2> /dev/null)
--++if [ -z "$filtered_reports" ]; then
--++  echo "No vulnerabilities found in the changed lines. Proceeding with commit."
--++  exit 0
--++fi
--++
--++# Combine all filtered reports into one final report
--++jq -s '.' filtered-scanner-report-*.json > final-filtered-scanner-report.json
--++
--++# Parse the final filtered scanner report and check for severity 3 issues
--++severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' final-filtered-scanner-report.json)
--++
--++# Output the fail count for debugging
--++echo "Severity Fail Count: $severity_fail_count"
--++
--++# Block commit if there are severity 3 issues
--++if [ "$severity_fail_count" -gt 0 ]; then
--++  echo "Blocking your commit due to vulnerabilities found with severity 3."
--++  exit 1
--++else
--++  echo "No vulnerabilities found in changed lines. Proceeding with commit."
--++  exit 0
--++fi
--+diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/default/classes/Account_Insert.cls
--+index 1e62ed4..14cff41 100644
--+--- a/force-app/main/default/classes/Account_Insert.cls
--++++ b/force-app/main/default/classes/Account_Insert.cls
--+@@ -69,0 +70 @@ public with sharing class AccountInsertClass {
--++          System.debug('Hello Hi');
--+diff --git a/scanner-report.json b/scanner-report.json
--+new file mode 100644
--+index 0000000..8a298a1
--+--- /dev/null
--++++ b/scanner-report.json
--+@@ -0,0 +1 @@
--++[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
-++@@ -52 +61 @@ while IFS= read -r file; do
-++-  sf scanner:run --target "$file" --format "json" --outfile "scanner-report-$file.json"
-+++  sf scanner:run --target "$file" --format "json" --outfile "$output_file"
-++@@ -55 +64 @@ while IFS= read -r file; do
-++-  if [ ! -f "scanner-report-$file.json" ]; then
-+++  if [ ! -f "$output_file" ]; then
-++@@ -64 +73 @@ while IFS= read -r file; do
-++-  ' "scanner-report-$file.json" > "filtered-scanner-report-$file.json"
-+++  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.json"
-++@@ -67 +76 @@ while IFS= read -r file; do
-++-  if [ ! -s "filtered-scanner-report-$file.json" ]; then
-+++  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.json" ]; then
-++@@ -73 +82 @@ while IFS= read -r file; do
-++-  cat "filtered-scanner-report-$file.json"
-+++  cat "scanner-reports/filtered-scanner-report-${clean_file}.json"
-++@@ -78 +87 @@ done <<< "$changed_files"
-++-filtered_reports=$(ls filtered-scanner-report-*.json 2> /dev/null)
-+++filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.json 2> /dev/null)
-++@@ -85 +94 @@ fi
-++-jq -s '.' filtered-scanner-report-*.json > final-filtered-scanner-report.json
-+++jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final-filtered-scanner-report.json
-++@@ -88 +97 @@ jq -s '.' filtered-scanner-report-*.json > final-filtered-scanner-report.json
-++-severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' final-filtered-scanner-report.json)
-+++severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' scanner-reports/final-filtered-scanner-report.json)
-++diff --git a/changes.diff b/changes.diff
-+@@ -3 +43 @@ new file mode 100644
-+-index 0000000..9b8d99e
-++index 0000000..dd57583
-+@@ -5,102 +45,121 @@ index 0000000..9b8d99e
-+-+++ b/.husky/pre-commit
-+-@@ -0,0 +1,100 @@
-+-+#!/bin/bash
-+-+
-+-+# Prevent modification of Husky files
-+-+# if git diff --name-only --cached | grep -q ".husky/pre-commit\|.husky/post-commit"; then
-+-+#   echo "Error: pre-commit and post-commit files cannot be modified."
-+-+#   exit 1
-+-+# fi
-+-+# chmod 544 .husky/pre-commit
-+-+# chmod 544 .husky/post-commit
-+-+
-+-+# Check if Husky is installed
-+-+if ! command -v husky &> /dev/null
-+-+then
-+-+    echo "Husky is not installed. Installing Husky..."
-+-+    npm install husky --save-dev
-+-+    npx husky install
-+-+else
-+-+    echo "Husky is already installed Successfully."
-+-+fi
-+-+
-+-+# Get the list of changed Apex (.cls) or LWC files
-+-+changed_files=$(git diff --cached --name-only | grep -E '\.cls$|\.lwc$')
-+-+
-+-+# Check if there are any relevant changes
-+-+if [ -z "$changed_files" ]; then
-+-+  echo "No relevant changes to scan in the files."
-+-+  exit 0
-+-+fi
-+-+
-+-+# Extract the changed lines and corresponding line numbers from the diff for each file
-+-+git diff --unified=0 --cached > changes.diff
-+-+
-+-+# Loop through each changed file
-+-+while IFS= read -r file; do
-+-+  echo "Processing file: $file"
-+-+
-+-+  # Extract line numbers from the diff for this file
-+-+  changed_lines=$(awk -v file="$file" '
-+-+    BEGIN {inside=0}
-+-+    /^diff --git/ {inside=0}
-+-+    $0 ~ file {inside=1}
-+-+    inside && /^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); print start}
-+-+  ' changes.diff)
-+-+
-+-+  # If no line numbers were found for this file, skip it
-+-+  if [ -z "$changed_lines" ]; then
-+-+    echo "No changed lines found in $file"
-+-+    continue
-+-+  fi
-+-+
-+-+  # Run the SFDX scanner on the file and generate the report
-+-+  sf scanner:run --target "$file" --format "json" --outfile "scanner-report-$file.json"
-+-+
-+-+  # Ensure that the scanner report was generated
-+-+  if [ ! -f "scanner-report-$file.json" ]; then
-+-+    echo "Scanner report for $file not found."
-+-+    continue
-+-+  fi
-+-+
-+-+  # Filter the scanner report based on the changed lines
-+-+  echo "Filtering scanner report for $file by changed lines..."
-+-+  jq --argfile lines <(echo "$changed_lines" | jq -R . | jq -s .) '
-+-+    .[] | select(.violations[]?.line as $line | $lines | index($line) != null)
-+-+  ' "scanner-report-$file.json" > "filtered-scanner-report-$file.json"
-+-+
-+-+  # If no filtered report is found, skip
-+-+  if [ ! -s "filtered-scanner-report-$file.json" ]; then
-+-+    echo "No issues found for the changed lines in $file"
-+-+    continue
-+-+  fi
-+-+
-+-+  echo "Filtered scanner report for $file:"
-+-+  cat "filtered-scanner-report-$file.json"
-+-+
-+-+done <<< "$changed_files"
-+-+
-+-+# Check if any filtered reports were generated
-+-+filtered_reports=$(ls filtered-scanner-report-*.json 2> /dev/null)
-+-+if [ -z "$filtered_reports" ]; then
-+-+  echo "No vulnerabilities found in the changed lines. Proceeding with commit."
-+-+  exit 0
-+-+fi
-+-+
-+-+# Combine all filtered reports into one final report
-+-+jq -s '.' filtered-scanner-report-*.json > final-filtered-scanner-report.json
-+-+
-+-+# Parse the final filtered scanner report and check for severity 3 issues
-+-+severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' final-filtered-scanner-report.json)
-+-+
-+-+# Output the fail count for debugging
-+-+echo "Severity Fail Count: $severity_fail_count"
-+-+
-+-+# Block commit if there are severity 3 issues
-+-+if [ "$severity_fail_count" -gt 0 ]; then
-+-+  echo "Blocking your commit due to vulnerabilities found with severity 3."
-+-+  exit 1
-+-+else
-+-+  echo "No vulnerabilities found in changed lines. Proceeding with commit."
-+-+  exit 0
-+-+fi
-+++++ b/changes.diff
-++@@ -0,0 +1,119 @@
-+++diff --git a/.husky/pre-commit b/.husky/pre-commit
-+++new file mode 100644
-+++index 0000000..9b8d99e
-+++--- /dev/null
-++++++ b/.husky/pre-commit
-+++@@ -0,0 +1,100 @@
-++++#!/bin/bash
-++++
-++++# Prevent modification of Husky files
-++++# if git diff --name-only --cached | grep -q ".husky/pre-commit\|.husky/post-commit"; then
-++++#   echo "Error: pre-commit and post-commit files cannot be modified."
-++++#   exit 1
-++++# fi
-++++# chmod 544 .husky/pre-commit
-++++# chmod 544 .husky/post-commit
-++++
-++++# Check if Husky is installed
-++++if ! command -v husky &> /dev/null
-++++then
-++++    echo "Husky is not installed. Installing Husky..."
-++++    npm install husky --save-dev
-++++    npx husky install
-++++else
-++++    echo "Husky is already installed Successfully."
-++++fi
-++++
-++++# Get the list of changed Apex (.cls) or LWC files
-++++changed_files=$(git diff --cached --name-only | grep -E '\.cls$|\.lwc$')
-++++
-++++# Check if there are any relevant changes
-++++if [ -z "$changed_files" ]; then
-++++  echo "No relevant changes to scan in the files."
-++++  exit 0
-++++fi
-++++
-++++# Extract the changed lines and corresponding line numbers from the diff for each file
-++++git diff --unified=0 --cached > changes.diff
-++++
-++++# Loop through each changed file
-++++while IFS= read -r file; do
-++++  echo "Processing file: $file"
-++++
-++++  # Extract line numbers from the diff for this file
-++++  changed_lines=$(awk -v file="$file" '
-++++    BEGIN {inside=0}
-++++    /^diff --git/ {inside=0}
-++++    $0 ~ file {inside=1}
-++++    inside && /^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); print start}
-++++  ' changes.diff)
-++++
-++++  # If no line numbers were found for this file, skip it
-++++  if [ -z "$changed_lines" ]; then
-++++    echo "No changed lines found in $file"
-++++    continue
-++++  fi
-++++
-++++  # Run the SFDX scanner on the file and generate the report
-++++  sf scanner:run --target "$file" --format "json" --outfile "scanner-report-$file.json"
-++++
-++++  # Ensure that the scanner report was generated
-++++  if [ ! -f "scanner-report-$file.json" ]; then
-++++    echo "Scanner report for $file not found."
-++++    continue
-++++  fi
-++++
-++++  # Filter the scanner report based on the changed lines
-++++  echo "Filtering scanner report for $file by changed lines..."
-++++  jq --argfile lines <(echo "$changed_lines" | jq -R . | jq -s .) '
-++++    .[] | select(.violations[]?.line as $line | $lines | index($line) != null)
-++++  ' "scanner-report-$file.json" > "filtered-scanner-report-$file.json"
-++++
-++++  # If no filtered report is found, skip
-++++  if [ ! -s "filtered-scanner-report-$file.json" ]; then
-++++    echo "No issues found for the changed lines in $file"
-++++    continue
-++++  fi
-++++
-++++  echo "Filtered scanner report for $file:"
-++++  cat "filtered-scanner-report-$file.json"
-++++
-++++done <<< "$changed_files"
-++++
-++++# Check if any filtered reports were generated
-++++filtered_reports=$(ls filtered-scanner-report-*.json 2> /dev/null)
-++++if [ -z "$filtered_reports" ]; then
-++++  echo "No vulnerabilities found in the changed lines. Proceeding with commit."
-++++  exit 0
-++++fi
-++++
-++++# Combine all filtered reports into one final report
-++++jq -s '.' filtered-scanner-report-*.json > final-filtered-scanner-report.json
-++++
-++++# Parse the final filtered scanner report and check for severity 3 issues
-++++severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' final-filtered-scanner-report.json)
-++++
-++++# Output the fail count for debugging
-++++echo "Severity Fail Count: $severity_fail_count"
-++++
-++++# Block commit if there are severity 3 issues
-++++if [ "$severity_fail_count" -gt 0 ]; then
-++++  echo "Blocking your commit due to vulnerabilities found with severity 3."
-++++  exit 1
-++++else
-++++  echo "No vulnerabilities found in changed lines. Proceeding with commit."
-++++  exit 0
-++++fi
-+++diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/default/classes/Account_Insert.cls
-+++index 1e62ed4..14cff41 100644
-+++--- a/force-app/main/default/classes/Account_Insert.cls
-++++++ b/force-app/main/default/classes/Account_Insert.cls
-+++@@ -69,0 +70 @@ public with sharing class AccountInsertClass {
-++++          System.debug('Hello Hi');
-+++diff --git a/scanner-report.json b/scanner-report.json
-+++new file mode 100644
-+++index 0000000..8a298a1
-+++--- /dev/null
-++++++ b/scanner-report.json
-+++@@ -0,0 +1 @@
-++++[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
-+@@ -108 +167 @@ diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/
-+-index 1e62ed4..14cff41 100644
-++index 14cff41..9a5148a 100644
-+@@ -111,9 +170,3 @@ index 1e62ed4..14cff41 100644
-+-@@ -69,0 +70 @@ public with sharing class AccountInsertClass {
-+-+          System.debug('Hello Hi');
-+-diff --git a/scanner-report.json b/scanner-report.json
-+-new file mode 100644
-+-index 0000000..8a298a1
-+---- /dev/null
-+-+++ b/scanner-report.json
-+-@@ -0,0 +1 @@
-+-+[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
-++@@ -70 +70 @@ public with sharing class AccountInsertClass {
-++-          System.debug('Hello Hi');
-+++          System.debug('Hello');
-@@ -167 +323 @@ diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/
--index 14cff41..9a5148a 100644
-+index 9a5148a..1ec7a54 100644
-@@ -171,2 +327,20 @@ index 14cff41..9a5148a 100644
---          System.debug('Hello Hi');
--+          System.debug('Hello');
-+-          System.debug('Hello');
-++          System.debug('Hi');
-+diff --git a/scanner-reports/filtered-scanner-report-.json b/scanner-reports/filtered-scanner-report-.json
-+new file mode 100644
-+index 0000000..e69de29
-+diff --git a/scanner-reports/final-filtered-scanner-report.json b/scanner-reports/final-filtered-scanner-report.json
-+new file mode 100644
-+index 0000000..fe51488
-+--- /dev/null
-++++ b/scanner-reports/final-filtered-scanner-report.json
-+@@ -0,0 +1 @@
-++[]
-+diff --git a/scanner-reports/scanner-report-.json b/scanner-reports/scanner-report-.json
-+new file mode 100644
-+index 0000000..e670f52
-+--- /dev/null
-++++ b/scanner-reports/scanner-report-.json
-+@@ -0,0 +1 @@
-++[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
-+\ No newline at end of file
+-+++ b/scanner-reports/final-filtered-scanner-report.json
+-@@ -0,0 +1 @@
+-+[]
++deleted file mode 100644
++index fe51488..0000000
++--- a/scanner-reports/final-filtered-scanner-report.json
+++++ /dev/null
++@@ -1 +0,0 @@
++-[]
+@@ -340,6 +624,6 @@ diff --git a/scanner-reports/scanner-report-.json b/scanner-reports/scanner-repo
+-new file mode 100644
+-index 0000000..e670f52
+---- /dev/null
+-+++ b/scanner-reports/scanner-report-.json
+-@@ -0,0 +1 @@
+-+[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
++deleted file mode 100644
++index e670f52..0000000
++--- a/scanner-reports/scanner-report-.json
+++++ /dev/null
++@@ -1 +0,0 @@
++-[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
 diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/default/classes/Account_Insert.cls
-index 1ec7a54..870d508 100644
+index 870d508..1ec7a54 100644
 --- a/force-app/main/default/classes/Account_Insert.cls
 +++ b/force-app/main/default/classes/Account_Insert.cls
 @@ -70 +70 @@ public with sharing class AccountInsertClass {
--          System.debug('Hi');
-+          System.debug('Hi Hello');
-diff --git a/scanner-reports/filtered-scanner-report-.json b/scanner-reports/filtered-scanner-report-.json
-deleted file mode 100644
-index e69de29..0000000
-diff --git a/scanner-reports/final-filtered-scanner-report.json b/scanner-reports/final-filtered-scanner-report.json
-deleted file mode 100644
-index fe51488..0000000
---- a/scanner-reports/final-filtered-scanner-report.json
-+++ /dev/null
-@@ -1 +0,0 @@
--[]
-diff --git a/scanner-reports/scanner-report-.json b/scanner-reports/scanner-report-.json
-deleted file mode 100644
-index e670f52..0000000
---- a/scanner-reports/scanner-report-.json
-+++ /dev/null
-@@ -1 +0,0 @@
--[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
+-          System.debug('Hi Hello');
++          System.debug('Hi');
+diff --git a/scanner-reports/scanner-report-Account_Insert.cls.json b/scanner-reports/scanner-report-Account_Insert.cls.json
+new file mode 100644
+index 0000000..cd70445
+--- /dev/null
++++ b/scanner-reports/scanner-report-Account_Insert.cls.json
+@@ -0,0 +1 @@
++[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
 \ No newline at end of file
