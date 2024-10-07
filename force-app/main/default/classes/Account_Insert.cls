@@ -14,15 +14,13 @@ public with sharing class AccountInsertClass {
     if (Schema.sObjectType.Account.isCreateable()) {
       for (Account acc : accList) {
         if (Schema.sObjectType.Account.fields.Description.isUpdateable()) {
-          System.debug('Hi Hello');
-          System.debug('Hello Hi');
           acc.Description = 'Happy Welcome';
           acc.Rating = 'Hotter';
           acc.Industry = 'Agriculture';
         }
       }
       insert accList;
-      System.debug('Hello Hi Hello Hi');
+      System.debug('Hello Hi Hello');
     } else {
       throw new CustomException(
         'You do not have permission to create Account records.'
@@ -47,6 +45,7 @@ public with sharing class AccountInsertClass {
         opp.StageName = 'Prospecting';
         opp.AccountId = acc.Id;
         oppList.add(opp);
+        System.debug('Hi Bye');
       }
       if (oppList.size() > 0) {
         insert oppList;

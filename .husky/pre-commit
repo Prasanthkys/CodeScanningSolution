@@ -31,10 +31,10 @@ echo "Filtering scanner report for changed lines..."
 # Extract the changed line numbers for each file and filter the scanner report
 for file in $files; do
   echo "Processing file: $file"
-  
-  # Get lines that are added/modified (ignore deletions)
-  line_numbers=$(grep -A 1000 "$file" changes.diff | grep -E '^\+[^\+]' | awk '{print $1}' | sed 's/^+//')
 
+  # Extract only lines that are actual code changes (lines prefixed with `+` but not `+++`)
+  line_numbers=$(awk '/^@@/ {line=$0; sub(/^@@ -[0-9]+(,[0-9]+)? \+/, "", line); sub(/ .*/, "", line); print line}' changes.diff)
+  
   # Validate if line numbers were captured
   if [ -z "$line_numbers" ]; then
     echo "No valid line numbers for file: $file"
