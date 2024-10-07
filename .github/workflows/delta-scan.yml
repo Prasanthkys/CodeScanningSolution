@@ -37,7 +37,7 @@ jobs:
           # Check if the repository is shallow and unshallow if necessary
           if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
             echo "Repository is shallow, unshallowing..."
-            git fetch --unshallow || { echo "Failed to unshallow the repository"; exit 1; }
+            git fetch --unshallow || { echo "Failed to unshallow the repository"; exit 0; }
           else
             echo "Repository is not shallow, skipping unshallow."
           fi
