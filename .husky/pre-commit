@@ -1,0 +1,100 @@
+#!/bin/bash
+
+# Prevent modification of Husky files
+# if git diff --name-only --cached | grep -q ".husky/pre-commit\|.husky/post-commit"; then
+#   echo "Error: pre-commit and post-commit files cannot be modified."
+#   exit 1
+# fi
+# chmod 544 .husky/pre-commit
+# chmod 544 .husky/post-commit
+
+# Check if Husky is installed
+if ! command -v husky &> /dev/null
+then
+    echo "Husky is not installed. Installing Husky..."
+    npm install husky --save-dev
+    npx husky install
+else
+    echo "Husky is already installed Successfully."
+fi
+
+# Get the list of changed Apex (.cls) or LWC files
+changed_files=$(git diff --cached --name-only | grep -E '\.cls$|\.lwc$')
+
+# Check if there are any relevant changes
+if [ -z "$changed_files" ]; then
+  echo "No relevant changes to scan in the files."
+  exit 0
+fi
+
+# Extract the changed lines and corresponding line numbers from the diff for each file
+git diff --unified=0 --cached > changes.diff
+
+# Loop through each changed file
+while IFS= read -r file; do
+  echo "Processing file: $file"
+
+  # Extract line numbers from the diff for this file
+  changed_lines=$(awk -v file="$file" '
+    BEGIN {inside=0}
+    /^diff --git/ {inside=0}
+    $0 ~ file {inside=1}
+    inside && /^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); print start}
+  ' changes.diff)
+
+  # If no line numbers were found for this file, skip it
+  if [ -z "$changed_lines" ]; then
+    echo "No changed lines found in $file"
+    continue
+  fi
+
+  # Run the SFDX scanner on the file and generate the report
+  sf scanner:run --target "$file" --format "json" --outfile "scanner-report-$file.json"
+
+  # Ensure that the scanner report was generated
+  if [ ! -f "scanner-report-$file.json" ]; then
+    echo "Scanner report for $file not found."
+    continue
+  fi
+
+  # Filter the scanner report based on the changed lines
+  echo "Filtering scanner report for $file by changed lines..."
+  jq --argfile lines <(echo "$changed_lines" | jq -R . | jq -s .) '
+    .[] | select(.violations[]?.line as $line | $lines | index($line) != null)
+  ' "scanner-report-$file.json" > "filtered-scanner-report-$file.json"
+
+  # If no filtered report is found, skip
+  if [ ! -s "filtered-scanner-report-$file.json" ]; then
+    echo "No issues found for the changed lines in $file"
+    continue
+  fi
+
+  echo "Filtered scanner report for $file:"
+  cat "filtered-scanner-report-$file.json"
+
+done <<< "$changed_files"
+
+# Check if any filtered reports were generated
+filtered_reports=$(ls filtered-scanner-report-*.json 2> /dev/null)
+if [ -z "$filtered_reports" ]; then
+  echo "No vulnerabilities found in the changed lines. Proceeding with commit."
+  exit 0
+fi
+
+# Combine all filtered reports into one final report
+jq -s '.' filtered-scanner-report-*.json > final-filtered-scanner-report.json
+
+# Parse the final filtered scanner report and check for severity 3 issues
+severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' final-filtered-scanner-report.json)
+
+# Output the fail count for debugging
+echo "Severity Fail Count: $severity_fail_count"
+
+# Block commit if there are severity 3 issues
+if [ "$severity_fail_count" -gt 0 ]; then
+  echo "Blocking your commit due to vulnerabilities found with severity 3."
+  exit 1
+else
+  echo "No vulnerabilities found in changed lines. Proceeding with commit."
+  exit 0
+fi
