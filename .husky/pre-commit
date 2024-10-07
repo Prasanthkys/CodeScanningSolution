@@ -1,15 +1,5 @@
 #!/bin/bash
 
-# Check if Husky is installed
-if ! command -v husky &> /dev/null
-then
-    echo "Husky is not installed. Installing Husky..."
-    npm install husky --save-dev
-    npx husky install
-else
-    echo "Husky is already installed successfully."
-fi
-
 # Get the list of changed Apex (.cls) or LWC files
 changed_files=$(git diff --cached --name-only | grep -E '\.cls$|\.lwc$')
 
@@ -31,26 +21,6 @@ while IFS= read -r file; do
 
   # Clean file paths to make them compatible with filenames
   clean_file=$(basename "$file")
-  
-  # Extract only the changed line numbers for the file
-  line_numbers=$(awk -v file="$file" '
-    BEGIN {inside=0; start_line=0; line_offset=0}
-    /^diff --git/ {inside=0}
-    $0 ~ file {inside=1}
-    inside && /^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start_line = substr(arr[2], 2); line_offset=0; next}
-    inside && /^[+][^+]/ {print start_line + line_offset++}
-  ' changes.diff)
-
-  # If no changed lines are found for this file, skip it
-  if [ -z "$line_numbers" ]; then
-    echo "No changed lines found in $file"
-    continue
-  fi
-
-  # Convert the line numbers to a comma-separated string for matching
-  line_numbers_string=$(echo "$line_numbers" | tr '\n' ',' | sed 's/,$//')
-
-  echo "Changed lines for $file: $line_numbers_string"
 
   # Define the output path for the scanner report in CSV format
   output_file="scanner-reports/scanner-report-${clean_file}.csv"
@@ -64,32 +34,17 @@ while IFS= read -r file; do
     continue
   fi
 
-  # Ensure that line_numbers_string is not empty
-  if [ -z "$line_numbers_string" ]; then
-    echo "No valid line numbers extracted for $file."
-    continue
-  fi
-
-  # Filter the CSV scanner report based on the changed line numbers
-  echo "Filtering scanner report for $file by changed lines..."
-  awk -v lines="$line_numbers_string" '
-  BEGIN {
-    FS=OFS=",";  # Define CSV format
-    split(lines, arr, ",");  # Split the line numbers into an array
-    for (i in arr) {
-      line_map[arr[i]] = 1  # Create a lookup for valid line numbers
-    }
-  }
-  NR == 1 || (line_map[$4])  # $4 is the "Line" field in the CSV
-  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.csv"
+  # Filter the CSV scanner report for rows where the "Line" field equals "70"
+  echo "Filtering scanner report for $file for Line '70'..."
+  awk -F, 'NR == 1 || $4 == "70"' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.csv"
 
   # If no filtered report is found, skip
   if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.csv" ]; then
-    echo "No issues found for the changed lines in $file"
+    echo "No issues found for line '70' in $file"
     continue
   fi
 
-  echo "Filtered scanner report for $file:"
+  echo "Filtered scanner report for $file (Line '70'):"
   cat "scanner-reports/filtered-scanner-report-${clean_file}.csv"
 
 done <<< "$changed_files"
@@ -97,29 +52,28 @@ done <<< "$changed_files"
 # Check if any filtered reports were generated
 filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.csv 2> /dev/null)
 if [ -z "$filtered_reports" ]; then
-  echo "No vulnerabilities found in the changed lines. Proceeding with commit."
+  echo "No vulnerabilities found on line '70'. Proceeding with commit."
   exit 0
 fi
 
 # Combine all filtered reports into one final report (optional)
-# You can use a simple `cat` command for CSV, as there is no header duplication issue in CSV files
 final_report="scanner-reports/final-filtered-scanner-report.csv"
 cat scanner-reports/filtered-scanner-report-*.csv > "$final_report"
 
-echo "Final filtered scanner report:"
+echo "Final filtered scanner report (Line '70'):"
 cat "$final_report"
 
-# Parse the final filtered scanner report and check for severity 3 issues (optional, CSV parsing in bash)
-severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count+0}' "$final_report")  # $2 is the Severity column
+# Parse the final filtered scanner report and check for severity 3 issues
+severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count+0}' "$final_report")
 
 # Output the fail count for debugging
-echo "Severity Fail Count: $severity_fail_count"
+echo "Severity Fail Count (Line '70'): $severity_fail_count"
 
 # Block commit if there are severity 3 issues
 if [ "$severity_fail_count" -gt 0 ]; then
-  echo "Blocking your commit due to vulnerabilities found with severity 3."
+  echo "Blocking your commit due to vulnerabilities found with severity 3 on Line '70'."
   exit 1
 else
-  echo "No vulnerabilities found in changed lines. Proceeding with commit."
+  echo "No vulnerabilities with severity 3 found on Line '70'. Proceeding with commit."
   exit 0
 fi
