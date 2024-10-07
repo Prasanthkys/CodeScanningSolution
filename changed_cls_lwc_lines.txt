@@ -1,0 +1,4 @@
+108 : index 14cff41..9a5148a 100644
+1119 : @@ -70 +70 @@ public with sharing class AccountInsertClass {
+1120 : -          System.debug('Hello Hi');
+70 :           System.debug('Hi');
