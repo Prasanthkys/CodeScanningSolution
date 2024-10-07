@@ -38,7 +38,7 @@ while IFS= read -r file; do
     /^diff --git/ {inside=0}
     $0 ~ file {inside=1}
     inside && /^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start_line = substr(arr[2], 2); line_offset=0; next}
-    inside && /^[+][^+]/ {print start_line + line_offset++, ":", substr($0, 2)}
+    inside && /^[+][^+]/ {print start_line + line_offset++}
   ' changes.diff > "changed_cls_lwc_lines_${clean_file}.txt"
 
   # If no changed lines are found for this file, skip it
@@ -47,8 +47,8 @@ while IFS= read -r file; do
     continue
   fi
 
-  # Extract line numbers as a comma-separated string for filtering later
-  line_numbers=$(cut -d':' -f1 "changed_cls_lwc_lines_${clean_file}.txt" | tr '\n' ',' | sed 's/,$//')
+  # Extract line numbers as an array for filtering later
+  mapfile -t line_numbers < "changed_cls_lwc_lines_${clean_file}.txt"
 
   # Define the output path for the scanner report in CSV format
   output_file="scanner-reports/scanner-report-${clean_file}.csv"
@@ -63,14 +63,18 @@ while IFS= read -r file; do
   fi
 
   # Ensure that line_numbers is not empty
-  if [ -z "$line_numbers" ]; then
+  if [ ${#line_numbers[@]} -eq 0 ]; then
     echo "No valid line numbers extracted for $file."
     continue
   fi
 
+  # Convert the array of line numbers into a format that can be used by awk
+  lines_for_filter=$(printf ",%s" "${line_numbers[@]}")
+  lines_for_filter="${lines_for_filter:1}"
+
   # Filter the CSV scanner report based on the changed line numbers
   echo "Filtering scanner report for $file by changed lines..."
-  awk -v lines="$line_numbers" '
+  awk -v lines="$lines_for_filter" '
   BEGIN {
     FS=OFS=",";  # Define CSV format
     split(lines, arr, ",");  # Split the line numbers into an array
@@ -78,7 +82,7 @@ while IFS= read -r file; do
       line_map[arr[i]] = 1  # Create a lookup for valid line numbers
     }
   }
-  NR == 1 || ($4 in line_map)  # $4 is the "Line" field in the CSV, this line checks if it exists in the map
+  NR == 1 || (line_map[$4])  # $4 is the "Line" field in the CSV
   ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.csv"
 
   # If no filtered report is found, skip
@@ -108,7 +112,7 @@ echo "Final filtered scanner report:"
 cat "$final_report"
 
 # Parse the final filtered scanner report and check for severity 3 issues (optional, CSV parsing in bash)
-severity_fail_count=$(awk -F, '$7 == 3 {count++} END {print count}' "$final_report")  # $7 is the Severity column
+severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count}' "$final_report")  # $2 is the Severity column
 
 # Output the fail count for debugging
 echo "Severity Fail Count: $severity_fail_count"
