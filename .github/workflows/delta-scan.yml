@@ -42,9 +42,6 @@ jobs:
             echo "Repository is not shallow, skipping unshallow."
           fi
 
-          # Verify git log output for debugging purposes
-          git log --oneline -2 || { echo "Failed to retrieve git log. This could be an issue with git history."; exit 0; }
-
           # Fetch changes only if there is a previous commit
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files and lines between HEAD~1 and HEAD"
