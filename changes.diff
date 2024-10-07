@@ -1,0 +1,65 @@
+diff --git a/.husky/pre-commit b/.husky/pre-commit
+index 255a037..525d43a 100644
+--- a/.husky/pre-commit
++++ b/.husky/pre-commit
+@@ -50 +50 @@ while IFS= read -r file; do
+-  # Extract line numbers as a comma-separated string for use in jq filtering
++  # Extract line numbers as a comma-separated string for filtering later
+@@ -53,2 +53,2 @@ while IFS= read -r file; do
+-  # Define the output path for the scanner report
+-  output_file="scanner-reports/scanner-report-${clean_file}.json"
++  # Define the output path for the scanner report in CSV format
++  output_file="scanner-reports/scanner-report-${clean_file}.csv"
+@@ -56,2 +56,2 @@ while IFS= read -r file; do
+-  # Run the SFDX scanner on the file and generate the report
+-  sf scanner:run --target "$file" --format "json" --outfile "$output_file"
++  # Run the SFDX scanner on the file and generate the report in CSV format
++  sf scanner:run --target "$file" --format "csv" --outfile "$output_file"
+@@ -71 +71 @@ while IFS= read -r file; do
+-  # Filter the scanner report based on the changed line numbers
++  # Filter the CSV scanner report based on the changed line numbers
+@@ -73,3 +73,10 @@ while IFS= read -r file; do
+-  jq --arg lines "$line_numbers" '
+-    .[] | select(.violations[]? | ($lines | split(",") | index((.line|tostring))))
+-  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.json"
++  awk -v lines="$line_numbers" '
++  BEGIN {
++    FS=OFS=",";
++    split(lines, arr, ",");  # Split the line numbers into an array
++    for (i in arr) {
++      line_map[arr[i]] = 1  # Create a lookup for valid line numbers
++    }
++  }
++  NR == 1 || line_map[$4]  # $4 is the "Line" field in the CSV
++  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.csv"
+@@ -78 +85 @@ while IFS= read -r file; do
+-  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.json" ]; then
++  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.csv" ]; then
+@@ -84 +91 @@ while IFS= read -r file; do
+-  cat "scanner-reports/filtered-scanner-report-${clean_file}.json"
++  cat "scanner-reports/filtered-scanner-report-${clean_file}.csv"
+@@ -89 +96 @@ done <<< "$changed_files"
+-filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.json 2> /dev/null)
++filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.csv 2> /dev/null)
+@@ -95,2 +102,4 @@ fi
+-# Combine all filtered reports into one final report
+-jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final-filtered-scanner-report.json
++# Combine all filtered reports into one final report (optional)
++# You can use a simple `cat` command for CSV, as there is no header duplication issue in CSV files
++final_report="scanner-reports/final-filtered-scanner-report.csv"
++cat scanner-reports/filtered-scanner-report-*.csv > "$final_report"
+@@ -98,2 +107,5 @@ jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final
+-# Parse the final filtered scanner report and check for severity 3 issues
+-severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' scanner-reports/final-filtered-scanner-report.json)
++echo "Final filtered scanner report:"
++cat "$final_report"
++
++# Parse the final filtered scanner report and check for severity 3 issues (optional, CSV parsing in bash)
++severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count}' "$final_report")  # $7 is the Severity column
+diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/default/classes/Account_Insert.cls
+index 1ec7a54..870d508 100644
+--- a/force-app/main/default/classes/Account_Insert.cls
++++ b/force-app/main/default/classes/Account_Insert.cls
+@@ -70 +70 @@ public with sharing class AccountInsertClass {
+-          System.debug('Hi');
++          System.debug('Hi Hello');
