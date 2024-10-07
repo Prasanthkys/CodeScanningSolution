@@ -83,20 +83,24 @@ jobs:
           echo "Detected changes in .cls and .lwc files:"
           cat changed_cls_lwc_lines.txt
 
-
       - name: Run SFDX Scanner on Changed Files and Lines
         run: |
+          # Get the changed .cls and .lwc files from the diff
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+
           if [ -z "$files" ]; then
             echo "No changed .cls or .lwc files detected."
             exit 0
           fi
 
+          # Declare an array to store the line numbers
           declare -a line_numbers_array=()
 
           while IFS= read -r file; do
             echo "Processing file: $file"
-            file=$(echo "$file" | tr -d '"')
+            file=$(echo "$file" | tr -d '"')  # Clean up the file path
+
+            # Extract the actual changed lines and line numbers for the specific file
             changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^\+' | sed 's/^+//')
             line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
 
