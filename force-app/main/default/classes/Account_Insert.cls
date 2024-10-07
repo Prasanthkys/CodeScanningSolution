@@ -15,12 +15,14 @@ public with sharing class AccountInsertClass {
       for (Account acc : accList) {
         if (Schema.sObjectType.Account.fields.Description.isUpdateable()) {
           System.debug('Hi Hello');
+          System.debug('Hello Hi');
           acc.Description = 'Happy Welcome';
           acc.Rating = 'Hotter';
           acc.Industry = 'Agriculture';
         }
       }
       insert accList;
+      System.debug('Hello Hi Hello Hi');
     } else {
       throw new CustomException(
         'You do not have permission to create Account records.'

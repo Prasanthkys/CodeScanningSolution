@@ -2,13 +2,9 @@
 set -e
 
 # Step 1: Get changed files and lines (for .cls and .lwc files)
-git fetch --unshallow || true
-if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-  echo "Fetching changed files and lines between HEAD~1 and HEAD"
-  git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
-else
-  echo "No previous commit to compare to." > changes.diff
-fi
+echo "Fetching changed files and lines between HEAD~1 and HEAD"
+
+git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
 
 if [ ! -s changes.diff ]; then
   echo "No changes detected between HEAD~1 and HEAD."
@@ -35,8 +31,10 @@ echo "Filtering scanner report for changed lines..."
 # Extract the changed line numbers for each file and filter the scanner report
 for file in $files; do
   echo "Processing file: $file"
-  line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk -F' ' '{print $2}' | cut -d',' -f1 | sed 's/-//')
   
+  # Get lines that are added/modified (ignore deletions)
+  line_numbers=$(grep -A 1000 "$file" changes.diff | grep -E '^\+[^\+]' | awk '{print $1}' | sed 's/^+//')
+
   # Validate if line numbers were captured
   if [ -z "$line_numbers" ]; then
     echo "No valid line numbers for file: $file"
