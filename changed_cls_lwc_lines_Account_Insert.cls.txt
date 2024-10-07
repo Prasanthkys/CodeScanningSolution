@@ -1,6 +1,24 @@
-0 : diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/default/classes/Account_Insert.cls
-1 : index 1ec7a54..870d508 100644
-2 : --- a/force-app/main/default/classes/Account_Insert.cls
-3 : @@ -70 +70 @@ public with sharing class AccountInsertClass {
-4 : -          System.debug('Hi');
-70 :           System.debug('Hi');
+0
+1
+2
+3
+4
+5
+60
+642
+643
+644
+645
+646
+647
+648
+649
+650
+651
+652
+653
+654
+655
+656
+657
+70

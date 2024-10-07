@@ -32,23 +32,25 @@ while IFS= read -r file; do
   # Clean file paths to make them compatible with filenames
   clean_file=$(basename "$file")
   
-  # Extract the actual changed lines and corresponding line numbers for the file
-  awk -v file="$file" '
+  # Extract only the changed line numbers for the file
+  line_numbers=$(awk -v file="$file" '
     BEGIN {inside=0; start_line=0; line_offset=0}
     /^diff --git/ {inside=0}
     $0 ~ file {inside=1}
     inside && /^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start_line = substr(arr[2], 2); line_offset=0; next}
     inside && /^[+][^+]/ {print start_line + line_offset++}
-  ' changes.diff > "changed_cls_lwc_lines_${clean_file}.txt"
+  ' changes.diff)
 
   # If no changed lines are found for this file, skip it
-  if [ ! -s "changed_cls_lwc_lines_${clean_file}.txt" ]; then
+  if [ -z "$line_numbers" ]; then
     echo "No changed lines found in $file"
     continue
   fi
 
-  # Extract line numbers as an array for filtering later
-  mapfile -t line_numbers < "changed_cls_lwc_lines_${clean_file}.txt"
+  # Convert the line numbers to a comma-separated string for matching
+  line_numbers_string=$(echo "$line_numbers" | tr '\n' ',' | sed 's/,$//')
+
+  echo "Changed lines for $file: $line_numbers_string"
 
   # Define the output path for the scanner report in CSV format
   output_file="scanner-reports/scanner-report-${clean_file}.csv"
@@ -62,19 +64,15 @@ while IFS= read -r file; do
     continue
   fi
 
-  # Ensure that line_numbers is not empty
-  if [ ${#line_numbers[@]} -eq 0 ]; then
+  # Ensure that line_numbers_string is not empty
+  if [ -z "$line_numbers_string" ]; then
     echo "No valid line numbers extracted for $file."
     continue
   fi
 
-  # Convert the array of line numbers into a format that can be used by awk
-  lines_for_filter=$(printf ",%s" "${line_numbers[@]}")
-  lines_for_filter="${lines_for_filter:1}"
-
   # Filter the CSV scanner report based on the changed line numbers
   echo "Filtering scanner report for $file by changed lines..."
-  awk -v lines="$lines_for_filter" '
+  awk -v lines="$line_numbers_string" '
   BEGIN {
     FS=OFS=",";  # Define CSV format
     split(lines, arr, ",");  # Split the line numbers into an array
