@@ -22,11 +22,31 @@ while IFS= read -r file; do
   # Clean file paths to make them compatible with filenames
   clean_file=$(basename "$file")
 
-  # Define the output path for the scanner report in CSV format
-  output_file="scanner-reports/scanner-report-${clean_file}.csv"
+  # Extract only the changed line numbers for the file
+  line_numbers=$(awk -v file="$file" '
+    BEGIN {inside=0; start_line=0; line_offset=0}
+    /^diff --git/ {inside=0}
+    $0 ~ file {inside=1}
+    inside && /^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start_line = substr(arr[2], 2); line_offset=0; next}
+    inside && /^[+][^+]/ {print start_line + line_offset++}
+  ' changes.diff)
 
-  # Run the SFDX scanner on the file and generate the report in CSV format
-  sf scanner:run --target "$file" --format "csv" --outfile "$output_file"
+  # If no changed lines are found for this file, skip it
+  if [ -z "$line_numbers" ]; then
+    echo "No changed lines found in $file"
+    continue
+  fi
+
+  # Convert the line numbers to a JSON array format for jq filtering
+  line_numbers_array=$(echo "$line_numbers" | jq -R . | jq -s .)
+
+  echo "Changed lines for $file: $line_numbers_array"
+
+  # Define the output path for the scanner report in JSON format
+  output_file="scanner-reports/scanner-report-${clean_file}.json"
+
+  # Run the SFDX scanner on the file and generate the report in JSON format
+  sf scanner:run --target "$file" --format "json" --outfile "$output_file"
 
   # Ensure that the scanner report was generated
   if [ ! -f "$output_file" ]; then
@@ -34,46 +54,50 @@ while IFS= read -r file; do
     continue
   fi
 
-  # Filter the CSV scanner report for rows where the "Line" field equals "70"
-  echo "Filtering scanner report for $file for Line '70'..."
-  awk -F, 'NR == 1 || $4 == "70"' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.csv"
+  # Filter the JSON scanner report based on the dynamically extracted changed line numbers
+  echo "Filtering scanner report for $file for changed lines: $line_numbers_array"
+  jq --argjson lines "$line_numbers_array" '
+    [.[] | 
+      {engine, fileName, violations: [.violations[] | select(.line as $ln | $lines | index($ln) != null)]} | 
+      select(.violations | length > 0)]
+  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.json"
 
   # If no filtered report is found, skip
-  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.csv" ]; then
-    echo "No issues found for line '70' in $file"
+  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.json" ]; then
+    echo "No issues found for changed lines in $file"
     continue
   fi
 
-  echo "Filtered scanner report for $file (Line '70'):"
-  cat "scanner-reports/filtered-scanner-report-${clean_file}.csv"
+  echo "Filtered scanner report for $file (Changed lines):"
+  cat "scanner-reports/filtered-scanner-report-${clean_file}.json"
 
 done <<< "$changed_files"
 
 # Check if any filtered reports were generated
-filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.csv 2> /dev/null)
+filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.json 2> /dev/null)
 if [ -z "$filtered_reports" ]; then
-  echo "No vulnerabilities found on line '70'. Proceeding with commit."
+  echo "No vulnerabilities found on the changed lines. Proceeding with commit."
   exit 0
 fi
 
 # Combine all filtered reports into one final report (optional)
-final_report="scanner-reports/final-filtered-scanner-report.csv"
-cat scanner-reports/filtered-scanner-report-*.csv > "$final_report"
+final_report="scanner-reports/final-filtered-scanner-report.json"
+jq -s 'add' scanner-reports/filtered-scanner-report-*.json > "$final_report"
 
-echo "Final filtered scanner report (Line '70'):"
+echo "Final filtered scanner report (Changed lines):"
 cat "$final_report"
 
 # Parse the final filtered scanner report and check for severity 3 issues
-severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count+0}' "$final_report")
+severity_fail_count=$(jq '[.[] | select(.violations[]?.severity == 3)] | length' "$final_report")
 
 # Output the fail count for debugging
-echo "Severity Fail Count (Line '70'): $severity_fail_count"
+echo "Severity Fail Count (Changed lines): $severity_fail_count"
 
 # Block commit if there are severity 3 issues
 if [ "$severity_fail_count" -gt 0 ]; then
-  echo "Blocking your commit due to vulnerabilities found with severity 3 on Line '70'."
+  echo "Blocking your commit due to vulnerabilities found with severity 3 on changed lines."
   exit 1
 else
-  echo "No vulnerabilities with severity 3 found on Line '70'. Proceeding with commit."
+  echo "No vulnerabilities with severity 3 found on changed lines. Proceeding with commit."
   exit 0
 fi
