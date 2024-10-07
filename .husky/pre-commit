@@ -1,0 +1,80 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Install necessary dependencies
+npm install @salesforce/cli --global
+sf plugins install @salesforce/sfdx-scanner
+
+# Check for unstaged changes and get changed files/lines
+git diff --unified=0 --cached > changes.diff || { echo "Failed to get git diff"; exit 1; }
+
+if [ ! -s changes.diff ]; then
+  echo "No changes detected."
+  exit 0
+fi
+
+# Process only .cls and .lwc files
+awk '
+  BEGIN {valid_file=0} 
+  /^diff --git/ {valid_file=0} 
+  /\.cls$|\.lwc$/ {valid_file=1} 
+  /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  
+  /^[+][^+]/ && valid_file {print "Line", start + line_offset++, ":", substr($0, 2)}  
+' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
+
+if [ ! -s changed_cls_lwc_lines.txt ]; then
+  echo "No changes detected in .cls or .lwc files."
+  exit 0
+fi
+
+cat changed_cls_lwc_lines.txt
+
+# Run SFDX Scanner on changed files (only once per file)
+files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+if [ -z "$files" ]; then
+  echo "No changed .cls or .lwc files detected."
+  exit 0
+fi
+
+for file in $files; do
+  echo "Running SFDX Scanner on file: $file"
+  sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed or no issues found for $file, continuing with other files."; }
+done
+
+# Filter Scanner Report (you can apply line filtering logic if necessary)
+if [ -f scanner-report.csv ]; then
+  current_line_number_list=$(cat line_numbers.txt)
+  current_line_number_list=$(echo $current_line_number_list | xargs)
+  echo "Filtering scanner report for the following line numbers: $current_line_number_list"
+  awk -v lines="$current_line_number_list" '
+  BEGIN {
+    FPAT = "([^,]+)|(\"[^\"]+\")";
+    split(lines, arr, " ");
+    for (i in arr) {
+      valid[arr[i]] = 1;
+    }
+  }
+  NR == 1 || (substr($4, 2, length($4)-2) in valid) {
+    print $0;
+  }
+  ' scanner-report.csv > filtered-scanner-report.csv
+  cat filtered-scanner-report.csv
+else
+  echo "No scanner report generated."
+  exit 0
+fi
+
+# Block commit if severity 3 vulnerabilities are found
+if [ -f filtered-scanner-report.csv ]; then
+  severity_fail_count=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' filtered-scanner-report.csv)
+  echo "Severity 3 issues count: $severity_fail_count"
+  if [ "$severity_fail_count" -gt 0 ]; then
+    echo "Blocking your commit due to severity 3 vulnerabilities found."
+    exit 1
+  else
+    echo "No severity 3 vulnerabilities found. Proceeding with commit."
+  fi
+else
+  echo "No filtered scanner report found."
+  exit 0
+fi
