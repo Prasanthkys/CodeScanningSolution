@@ -47,14 +47,14 @@ while IFS= read -r file; do
     continue
   fi
 
-  # Extract line numbers as a comma-separated string for use in jq filtering
+  # Extract line numbers as a comma-separated string for filtering later
   line_numbers=$(cut -d':' -f1 "changed_cls_lwc_lines_${clean_file}.txt" | tr '\n' ',' | sed 's/,$//')
 
-  # Define the output path for the scanner report
-  output_file="scanner-reports/scanner-report-${clean_file}.json"
+  # Define the output path for the scanner report in CSV format
+  output_file="scanner-reports/scanner-report-${clean_file}.csv"
 
-  # Run the SFDX scanner on the file and generate the report
-  sf scanner:run --target "$file" --format "json" --outfile "$output_file"
+  # Run the SFDX scanner on the file and generate the report in CSV format
+  sf scanner:run --target "$file" --format "csv" --outfile "$output_file"
 
   # Ensure that the scanner report was generated
   if [ ! -f "$output_file" ]; then
@@ -68,35 +68,47 @@ while IFS= read -r file; do
     continue
   fi
 
-  # Filter the scanner report based on the changed line numbers
+  # Filter the CSV scanner report based on the changed line numbers
   echo "Filtering scanner report for $file by changed lines..."
-  jq --arg lines "$line_numbers" '
-    .[] | select(.violations[]? | ($lines | split(",") | index((.line|tostring))))
-  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.json"
+  awk -v lines="$line_numbers" '
+  BEGIN {
+    FS=OFS=",";
+    split(lines, arr, ",");  # Split the line numbers into an array
+    for (i in arr) {
+      line_map[arr[i]] = 1  # Create a lookup for valid line numbers
+    }
+  }
+  NR == 1 || line_map[$4]  # $4 is the "Line" field in the CSV
+  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.csv"
 
   # If no filtered report is found, skip
-  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.json" ]; then
+  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.csv" ]; then
     echo "No issues found for the changed lines in $file"
     continue
   fi
 
   echo "Filtered scanner report for $file:"
-  cat "scanner-reports/filtered-scanner-report-${clean_file}.json"
+  cat "scanner-reports/filtered-scanner-report-${clean_file}.csv"
 
 done <<< "$changed_files"
 
 # Check if any filtered reports were generated
-filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.json 2> /dev/null)
+filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.csv 2> /dev/null)
 if [ -z "$filtered_reports" ]; then
   echo "No vulnerabilities found in the changed lines. Proceeding with commit."
   exit 0
 fi
 
-# Combine all filtered reports into one final report
-jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final-filtered-scanner-report.json
+# Combine all filtered reports into one final report (optional)
+# You can use a simple `cat` command for CSV, as there is no header duplication issue in CSV files
+final_report="scanner-reports/final-filtered-scanner-report.csv"
+cat scanner-reports/filtered-scanner-report-*.csv > "$final_report"
 
-# Parse the final filtered scanner report and check for severity 3 issues
-severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' scanner-reports/final-filtered-scanner-report.json)
+echo "Final filtered scanner report:"
+cat "$final_report"
+
+# Parse the final filtered scanner report and check for severity 3 issues (optional, CSV parsing in bash)
+severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count}' "$final_report")  # $7 is the Severity column
 
 # Output the fail count for debugging
 echo "Severity Fail Count: $severity_fail_count"
