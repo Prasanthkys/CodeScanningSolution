@@ -15,7 +15,7 @@ then
     npm install husky --save-dev
     npx husky install
 else
-    echo "Husky is already installed Successfully."
+    echo "Husky is already installed successfully."
 fi
 
 # Get the list of changed Apex (.cls) or LWC files
@@ -40,16 +40,17 @@ while IFS= read -r file; do
   # Remove leading slashes to make it compatible with file path
   clean_file=$(echo "$file" | sed 's#^\(\./\|/##')
 
-  # Extract line numbers from the diff for this file
-  changed_lines=$(awk -v file="$file" '
-    BEGIN {inside=0}
-    /^diff --git/ {inside=0}
-    $0 ~ file {inside=1}
-    inside && /^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); print start}
-  ' changes.diff)
+  # Extract the changed lines and corresponding line numbers
+  awk '
+    BEGIN {valid_file=0} 
+    /^diff --git/ {valid_file=0} 
+    $0 ~ /\.cls$|\.lwc$/ {valid_file=1} 
+    /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  
+    /^[+][^+]/ && valid_file {print start + line_offset++, ":", substr($0, 2)}  
+  ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
 
-  # If no line numbers were found for this file, skip it
-  if [ -z "$changed_lines" ]; then
+  # If no lines are found for this file, skip it
+  if [ ! -s changed_cls_lwc_lines.txt ]; then
     echo "No changed lines found in $file"
     continue
   fi
@@ -65,6 +66,9 @@ while IFS= read -r file; do
     echo "Scanner report for $file not found."
     continue
   fi
+
+  # Read the changed lines from the file for filtering
+  changed_lines=$(cut -d':' -f1 changed_cls_lwc_lines.txt | tr '\n' ' ')
 
   # Filter the scanner report based on the changed lines
   echo "Filtering scanner report for $file by changed lines..."
