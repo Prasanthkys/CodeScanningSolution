@@ -16,8 +16,7 @@ public with sharing class AccountInsertClass {
         if (Schema.sObjectType.Account.fields.Description.isUpdateable()) {
           acc.Description = 'Happy Welcome';
           acc.Rating = 'Hot';
-          acc.Industry = 'Agriculture';
-          System.debug('Hello Hi');
+          acc.Industry = 'Corporate';
         }
       }
       insert accList;
@@ -48,7 +47,6 @@ public with sharing class AccountInsertClass {
       }
       if (oppList.size() > 0) {
         insert oppList;
-        System.debug('Hello Bava');
       }
     } else {
       throw new CustomException(
