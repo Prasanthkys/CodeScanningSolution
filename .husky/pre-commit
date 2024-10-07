@@ -27,12 +27,18 @@ if [ -z "$changed_files" ]; then
   exit 0
 fi
 
+# Create a directory for scanner reports if it doesn't exist
+mkdir -p scanner-reports
+
 # Extract the changed lines and corresponding line numbers from the diff for each file
 git diff --unified=0 --cached > changes.diff
 
 # Loop through each changed file
 while IFS= read -r file; do
   echo "Processing file: $file"
+
+  # Remove leading slashes to make it compatible with file path
+  clean_file=$(echo "$file" | sed 's#^\(\./\|/##')
 
   # Extract line numbers from the diff for this file
   changed_lines=$(awk -v file="$file" '
@@ -48,11 +54,14 @@ while IFS= read -r file; do
     continue
   fi
 
+  # Define the output path for the scanner report
+  output_file="scanner-reports/scanner-report-${clean_file}.json"
+
   # Run the SFDX scanner on the file and generate the report
-  sf scanner:run --target "$file" --format "json" --outfile "scanner-report-$file.json"
+  sf scanner:run --target "$file" --format "json" --outfile "$output_file"
 
   # Ensure that the scanner report was generated
-  if [ ! -f "scanner-report-$file.json" ]; then
+  if [ ! -f "$output_file" ]; then
     echo "Scanner report for $file not found."
     continue
   fi
@@ -61,31 +70,31 @@ while IFS= read -r file; do
   echo "Filtering scanner report for $file by changed lines..."
   jq --argfile lines <(echo "$changed_lines" | jq -R . | jq -s .) '
     .[] | select(.violations[]?.line as $line | $lines | index($line) != null)
-  ' "scanner-report-$file.json" > "filtered-scanner-report-$file.json"
+  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.json"
 
   # If no filtered report is found, skip
-  if [ ! -s "filtered-scanner-report-$file.json" ]; then
+  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.json" ]; then
     echo "No issues found for the changed lines in $file"
     continue
   fi
 
   echo "Filtered scanner report for $file:"
-  cat "filtered-scanner-report-$file.json"
+  cat "scanner-reports/filtered-scanner-report-${clean_file}.json"
 
 done <<< "$changed_files"
 
 # Check if any filtered reports were generated
-filtered_reports=$(ls filtered-scanner-report-*.json 2> /dev/null)
+filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.json 2> /dev/null)
 if [ -z "$filtered_reports" ]; then
   echo "No vulnerabilities found in the changed lines. Proceeding with commit."
   exit 0
 fi
 
 # Combine all filtered reports into one final report
-jq -s '.' filtered-scanner-report-*.json > final-filtered-scanner-report.json
+jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final-filtered-scanner-report.json
 
 # Parse the final filtered scanner report and check for severity 3 issues
-severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' final-filtered-scanner-report.json)
+severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' scanner-reports/final-filtered-scanner-report.json)
 
 # Output the fail count for debugging
 echo "Severity Fail Count: $severity_fail_count"
