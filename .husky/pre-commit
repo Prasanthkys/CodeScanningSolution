@@ -110,7 +110,7 @@ echo "Final filtered scanner report:"
 cat "$final_report"
 
 # Parse the final filtered scanner report and check for severity 3 issues (optional, CSV parsing in bash)
-severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count}' "$final_report")  # $2 is the Severity column
+severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count+0}' "$final_report")  # $2 is the Severity column
 
 # Output the fail count for debugging
 echo "Severity Fail Count: $severity_fail_count"
