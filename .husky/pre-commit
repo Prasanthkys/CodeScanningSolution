@@ -33,14 +33,20 @@ done
 echo "Filtering scanner report for changed lines..."
 
 # Extract the changed line numbers for each file and filter the scanner report
-while IFS= read -r file; do
+for file in $files; do
   echo "Processing file: $file"
-  line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
+  line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk -F' ' '{print $2}' | cut -d',' -f1 | sed 's/-//')
+  
+  # Validate if line numbers were captured
+  if [ -z "$line_numbers" ]; then
+    echo "No valid line numbers for file: $file"
+    continue
+  fi
+
+  echo "Filtering results for file: $file with changed lines: $line_numbers"
   
   if [ -f scanner-report.csv ]; then
-    echo "Filtering results for file: $file with changed lines: $line_numbers"
-    
-    # Ensure the line numbers are captured correctly
+    # Filter scanner report for the relevant line numbers
     awk -v lines="$line_numbers" '
     BEGIN {
       FPAT = "([^,]+)|(\"[^\"]+\")";
@@ -58,14 +64,13 @@ while IFS= read -r file; do
   else
     echo "No scanner report found for $file."
   fi
-done <<< "$files"
+done
 
 # Step 4: Block commit if severity violations are found
 if [ -f filtered-scanner-report.csv ]; then
   severity_fail_count=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' filtered-scanner-report.csv)
   echo "Severity 3 issues count: $severity_fail_count"
 
-  # Fix to prevent the integer expression error
   if [ -n "$severity_fail_count" ] && [ "$severity_fail_count" -gt 0 ]; then
     echo "Blocking your commit due to severity 3 vulnerabilities found."
     exit 1
