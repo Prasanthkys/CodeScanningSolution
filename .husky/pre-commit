@@ -13,7 +13,7 @@ fi
 mkdir -p scanner-reports
 
 # Extract the changed lines and corresponding line numbers from the diff for each file
-git diff --unified=0 --cached > changes.diff
+git diff --cached --unified=0 > changes.diff
 
 # Loop through each changed file
 while IFS= read -r file; do
@@ -22,14 +22,14 @@ while IFS= read -r file; do
   # Clean file paths to make them compatible with filenames
   clean_file=$(basename "$file")
 
-  # Extract only the changed line numbers for the file
+  # Extract only the added or modified lines for .cls and .lwc files
   line_numbers=$(awk -v file="$file" '
     BEGIN {inside=0; start_line=0; line_offset=0}
     /^diff --git/ {inside=0}
     $0 ~ file {inside=1}
-    inside && /^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start_line = substr(arr[2], 2); line_offset=0; next}
-    inside && /^[+][^+]/ {print start_line + line_offset++}
-  ' changes.diff)
+    inside && /^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start_line = substr(arr[2], 2); next}
+    inside && /^[+][^+]/ {line_offset++; print start_line + line_offset}
+  ' changes.diff | uniq)
 
   # If no changed lines are found for this file, skip it
   if [ -z "$line_numbers" ]; then
@@ -58,7 +58,7 @@ while IFS= read -r file; do
   echo "Filtering scanner report for $file for changed lines: $line_numbers_array"
   jq --argjson lines "$line_numbers_array" '
     [.[] | 
-      {engine, fileName, violations: [.violations[] | select(.line as $ln | $lines | index($ln) != null)]} | 
+      {engine, fileName, violations: [.violations[] | select(.line as $ln | ($lines | map(tonumber) | index($ln) != null))]} | 
       select(.violations | length > 0)]
   ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.json"
 

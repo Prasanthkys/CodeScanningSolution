@@ -1,0 +1,1293 @@
+diff --git a/.husky/pre-commit b/.husky/pre-commit
+index daf61a1..3603bae 100644
+--- a/.husky/pre-commit
++++ b/.husky/pre-commit
+@@ -16 +16 @@ mkdir -p scanner-reports
+-git diff --unified=0 --cached > changes.diff
++git diff --cached --unified=0 > changes.diff
+@@ -25 +25 @@ while IFS= read -r file; do
+-  # Extract only the changed line numbers for the file
++  # Extract only the added or modified lines for .cls and .lwc files
+@@ -32 +32 @@ while IFS= read -r file; do
+-  ' changes.diff)
++  ' changes.diff | uniq)
+@@ -61 +61 @@ while IFS= read -r file; do
+-      {engine, fileName, violations: [.violations[] | select(.line as $ln | $lines | index($ln) != null)]} | 
++      {engine, fileName, violations: [.violations[] | select(.line as $ln | ($lines | map(tonumber) | index($ln) != null))]} | 
+diff --git a/changes.diff b/changes.diff
+new file mode 100644
+index 0000000..a6452b3
+--- /dev/null
++++ b/changes.diff
+@@ -0,0 +1,1262 @@
++diff --git a/.husky/pre-commit b/.husky/pre-commit
++index daf61a1..3603bae 100644
++--- a/.husky/pre-commit
+++++ b/.husky/pre-commit
++@@ -16 +16 @@ mkdir -p scanner-reports
++-git diff --unified=0 --cached > changes.diff
+++git diff --cached --unified=0 > changes.diff
++@@ -25 +25 @@ while IFS= read -r file; do
++-  # Extract only the changed line numbers for the file
+++  # Extract only the added or modified lines for .cls and .lwc files
++@@ -32 +32 @@ while IFS= read -r file; do
++-  ' changes.diff)
+++  ' changes.diff | uniq)
++@@ -61 +61 @@ while IFS= read -r file; do
++-      {engine, fileName, violations: [.violations[] | select(.line as $ln | $lines | index($ln) != null)]} | 
+++      {engine, fileName, violations: [.violations[] | select(.line as $ln | ($lines | map(tonumber) | index($ln) != null))]} | 
++diff --git a/changes.diff b/changes.diff
++new file mode 100644
++index 0000000..1831031
++--- /dev/null
+++++ b/changes.diff
++@@ -0,0 +1,1158 @@
+++diff --git a/.husky/pre-commit b/.husky/pre-commit
+++index daf61a1..d6ae40b 100644
+++--- a/.husky/pre-commit
++++++ b/.husky/pre-commit
+++@@ -25 +25 @@ while IFS= read -r file; do
+++-  # Extract only the changed line numbers for the file
++++  # Extract only the added or modified lines for .cls and .lwc files
+++@@ -32 +32 @@ while IFS= read -r file; do
+++-  ' changes.diff)
++++  ' changes.diff | uniq)
+++@@ -61 +61 @@ while IFS= read -r file; do
+++-      {engine, fileName, violations: [.violations[] | select(.line as $ln | $lines | index($ln) != null)]} | 
++++      {engine, fileName, violations: [.violations[] | select(.line as $ln | ($lines | map(tonumber) | index($ln) != null))]} | 
+++diff --git a/changes.diff b/changes.diff
+++new file mode 100644
+++index 0000000..47b6c1c
+++--- /dev/null
++++++ b/changes.diff
+++@@ -0,0 +1,1078 @@
++++diff --git a/.husky/pre-commit b/.husky/pre-commit
++++index daf61a1..d6ae40b 100644
++++--- a/.husky/pre-commit
+++++++ b/.husky/pre-commit
++++@@ -25 +25 @@ while IFS= read -r file; do
++++-  # Extract only the changed line numbers for the file
+++++  # Extract only the added or modified lines for .cls and .lwc files
++++@@ -32 +32 @@ while IFS= read -r file; do
++++-  ' changes.diff)
+++++  ' changes.diff | uniq)
++++@@ -61 +61 @@ while IFS= read -r file; do
++++-      {engine, fileName, violations: [.violations[] | select(.line as $ln | $lines | index($ln) != null)]} | 
+++++      {engine, fileName, violations: [.violations[] | select(.line as $ln | ($lines | map(tonumber) | index($ln) != null))]} | 
++++diff --git a/changes.diff b/changes.diff
++++new file mode 100644
++++index 0000000..8cd4f1a
++++--- /dev/null
+++++++ b/changes.diff
++++@@ -0,0 +1,977 @@
+++++diff --git a/.husky/pre-commit b/.husky/pre-commit
+++++index daf61a1..73bb862 100644
+++++--- a/.husky/pre-commit
++++++++ b/.husky/pre-commit
+++++@@ -61 +61 @@ while IFS= read -r file; do
+++++-      {engine, fileName, violations: [.violations[] | select(.line as $ln | $lines | index($ln) != null)]} | 
++++++      {engine, fileName, violations: [.violations[] | select(.line as $ln | ($lines | map(tonumber) | index($ln) != null))]} | 
+++++diff --git a/changes.diff b/changes.diff
+++++new file mode 100644
+++++index 0000000..f9d24dc
+++++--- /dev/null
++++++++ b/changes.diff
+++++@@ -0,0 +1,876 @@
++++++diff --git a/.husky/pre-commit b/.husky/pre-commit
++++++index 19cfdbc..daf61a1 100644
++++++--- a/.husky/pre-commit
+++++++++ b/.husky/pre-commit
++++++@@ -25,2 +25,22 @@ while IFS= read -r file; do
++++++-  # Define the output path for the scanner report in CSV format
++++++-  output_file="scanner-reports/scanner-report-${clean_file}.csv"
+++++++  # Extract only the changed line numbers for the file
+++++++  line_numbers=$(awk -v file="$file" '
+++++++    BEGIN {inside=0; start_line=0; line_offset=0}
+++++++    /^diff --git/ {inside=0}
+++++++    $0 ~ file {inside=1}
+++++++    inside && /^@@/ {split($0, arr, " "); gsub(",", "", arr[2]); start_line = substr(arr[2], 2); line_offset=0; next}
+++++++    inside && /^[+][^+]/ {print start_line + line_offset++}
+++++++  ' changes.diff)
+++++++
+++++++  # If no changed lines are found for this file, skip it
+++++++  if [ -z "$line_numbers" ]; then
+++++++    echo "No changed lines found in $file"
+++++++    continue
+++++++  fi
+++++++
+++++++  # Convert the line numbers to a JSON array format for jq filtering
+++++++  line_numbers_array=$(echo "$line_numbers" | jq -R . | jq -s .)
+++++++
+++++++  echo "Changed lines for $file: $line_numbers_array"
+++++++
+++++++  # Define the output path for the scanner report in JSON format
+++++++  output_file="scanner-reports/scanner-report-${clean_file}.json"
++++++@@ -28,2 +48,2 @@ while IFS= read -r file; do
++++++-  # Run the SFDX scanner on the file and generate the report in CSV format
++++++-  sf scanner:run --target "$file" --format "csv" --outfile "$output_file"
+++++++  # Run the SFDX scanner on the file and generate the report in JSON format
+++++++  sf scanner:run --target "$file" --format "json" --outfile "$output_file"
++++++@@ -37,3 +57,7 @@ while IFS= read -r file; do
++++++-  # Filter the CSV scanner report for rows where the "Line" field equals "70"
++++++-  echo "Filtering scanner report for $file for Line '70'..."
++++++-  awk -F, 'NR == 1 || $4 == "70"' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.csv"
+++++++  # Filter the JSON scanner report based on the dynamically extracted changed line numbers
+++++++  echo "Filtering scanner report for $file for changed lines: $line_numbers_array"
+++++++  jq --argjson lines "$line_numbers_array" '
+++++++    [.[] | 
+++++++      {engine, fileName, violations: [.violations[] | select(.line as $ln | $lines | index($ln) != null)]} | 
+++++++      select(.violations | length > 0)]
+++++++  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.json"
++++++@@ -42,2 +66,2 @@ while IFS= read -r file; do
++++++-  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.csv" ]; then
++++++-    echo "No issues found for line '70' in $file"
+++++++  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.json" ]; then
+++++++    echo "No issues found for changed lines in $file"
++++++@@ -47,2 +71,2 @@ while IFS= read -r file; do
++++++-  echo "Filtered scanner report for $file (Line '70'):"
++++++-  cat "scanner-reports/filtered-scanner-report-${clean_file}.csv"
+++++++  echo "Filtered scanner report for $file (Changed lines):"
+++++++  cat "scanner-reports/filtered-scanner-report-${clean_file}.json"
++++++@@ -53 +77 @@ done <<< "$changed_files"
++++++-filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.csv 2> /dev/null)
+++++++filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.json 2> /dev/null)
++++++@@ -55 +79 @@ if [ -z "$filtered_reports" ]; then
++++++-  echo "No vulnerabilities found on line '70'. Proceeding with commit."
+++++++  echo "No vulnerabilities found on the changed lines. Proceeding with commit."
++++++@@ -60,2 +84,2 @@ fi
++++++-final_report="scanner-reports/final-filtered-scanner-report.csv"
++++++-cat scanner-reports/filtered-scanner-report-*.csv > "$final_report"
+++++++final_report="scanner-reports/final-filtered-scanner-report.json"
+++++++jq -s 'add' scanner-reports/filtered-scanner-report-*.json > "$final_report"
++++++@@ -63 +87 @@ cat scanner-reports/filtered-scanner-report-*.csv > "$final_report"
++++++-echo "Final filtered scanner report (Line '70'):"
+++++++echo "Final filtered scanner report (Changed lines):"
++++++@@ -67 +91 @@ cat "$final_report"
++++++-severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count+0}' "$final_report")
+++++++severity_fail_count=$(jq '[.[] | select(.violations[]?.severity == 3)] | length' "$final_report")
++++++@@ -70 +94 @@ severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count+0}' "$final_re
++++++-echo "Severity Fail Count (Line '70'): $severity_fail_count"
+++++++echo "Severity Fail Count (Changed lines): $severity_fail_count"
++++++@@ -74 +98 @@ if [ "$severity_fail_count" -gt 0 ]; then
++++++-  echo "Blocking your commit due to vulnerabilities found with severity 3 on Line '70'."
+++++++  echo "Blocking your commit due to vulnerabilities found with severity 3 on changed lines."
++++++@@ -77 +101 @@ else
++++++-  echo "No vulnerabilities with severity 3 found on Line '70'. Proceeding with commit."
+++++++  echo "No vulnerabilities with severity 3 found on changed lines. Proceeding with commit."
++++++diff --git a/changed_cls_lwc_lines_Account_Insert.cls.txt b/changed_cls_lwc_lines_Account_Insert.cls.txt
++++++deleted file mode 100644
++++++index 9d692ac..0000000
++++++--- a/changed_cls_lwc_lines_Account_Insert.cls.txt
+++++++++ /dev/null
++++++@@ -1,24 +0,0 @@
++++++-0
++++++-1
++++++-2
++++++-3
++++++-4
++++++-5
++++++-60
++++++-642
++++++-643
++++++-644
++++++-645
++++++-646
++++++-647
++++++-648
++++++-649
++++++-650
++++++-651
++++++-652
++++++-653
++++++-654
++++++-655
++++++-656
++++++-657
++++++-70
++++++diff --git a/changes.diff b/changes.diff
++++++deleted file mode 100644
++++++index 61d162d..0000000
++++++--- a/changes.diff
+++++++++ /dev/null
++++++@@ -1,647 +0,0 @@
++++++-diff --git a/.husky/pre-commit b/.husky/pre-commit
++++++-index 5b262e4..8c05f52 100644
++++++---- a/.husky/pre-commit
++++++-+++ b/.husky/pre-commit
++++++-@@ -113 +113 @@ cat "$final_report"
++++++--severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count}' "$final_report")  # $2 is the Severity column
++++++-+severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count+0}' "$final_report")  # $2 is the Severity column
++++++-diff --git a/changes.diff b/changes.diff
++++++-index 9a218e6..4fe1995 100644
++++++---- a/changes.diff
++++++-+++ b/changes.diff
++++++-@@ -2 +2 @@ diff --git a/.husky/pre-commit b/.husky/pre-commit
++++++--index aa6762f..586962b 100644
++++++-+index 586962b..5b262e4 100644
++++++-@@ -5,15 +5,16 @@ index aa6762f..586962b 100644
++++++--@@ -41 +41 @@ while IFS= read -r file; do
++++++---    inside && /^[+][^+]/ {print start_line + line_offset++, ":", substr($0, 2)}
++++++--+    inside && /^[+][^+]/ {print start_line + line_offset++}
++++++--@@ -50,2 +50,2 @@ while IFS= read -r file; do
++++++---  # Extract line numbers as a comma-separated string for filtering later
++++++---  line_numbers=$(cut -d':' -f1 "changed_cls_lwc_lines_${clean_file}.txt" | tr '\n' ',' | sed 's/,$//')
++++++--+  # Extract line numbers as an array for filtering later
++++++--+  mapfile -t line_numbers < "changed_cls_lwc_lines_${clean_file}.txt"
++++++--@@ -66 +66 @@ while IFS= read -r file; do
++++++---  if [ -z "$line_numbers" ]; then
++++++--+  if [ ${#line_numbers[@]} -eq 0 ]; then
++++++--@@ -70,0 +71,4 @@ while IFS= read -r file; do
++++++--+  # Convert the array of line numbers into a format that can be used by awk
++++++--+  lines_for_filter=$(printf ",%s" "${line_numbers[@]}")
++++++--+  lines_for_filter="${lines_for_filter:1}"
++++++-+@@ -35,2 +35,2 @@ while IFS= read -r file; do
++++++-+-  # Extract the actual changed lines and corresponding line numbers for the file
++++++-+-  awk -v file="$file" '
++++++-++  # Extract only the changed line numbers for the file
++++++-++  line_numbers=$(awk -v file="$file" '
++++++-+@@ -42 +42 @@ while IFS= read -r file; do
++++++-+-  ' changes.diff > "changed_cls_lwc_lines_${clean_file}.txt"
++++++-++  ' changes.diff)
++++++-+@@ -45 +45 @@ while IFS= read -r file; do
++++++-+-  if [ ! -s "changed_cls_lwc_lines_${clean_file}.txt" ]; then
++++++-++  if [ -z "$line_numbers" ]; then
++++++-+@@ -50,2 +50,4 @@ while IFS= read -r file; do
++++++-+-  # Extract line numbers as an array for filtering later
++++++-+-  mapfile -t line_numbers < "changed_cls_lwc_lines_${clean_file}.txt"
++++++-++  # Convert the line numbers to a comma-separated string for matching
++++++-++  line_numbers_string=$(echo "$line_numbers" | tr '\n' ',' | sed 's/,$//')
++++++-@@ -21,9 +22,14 @@ index aa6762f..586962b 100644
++++++--@@ -73 +77 @@ while IFS= read -r file; do
++++++---  awk -v lines="$line_numbers" '
++++++--+  awk -v lines="$lines_for_filter" '
++++++--@@ -81 +85 @@ while IFS= read -r file; do
++++++---  NR == 1 || ($4 in line_map)  # $4 is the "Line" field in the CSV, this line checks if it exists in the map
++++++--+  NR == 1 || (line_map[$4])  # $4 is the "Line" field in the CSV
++++++--@@ -111 +115 @@ cat "$final_report"
++++++---severity_fail_count=$(awk -F, '$7 == 3 {count++} END {print count}' "$final_report")  # $7 is the Severity column
++++++--+severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count}' "$final_report")  # $2 is the Severity column
++++++-++  echo "Changed lines for $file: $line_numbers_string"
++++++-+@@ -65,2 +67,2 @@ while IFS= read -r file; do
++++++-+-  # Ensure that line_numbers is not empty
++++++-+-  if [ ${#line_numbers[@]} -eq 0 ]; then
++++++-++  # Ensure that line_numbers_string is not empty
++++++-++  if [ -z "$line_numbers_string" ]; then
++++++-+@@ -71,4 +72,0 @@ while IFS= read -r file; do
++++++-+-  # Convert the array of line numbers into a format that can be used by awk
++++++-+-  lines_for_filter=$(printf ",%s" "${line_numbers[@]}")
++++++-+-  lines_for_filter="${lines_for_filter:1}"
++++++-+-
++++++-+@@ -77 +75 @@ while IFS= read -r file; do
++++++-+-  awk -v lines="$lines_for_filter" '
++++++-++  awk -v lines="$line_numbers_string" '
++++++-@@ -31 +37 @@ diff --git a/changed_cls_lwc_lines_Account_Insert.cls.txt b/changed_cls_lwc_line
++++++--index 0e43eee..a206584 100644
++++++-+index a206584..9d692ac 100644
++++++-@@ -34,8 +40,31 @@ index 0e43eee..a206584 100644
++++++--@@ -1 +1,6 @@
++++++---70 :           System.debug('Hi Hello');
++++++--+0 : diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/default/classes/Account_Insert.cls
++++++--+1 : index 1ec7a54..870d508 100644
++++++--+2 : --- a/force-app/main/default/classes/Account_Insert.cls
++++++--+3 : @@ -70 +70 @@ public with sharing class AccountInsertClass {
++++++--+4 : -          System.debug('Hi');
++++++--+70 :           System.debug('Hi');
++++++-+@@ -1,6 +1,24 @@
++++++-+-0 : diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/default/classes/Account_Insert.cls
++++++-+-1 : index 1ec7a54..870d508 100644
++++++-+-2 : --- a/force-app/main/default/classes/Account_Insert.cls
++++++-+-3 : @@ -70 +70 @@ public with sharing class AccountInsertClass {
++++++-+-4 : -          System.debug('Hi');
++++++-+-70 :           System.debug('Hi');
++++++-++0
++++++-++1
++++++-++2
++++++-++3
++++++-++4
++++++-++5
++++++-++60
++++++-++642
++++++-++643
++++++-++644
++++++-++645
++++++-++646
++++++-++647
++++++-++648
++++++-++649
++++++-++650
++++++-++651
++++++-++652
++++++-++653
++++++-++654
++++++-++655
++++++-++656
++++++-++657
++++++-++70
++++++-@@ -43 +72 @@ diff --git a/changes.diff b/changes.diff
++++++--index 760971b..3dfa538 100644
++++++-+index 3dfa538..9a218e6 100644
++++++-@@ -47,177 +76,338 @@ index 760971b..3dfa538 100644
++++++---index 255a037..525d43a 100644
++++++--+index 525d43a..aa6762f 100644
++++++--@@ -5,54 +5,87 @@ index 255a037..525d43a 100644
++++++---@@ -50 +50 @@ while IFS= read -r file; do
++++++----  # Extract line numbers as a comma-separated string for use in jq filtering
++++++---+  # Extract line numbers as a comma-separated string for filtering later
++++++---@@ -53,2 +53,2 @@ while IFS= read -r file; do
++++++----  # Define the output path for the scanner report
++++++----  output_file="scanner-reports/scanner-report-${clean_file}.json"
++++++---+  # Define the output path for the scanner report in CSV format
++++++---+  output_file="scanner-reports/scanner-report-${clean_file}.csv"
++++++---@@ -56,2 +56,2 @@ while IFS= read -r file; do
++++++----  # Run the SFDX scanner on the file and generate the report
++++++----  sf scanner:run --target "$file" --format "json" --outfile "$output_file"
++++++---+  # Run the SFDX scanner on the file and generate the report in CSV format
++++++---+  sf scanner:run --target "$file" --format "csv" --outfile "$output_file"
++++++---@@ -71 +71 @@ while IFS= read -r file; do
++++++----  # Filter the scanner report based on the changed line numbers
++++++---+  # Filter the CSV scanner report based on the changed line numbers
++++++---@@ -73,3 +73,10 @@ while IFS= read -r file; do
++++++----  jq --arg lines "$line_numbers" '
++++++----    .[] | select(.violations[]? | ($lines | split(",") | index((.line|tostring))))
++++++----  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.json"
++++++---+  awk -v lines="$line_numbers" '
++++++---+  BEGIN {
++++++---+    FS=OFS=",";
++++++---+    split(lines, arr, ",");  # Split the line numbers into an array
++++++---+    for (i in arr) {
++++++---+      line_map[arr[i]] = 1  # Create a lookup for valid line numbers
++++++---+    }
++++++---+  }
++++++---+  NR == 1 || line_map[$4]  # $4 is the "Line" field in the CSV
++++++---+  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.csv"
++++++---@@ -78 +85 @@ while IFS= read -r file; do
++++++----  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.json" ]; then
++++++---+  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.csv" ]; then
++++++---@@ -84 +91 @@ while IFS= read -r file; do
++++++----  cat "scanner-reports/filtered-scanner-report-${clean_file}.json"
++++++---+  cat "scanner-reports/filtered-scanner-report-${clean_file}.csv"
++++++---@@ -89 +96 @@ done <<< "$changed_files"
++++++----filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.json 2> /dev/null)
++++++---+filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.csv 2> /dev/null)
++++++---@@ -95,2 +102,4 @@ fi
++++++----# Combine all filtered reports into one final report
++++++----jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final-filtered-scanner-report.json
++++++---+# Combine all filtered reports into one final report (optional)
++++++---+# You can use a simple `cat` command for CSV, as there is no header duplication issue in CSV files
++++++---+final_report="scanner-reports/final-filtered-scanner-report.csv"
++++++---+cat scanner-reports/filtered-scanner-report-*.csv > "$final_report"
++++++---@@ -98,2 +107,5 @@ jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final
++++++----# Parse the final filtered scanner report and check for severity 3 issues
++++++----severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' scanner-reports/final-filtered-scanner-report.json)
++++++---+echo "Final filtered scanner report:"
++++++---+cat "$final_report"
++++++---+
++++++---+# Parse the final filtered scanner report and check for severity 3 issues (optional, CSV parsing in bash)
++++++---+severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count}' "$final_report")  # $7 is the Severity column
++++++--+@@ -75 +75 @@ while IFS= read -r file; do
++++++--+-    FS=OFS=",";
++++++--++    FS=OFS=",";  # Define CSV format
++++++--+@@ -81 +81 @@ while IFS= read -r file; do
++++++--+-  NR == 1 || line_map[$4]  # $4 is the "Line" field in the CSV
++++++--++  NR == 1 || ($4 in line_map)  # $4 is the "Line" field in the CSV, this line checks if it exists in the map
++++++--+@@ -111 +111 @@ cat "$final_report"
++++++--+-severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count}' "$final_report")  # $7 is the Severity column
++++++--++severity_fail_count=$(awk -F, '$7 == 3 {count++} END {print count}' "$final_report")  # $7 is the Severity column
++++++--+diff --git a/changed_cls_lwc_lines_Account_Insert.cls.txt b/changed_cls_lwc_lines_Account_Insert.cls.txt
++++++--+new file mode 100644
++++++--+index 0000000..0e43eee
++++++--+--- /dev/null
++++++--++++ b/changed_cls_lwc_lines_Account_Insert.cls.txt
++++++--+@@ -0,0 +1 @@
++++++--++70 :           System.debug('Hi Hello');
++++++--+diff --git a/changes.diff b/changes.diff
++++++--+new file mode 100644
++++++--+index 0000000..760971b
++++++--+--- /dev/null
++++++--++++ b/changes.diff
++++++--+@@ -0,0 +1,65 @@
++++++--++diff --git a/.husky/pre-commit b/.husky/pre-commit
++++++--++index 255a037..525d43a 100644
++++++--++--- a/.husky/pre-commit
++++++--+++++ b/.husky/pre-commit
++++++--++@@ -50 +50 @@ while IFS= read -r file; do
++++++--++-  # Extract line numbers as a comma-separated string for use in jq filtering
++++++--+++  # Extract line numbers as a comma-separated string for filtering later
++++++--++@@ -53,2 +53,2 @@ while IFS= read -r file; do
++++++--++-  # Define the output path for the scanner report
++++++--++-  output_file="scanner-reports/scanner-report-${clean_file}.json"
++++++--+++  # Define the output path for the scanner report in CSV format
++++++--+++  output_file="scanner-reports/scanner-report-${clean_file}.csv"
++++++--++@@ -56,2 +56,2 @@ while IFS= read -r file; do
++++++--++-  # Run the SFDX scanner on the file and generate the report
++++++--++-  sf scanner:run --target "$file" --format "json" --outfile "$output_file"
++++++--+++  # Run the SFDX scanner on the file and generate the report in CSV format
++++++--+++  sf scanner:run --target "$file" --format "csv" --outfile "$output_file"
++++++--++@@ -71 +71 @@ while IFS= read -r file; do
++++++--++-  # Filter the scanner report based on the changed line numbers
++++++--+++  # Filter the CSV scanner report based on the changed line numbers
++++++--++@@ -73,3 +73,10 @@ while IFS= read -r file; do
++++++--++-  jq --arg lines "$line_numbers" '
++++++--++-    .[] | select(.violations[]? | ($lines | split(",") | index((.line|tostring))))
++++++--++-  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.json"
++++++--+++  awk -v lines="$line_numbers" '
++++++--+++  BEGIN {
++++++--+++    FS=OFS=",";
++++++--+++    split(lines, arr, ",");  # Split the line numbers into an array
++++++--+++    for (i in arr) {
++++++--+++      line_map[arr[i]] = 1  # Create a lookup for valid line numbers
++++++--+++    }
++++++--+++  }
++++++--+++  NR == 1 || line_map[$4]  # $4 is the "Line" field in the CSV
++++++--+++  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.csv"
++++++--++@@ -78 +85 @@ while IFS= read -r file; do
++++++--++-  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.json" ]; then
++++++--+++  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.csv" ]; then
++++++--++@@ -84 +91 @@ while IFS= read -r file; do
++++++--++-  cat "scanner-reports/filtered-scanner-report-${clean_file}.json"
++++++--+++  cat "scanner-reports/filtered-scanner-report-${clean_file}.csv"
++++++--++@@ -89 +96 @@ done <<< "$changed_files"
++++++--++-filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.json 2> /dev/null)
++++++--+++filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.csv 2> /dev/null)
++++++--++@@ -95,2 +102,4 @@ fi
++++++--++-# Combine all filtered reports into one final report
++++++--++-jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final-filtered-scanner-report.json
++++++--+++# Combine all filtered reports into one final report (optional)
++++++--+++# You can use a simple `cat` command for CSV, as there is no header duplication issue in CSV files
++++++--+++final_report="scanner-reports/final-filtered-scanner-report.csv"
++++++--+++cat scanner-reports/filtered-scanner-report-*.csv > "$final_report"
++++++--++@@ -98,2 +107,5 @@ jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final
++++++--++-# Parse the final filtered scanner report and check for severity 3 issues
++++++--++-severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' scanner-reports/final-filtered-scanner-report.json)
++++++--+++echo "Final filtered scanner report:"
++++++--+++cat "$final_report"
++++++--+++
++++++--+++# Parse the final filtered scanner report and check for severity 3 issues (optional, CSV parsing in bash)
++++++--+++severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count}' "$final_report")  # $7 is the Severity column
++++++--++diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/default/classes/Account_Insert.cls
++++++--++index 1ec7a54..870d508 100644
++++++--++--- a/force-app/main/default/classes/Account_Insert.cls
++++++--+++++ b/force-app/main/default/classes/Account_Insert.cls
++++++--++@@ -70 +70 @@ public with sharing class AccountInsertClass {
++++++--++-          System.debug('Hi');
++++++--+++          System.debug('Hi Hello');
++++++--@@ -60 +93 @@ diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/
++++++---index 1ec7a54..870d508 100644
++++++--+index 870d508..1ec7a54 100644
++++++--@@ -64,2 +97,27 @@ index 1ec7a54..870d508 100644
++++++----          System.debug('Hi');
++++++---+          System.debug('Hi Hello');
++++++--+-          System.debug('Hi Hello');
++++++--++          System.debug('Hi');
++++++--+diff --git a/scanner-reports/filtered-scanner-report-Account_Insert.cls.csv b/scanner-reports/filtered-scanner-report-Account_Insert.cls.csv
++++++--+new file mode 100644
++++++--+index 0000000..5a3a1ac
++++++--+--- /dev/null
++++++--++++ b/scanner-reports/filtered-scanner-report-Account_Insert.cls.csv
++++++--+@@ -0,0 +1 @@
++++++--++"Problem","Severity","File","Line","Column","Rule","Description","URL","Category","Engine"
++++++--+diff --git a/scanner-reports/final-filtered-scanner-report.csv b/scanner-reports/final-filtered-scanner-report.csv
++++++--+new file mode 100644
++++++--+index 0000000..5a3a1ac
++++++--+--- /dev/null
++++++--++++ b/scanner-reports/final-filtered-scanner-report.csv
++++++--+@@ -0,0 +1 @@
++++++--++"Problem","Severity","File","Line","Column","Rule","Description","URL","Category","Engine"
++++++--+diff --git a/scanner-reports/scanner-report-Account_Insert.cls.csv b/scanner-reports/scanner-report-Account_Insert.cls.csv
++++++--+new file mode 100644
++++++--+index 0000000..e1ef0f0
++++++--+--- /dev/null
++++++--++++ b/scanner-reports/scanner-report-Account_Insert.cls.csv
++++++--+@@ -0,0 +1,5 @@
++++++--++"Problem","Severity","File","Line","Column","Rule","Description","URL","Category","Engine"
++++++--++"1","3","C:\GitHub Folder\CodeScanningSolution\force-app\main\default\classes\Account_Insert.cls","20","11","AvoidDebugStatements","Avoid debug statements since they impact on performance","https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","Performance","pmd"
++++++--++"2","3","C:\GitHub Folder\CodeScanningSolution\force-app\main\default\classes\Account_Insert.cls","20","11","DebugsShouldUseLoggingLevel","Calls to System.debug should specify a logging level.","https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","Best Practices","pmd"
++++++--++"3","3","C:\GitHub Folder\CodeScanningSolution\force-app\main\default\classes\Account_Insert.cls","70","11","AvoidDebugStatements","Avoid debug statements since they impact on performance","https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","Performance","pmd"
++++++--++"4","3","C:\GitHub Folder\CodeScanningSolution\force-app\main\default\classes\Account_Insert.cls","70","11","DebugsShouldUseLoggingLevel","Calls to System.debug should specify a logging level.","https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","Best Practices","pmd"
++++++-+-index 525d43a..aa6762f 100644
++++++-++index aa6762f..586962b 100644
++++++-+@@ -5,9 +5,25 @@ index 525d43a..aa6762f 100644
++++++-+-@@ -75 +75 @@ while IFS= read -r file; do
++++++-+--    FS=OFS=",";
++++++-+-+    FS=OFS=",";  # Define CSV format
++++++-+-@@ -81 +81 @@ while IFS= read -r file; do
++++++-+--  NR == 1 || line_map[$4]  # $4 is the "Line" field in the CSV
++++++-+-+  NR == 1 || ($4 in line_map)  # $4 is the "Line" field in the CSV, this line checks if it exists in the map
++++++-+-@@ -111 +111 @@ cat "$final_report"
++++++-+--severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count}' "$final_report")  # $7 is the Severity column
++++++-+-+severity_fail_count=$(awk -F, '$7 == 3 {count++} END {print count}' "$final_report")  # $7 is the Severity column
++++++-++@@ -41 +41 @@ while IFS= read -r file; do
++++++-++-    inside && /^[+][^+]/ {print start_line + line_offset++, ":", substr($0, 2)}
++++++-+++    inside && /^[+][^+]/ {print start_line + line_offset++}
++++++-++@@ -50,2 +50,2 @@ while IFS= read -r file; do
++++++-++-  # Extract line numbers as a comma-separated string for filtering later
++++++-++-  line_numbers=$(cut -d':' -f1 "changed_cls_lwc_lines_${clean_file}.txt" | tr '\n' ',' | sed 's/,$//')
++++++-+++  # Extract line numbers as an array for filtering later
++++++-+++  mapfile -t line_numbers < "changed_cls_lwc_lines_${clean_file}.txt"
++++++-++@@ -66 +66 @@ while IFS= read -r file; do
++++++-++-  if [ -z "$line_numbers" ]; then
++++++-+++  if [ ${#line_numbers[@]} -eq 0 ]; then
++++++-++@@ -70,0 +71,4 @@ while IFS= read -r file; do
++++++-+++  # Convert the array of line numbers into a format that can be used by awk
++++++-+++  lines_for_filter=$(printf ",%s" "${line_numbers[@]}")
++++++-+++  lines_for_filter="${lines_for_filter:1}"
++++++-+++
++++++-++@@ -73 +77 @@ while IFS= read -r file; do
++++++-++-  awk -v lines="$line_numbers" '
++++++-+++  awk -v lines="$lines_for_filter" '
++++++-++@@ -81 +85 @@ while IFS= read -r file; do
++++++-++-  NR == 1 || ($4 in line_map)  # $4 is the "Line" field in the CSV, this line checks if it exists in the map
++++++-+++  NR == 1 || (line_map[$4])  # $4 is the "Line" field in the CSV
++++++-++@@ -111 +115 @@ cat "$final_report"
++++++-++-severity_fail_count=$(awk -F, '$7 == 3 {count++} END {print count}' "$final_report")  # $7 is the Severity column
++++++-+++severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count}' "$final_report")  # $2 is the Severity column
++++++-+@@ -15,3 +31,2 @@ diff --git a/changed_cls_lwc_lines_Account_Insert.cls.txt b/changed_cls_lwc_line
++++++-+-new file mode 100644
++++++-+-index 0000000..0e43eee
++++++-+---- /dev/null
++++++-++index 0e43eee..a206584 100644
++++++-++--- a/changed_cls_lwc_lines_Account_Insert.cls.txt
++++++-+@@ -19,2 +34,8 @@ index 0000000..0e43eee
++++++-+-@@ -0,0 +1 @@
++++++-+-+70 :           System.debug('Hi Hello');
++++++-++@@ -1 +1,6 @@
++++++-++-70 :           System.debug('Hi Hello');
++++++-+++0 : diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/default/classes/Account_Insert.cls
++++++-+++1 : index 1ec7a54..870d508 100644
++++++-+++2 : --- a/force-app/main/default/classes/Account_Insert.cls
++++++-+++3 : @@ -70 +70 @@ public with sharing class AccountInsertClass {
++++++-+++4 : -          System.debug('Hi');
++++++-+++70 :           System.debug('Hi');
++++++-+@@ -22,3 +43,2 @@ diff --git a/changes.diff b/changes.diff
++++++-+-new file mode 100644
++++++-+-index 0000000..760971b
++++++-+---- /dev/null
++++++-++index 760971b..3dfa538 100644
++++++-++--- a/changes.diff
++++++-+@@ -26,66 +46,178 @@ index 0000000..760971b
++++++-+-@@ -0,0 +1,65 @@
++++++-+-+diff --git a/.husky/pre-commit b/.husky/pre-commit
++++++-+-+index 255a037..525d43a 100644
++++++-+-+--- a/.husky/pre-commit
++++++-+-++++ b/.husky/pre-commit
++++++-+-+@@ -50 +50 @@ while IFS= read -r file; do
++++++-+-+-  # Extract line numbers as a comma-separated string for use in jq filtering
++++++-+-++  # Extract line numbers as a comma-separated string for filtering later
++++++-+-+@@ -53,2 +53,2 @@ while IFS= read -r file; do
++++++-+-+-  # Define the output path for the scanner report
++++++-+-+-  output_file="scanner-reports/scanner-report-${clean_file}.json"
++++++-+-++  # Define the output path for the scanner report in CSV format
++++++-+-++  output_file="scanner-reports/scanner-report-${clean_file}.csv"
++++++-+-+@@ -56,2 +56,2 @@ while IFS= read -r file; do
++++++-+-+-  # Run the SFDX scanner on the file and generate the report
++++++-+-+-  sf scanner:run --target "$file" --format "json" --outfile "$output_file"
++++++-+-++  # Run the SFDX scanner on the file and generate the report in CSV format
++++++-+-++  sf scanner:run --target "$file" --format "csv" --outfile "$output_file"
++++++-+-+@@ -71 +71 @@ while IFS= read -r file; do
++++++-+-+-  # Filter the scanner report based on the changed line numbers
++++++-+-++  # Filter the CSV scanner report based on the changed line numbers
++++++-+-+@@ -73,3 +73,10 @@ while IFS= read -r file; do
++++++-+-+-  jq --arg lines "$line_numbers" '
++++++-+-+-    .[] | select(.violations[]? | ($lines | split(",") | index((.line|tostring))))
++++++-+-+-  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.json"
++++++-+-++  awk -v lines="$line_numbers" '
++++++-+-++  BEGIN {
++++++-+-++    FS=OFS=",";
++++++-+-++    split(lines, arr, ",");  # Split the line numbers into an array
++++++-+-++    for (i in arr) {
++++++-+-++      line_map[arr[i]] = 1  # Create a lookup for valid line numbers
++++++-+-++    }
++++++-+-++  }
++++++-+-++  NR == 1 || line_map[$4]  # $4 is the "Line" field in the CSV
++++++-+-++  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.csv"
++++++-+-+@@ -78 +85 @@ while IFS= read -r file; do
++++++-+-+-  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.json" ]; then
++++++-+-++  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.csv" ]; then
++++++-+-+@@ -84 +91 @@ while IFS= read -r file; do
++++++-+-+-  cat "scanner-reports/filtered-scanner-report-${clean_file}.json"
++++++-+-++  cat "scanner-reports/filtered-scanner-report-${clean_file}.csv"
++++++-+-+@@ -89 +96 @@ done <<< "$changed_files"
++++++-+-+-filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.json 2> /dev/null)
++++++-+-++filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.csv 2> /dev/null)
++++++-+-+@@ -95,2 +102,4 @@ fi
++++++-+-+-# Combine all filtered reports into one final report
++++++-+-+-jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final-filtered-scanner-report.json
++++++-+-++# Combine all filtered reports into one final report (optional)
++++++-+-++# You can use a simple `cat` command for CSV, as there is no header duplication issue in CSV files
++++++-+-++final_report="scanner-reports/final-filtered-scanner-report.csv"
++++++-+-++cat scanner-reports/filtered-scanner-report-*.csv > "$final_report"
++++++-+-+@@ -98,2 +107,5 @@ jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final
++++++-+-+-# Parse the final filtered scanner report and check for severity 3 issues
++++++-+-+-severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' scanner-reports/final-filtered-scanner-report.json)
++++++-+-++echo "Final filtered scanner report:"
++++++-+-++cat "$final_report"
++++++-+-++
++++++-+-++# Parse the final filtered scanner report and check for severity 3 issues (optional, CSV parsing in bash)
++++++-+-++severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count}' "$final_report")  # $7 is the Severity column
++++++-+-+diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/default/classes/Account_Insert.cls
++++++-+-+index 1ec7a54..870d508 100644
++++++-+-+--- a/force-app/main/default/classes/Account_Insert.cls
++++++-+-++++ b/force-app/main/default/classes/Account_Insert.cls
++++++-+-+@@ -70 +70 @@ public with sharing class AccountInsertClass {
++++++-+-+-          System.debug('Hi');
++++++-+-++          System.debug('Hi Hello');
++++++-++@@ -2 +2 @@ diff --git a/.husky/pre-commit b/.husky/pre-commit
++++++-++-index 255a037..525d43a 100644
++++++-+++index 525d43a..aa6762f 100644
++++++-++@@ -5,54 +5,87 @@ index 255a037..525d43a 100644
++++++-++-@@ -50 +50 @@ while IFS= read -r file; do
++++++-++--  # Extract line numbers as a comma-separated string for use in jq filtering
++++++-++-+  # Extract line numbers as a comma-separated string for filtering later
++++++-++-@@ -53,2 +53,2 @@ while IFS= read -r file; do
++++++-++--  # Define the output path for the scanner report
++++++-++--  output_file="scanner-reports/scanner-report-${clean_file}.json"
++++++-++-+  # Define the output path for the scanner report in CSV format
++++++-++-+  output_file="scanner-reports/scanner-report-${clean_file}.csv"
++++++-++-@@ -56,2 +56,2 @@ while IFS= read -r file; do
++++++-++--  # Run the SFDX scanner on the file and generate the report
++++++-++--  sf scanner:run --target "$file" --format "json" --outfile "$output_file"
++++++-++-+  # Run the SFDX scanner on the file and generate the report in CSV format
++++++-++-+  sf scanner:run --target "$file" --format "csv" --outfile "$output_file"
++++++-++-@@ -71 +71 @@ while IFS= read -r file; do
++++++-++--  # Filter the scanner report based on the changed line numbers
++++++-++-+  # Filter the CSV scanner report based on the changed line numbers
++++++-++-@@ -73,3 +73,10 @@ while IFS= read -r file; do
++++++-++--  jq --arg lines "$line_numbers" '
++++++-++--    .[] | select(.violations[]? | ($lines | split(",") | index((.line|tostring))))
++++++-++--  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.json"
++++++-++-+  awk -v lines="$line_numbers" '
++++++-++-+  BEGIN {
++++++-++-+    FS=OFS=",";
++++++-++-+    split(lines, arr, ",");  # Split the line numbers into an array
++++++-++-+    for (i in arr) {
++++++-++-+      line_map[arr[i]] = 1  # Create a lookup for valid line numbers
++++++-++-+    }
++++++-++-+  }
++++++-++-+  NR == 1 || line_map[$4]  # $4 is the "Line" field in the CSV
++++++-++-+  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.csv"
++++++-++-@@ -78 +85 @@ while IFS= read -r file; do
++++++-++--  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.json" ]; then
++++++-++-+  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.csv" ]; then
++++++-++-@@ -84 +91 @@ while IFS= read -r file; do
++++++-++--  cat "scanner-reports/filtered-scanner-report-${clean_file}.json"
++++++-++-+  cat "scanner-reports/filtered-scanner-report-${clean_file}.csv"
++++++-++-@@ -89 +96 @@ done <<< "$changed_files"
++++++-++--filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.json 2> /dev/null)
++++++-++-+filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.csv 2> /dev/null)
++++++-++-@@ -95,2 +102,4 @@ fi
++++++-++--# Combine all filtered reports into one final report
++++++-++--jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final-filtered-scanner-report.json
++++++-++-+# Combine all filtered reports into one final report (optional)
++++++-++-+# You can use a simple `cat` command for CSV, as there is no header duplication issue in CSV files
++++++-++-+final_report="scanner-reports/final-filtered-scanner-report.csv"
++++++-++-+cat scanner-reports/filtered-scanner-report-*.csv > "$final_report"
++++++-++-@@ -98,2 +107,5 @@ jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final
++++++-++--# Parse the final filtered scanner report and check for severity 3 issues
++++++-++--severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' scanner-reports/final-filtered-scanner-report.json)
++++++-++-+echo "Final filtered scanner report:"
++++++-++-+cat "$final_report"
++++++-++-+
++++++-++-+# Parse the final filtered scanner report and check for severity 3 issues (optional, CSV parsing in bash)
++++++-++-+severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count}' "$final_report")  # $7 is the Severity column
++++++-+++@@ -75 +75 @@ while IFS= read -r file; do
++++++-+++-    FS=OFS=",";
++++++-++++    FS=OFS=",";  # Define CSV format
++++++-+++@@ -81 +81 @@ while IFS= read -r file; do
++++++-+++-  NR == 1 || line_map[$4]  # $4 is the "Line" field in the CSV
++++++-++++  NR == 1 || ($4 in line_map)  # $4 is the "Line" field in the CSV, this line checks if it exists in the map
++++++-+++@@ -111 +111 @@ cat "$final_report"
++++++-+++-severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count}' "$final_report")  # $7 is the Severity column
++++++-++++severity_fail_count=$(awk -F, '$7 == 3 {count++} END {print count}' "$final_report")  # $7 is the Severity column
++++++-+++diff --git a/changed_cls_lwc_lines_Account_Insert.cls.txt b/changed_cls_lwc_lines_Account_Insert.cls.txt
++++++-+++new file mode 100644
++++++-+++index 0000000..0e43eee
++++++-+++--- /dev/null
++++++-++++++ b/changed_cls_lwc_lines_Account_Insert.cls.txt
++++++-+++@@ -0,0 +1 @@
++++++-++++70 :           System.debug('Hi Hello');
++++++-+++diff --git a/changes.diff b/changes.diff
++++++-+++new file mode 100644
++++++-+++index 0000000..760971b
++++++-+++--- /dev/null
++++++-++++++ b/changes.diff
++++++-+++@@ -0,0 +1,65 @@
++++++-++++diff --git a/.husky/pre-commit b/.husky/pre-commit
++++++-++++index 255a037..525d43a 100644
++++++-++++--- a/.husky/pre-commit
++++++-+++++++ b/.husky/pre-commit
++++++-++++@@ -50 +50 @@ while IFS= read -r file; do
++++++-++++-  # Extract line numbers as a comma-separated string for use in jq filtering
++++++-+++++  # Extract line numbers as a comma-separated string for filtering later
++++++-++++@@ -53,2 +53,2 @@ while IFS= read -r file; do
++++++-++++-  # Define the output path for the scanner report
++++++-++++-  output_file="scanner-reports/scanner-report-${clean_file}.json"
++++++-+++++  # Define the output path for the scanner report in CSV format
++++++-+++++  output_file="scanner-reports/scanner-report-${clean_file}.csv"
++++++-++++@@ -56,2 +56,2 @@ while IFS= read -r file; do
++++++-++++-  # Run the SFDX scanner on the file and generate the report
++++++-++++-  sf scanner:run --target "$file" --format "json" --outfile "$output_file"
++++++-+++++  # Run the SFDX scanner on the file and generate the report in CSV format
++++++-+++++  sf scanner:run --target "$file" --format "csv" --outfile "$output_file"
++++++-++++@@ -71 +71 @@ while IFS= read -r file; do
++++++-++++-  # Filter the scanner report based on the changed line numbers
++++++-+++++  # Filter the CSV scanner report based on the changed line numbers
++++++-++++@@ -73,3 +73,10 @@ while IFS= read -r file; do
++++++-++++-  jq --arg lines "$line_numbers" '
++++++-++++-    .[] | select(.violations[]? | ($lines | split(",") | index((.line|tostring))))
++++++-++++-  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.json"
++++++-+++++  awk -v lines="$line_numbers" '
++++++-+++++  BEGIN {
++++++-+++++    FS=OFS=",";
++++++-+++++    split(lines, arr, ",");  # Split the line numbers into an array
++++++-+++++    for (i in arr) {
++++++-+++++      line_map[arr[i]] = 1  # Create a lookup for valid line numbers
++++++-+++++    }
++++++-+++++  }
++++++-+++++  NR == 1 || line_map[$4]  # $4 is the "Line" field in the CSV
++++++-+++++  ' "$output_file" > "scanner-reports/filtered-scanner-report-${clean_file}.csv"
++++++-++++@@ -78 +85 @@ while IFS= read -r file; do
++++++-++++-  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.json" ]; then
++++++-+++++  if [ ! -s "scanner-reports/filtered-scanner-report-${clean_file}.csv" ]; then
++++++-++++@@ -84 +91 @@ while IFS= read -r file; do
++++++-++++-  cat "scanner-reports/filtered-scanner-report-${clean_file}.json"
++++++-+++++  cat "scanner-reports/filtered-scanner-report-${clean_file}.csv"
++++++-++++@@ -89 +96 @@ done <<< "$changed_files"
++++++-++++-filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.json 2> /dev/null)
++++++-+++++filtered_reports=$(ls scanner-reports/filtered-scanner-report-*.csv 2> /dev/null)
++++++-++++@@ -95,2 +102,4 @@ fi
++++++-++++-# Combine all filtered reports into one final report
++++++-++++-jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final-filtered-scanner-report.json
++++++-+++++# Combine all filtered reports into one final report (optional)
++++++-+++++# You can use a simple `cat` command for CSV, as there is no header duplication issue in CSV files
++++++-+++++final_report="scanner-reports/final-filtered-scanner-report.csv"
++++++-+++++cat scanner-reports/filtered-scanner-report-*.csv > "$final_report"
++++++-++++@@ -98,2 +107,5 @@ jq -s '.' scanner-reports/filtered-scanner-report-*.json > scanner-reports/final
++++++-++++-# Parse the final filtered scanner report and check for severity 3 issues
++++++-++++-severity_fail_count=$(jq '[.[].violations[]? | select(.severity == 3)] | length' scanner-reports/final-filtered-scanner-report.json)
++++++-+++++echo "Final filtered scanner report:"
++++++-+++++cat "$final_report"
++++++-+++++
++++++-+++++# Parse the final filtered scanner report and check for severity 3 issues (optional, CSV parsing in bash)
++++++-+++++severity_fail_count=$(awk -F, '$2 == 3 {count++} END {print count}' "$final_report")  # $7 is the Severity column
++++++-++++diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/default/classes/Account_Insert.cls
++++++-++++index 1ec7a54..870d508 100644
++++++-++++--- a/force-app/main/default/classes/Account_Insert.cls
++++++-+++++++ b/force-app/main/default/classes/Account_Insert.cls
++++++-++++@@ -70 +70 @@ public with sharing class AccountInsertClass {
++++++-++++-          System.debug('Hi');
++++++-+++++          System.debug('Hi Hello');
++++++-++@@ -60 +93 @@ diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/
++++++-++-index 1ec7a54..870d508 100644
++++++-+++index 870d508..1ec7a54 100644
++++++-++@@ -64,2 +97,27 @@ index 1ec7a54..870d508 100644
++++++-++--          System.debug('Hi');
++++++-++-+          System.debug('Hi Hello');
++++++-+++-          System.debug('Hi Hello');
++++++-++++          System.debug('Hi');
++++++-+++diff --git a/scanner-reports/filtered-scanner-report-Account_Insert.cls.csv b/scanner-reports/filtered-scanner-report-Account_Insert.cls.csv
++++++-+++new file mode 100644
++++++-+++index 0000000..5a3a1ac
++++++-+++--- /dev/null
++++++-++++++ b/scanner-reports/filtered-scanner-report-Account_Insert.cls.csv
++++++-+++@@ -0,0 +1 @@
++++++-++++"Problem","Severity","File","Line","Column","Rule","Description","URL","Category","Engine"
++++++-+++diff --git a/scanner-reports/final-filtered-scanner-report.csv b/scanner-reports/final-filtered-scanner-report.csv
++++++-+++new file mode 100644
++++++-+++index 0000000..5a3a1ac
++++++-+++--- /dev/null
++++++-++++++ b/scanner-reports/final-filtered-scanner-report.csv
++++++-+++@@ -0,0 +1 @@
++++++-++++"Problem","Severity","File","Line","Column","Rule","Description","URL","Category","Engine"
++++++-+++diff --git a/scanner-reports/scanner-report-Account_Insert.cls.csv b/scanner-reports/scanner-report-Account_Insert.cls.csv
++++++-+++new file mode 100644
++++++-+++index 0000000..e1ef0f0
++++++-+++--- /dev/null
++++++-++++++ b/scanner-reports/scanner-report-Account_Insert.cls.csv
++++++-+++@@ -0,0 +1,5 @@
++++++-++++"Problem","Severity","File","Line","Column","Rule","Description","URL","Category","Engine"
++++++-++++"1","3","C:\GitHub Folder\CodeScanningSolution\force-app\main\default\classes\Account_Insert.cls","20","11","AvoidDebugStatements","Avoid debug statements since they impact on performance","https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","Performance","pmd"
++++++-++++"2","3","C:\GitHub Folder\CodeScanningSolution\force-app\main\default\classes\Account_Insert.cls","20","11","DebugsShouldUseLoggingLevel","Calls to System.debug should specify a logging level.","https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","Best Practices","pmd"
++++++-++++"3","3","C:\GitHub Folder\CodeScanningSolution\force-app\main\default\classes\Account_Insert.cls","70","11","AvoidDebugStatements","Avoid debug statements since they impact on performance","https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","Performance","pmd"
++++++-++++"4","3","C:\GitHub Folder\CodeScanningSolution\force-app\main\default\classes\Account_Insert.cls","70","11","DebugsShouldUseLoggingLevel","Calls to System.debug should specify a logging level.","https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","Best Practices","pmd"
++++++-+@@ -93 +225 @@ diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/
++++++-+-index 870d508..1ec7a54 100644
++++++-++index 1ec7a54..870d508 100644
++++++-+@@ -97,27 +229,2 @@ index 870d508..1ec7a54 100644
++++++-+--          System.debug('Hi Hello');
++++++-+-+          System.debug('Hi');
++++++-+-diff --git a/scanner-reports/filtered-scanner-report-Account_Insert.cls.csv b/scanner-reports/filtered-scanner-report-Account_Insert.cls.csv
++++++-+-new file mode 100644
++++++-+-index 0000000..5a3a1ac
++++++-+---- /dev/null
++++++-+-+++ b/scanner-reports/filtered-scanner-report-Account_Insert.cls.csv
++++++-+-@@ -0,0 +1 @@
++++++-+-+"Problem","Severity","File","Line","Column","Rule","Description","URL","Category","Engine"
++++++-+-diff --git a/scanner-reports/final-filtered-scanner-report.csv b/scanner-reports/final-filtered-scanner-report.csv
++++++-+-new file mode 100644
++++++-+-index 0000000..5a3a1ac
++++++-+---- /dev/null
++++++-+-+++ b/scanner-reports/final-filtered-scanner-report.csv
++++++-+-@@ -0,0 +1 @@
++++++-+-+"Problem","Severity","File","Line","Column","Rule","Description","URL","Category","Engine"
++++++-+-diff --git a/scanner-reports/scanner-report-Account_Insert.cls.csv b/scanner-reports/scanner-report-Account_Insert.cls.csv
++++++-+-new file mode 100644
++++++-+-index 0000000..e1ef0f0
++++++-+---- /dev/null
++++++-+-+++ b/scanner-reports/scanner-report-Account_Insert.cls.csv
++++++-+-@@ -0,0 +1,5 @@
++++++-+-+"Problem","Severity","File","Line","Column","Rule","Description","URL","Category","Engine"
++++++-+-+"1","3","C:\GitHub Folder\CodeScanningSolution\force-app\main\default\classes\Account_Insert.cls","20","11","AvoidDebugStatements","Avoid debug statements since they impact on performance","https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","Performance","pmd"
++++++-+-+"2","3","C:\GitHub Folder\CodeScanningSolution\force-app\main\default\classes\Account_Insert.cls","20","11","DebugsShouldUseLoggingLevel","Calls to System.debug should specify a logging level.","https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","Best Practices","pmd"
++++++-+-+"3","3","C:\GitHub Folder\CodeScanningSolution\force-app\main\default\classes\Account_Insert.cls","70","11","AvoidDebugStatements","Avoid debug statements since they impact on performance","https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","Performance","pmd"
++++++-+-+"4","3","C:\GitHub Folder\CodeScanningSolution\force-app\main\default\classes\Account_Insert.cls","70","11","DebugsShouldUseLoggingLevel","Calls to System.debug should specify a logging level.","https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","Best Practices","pmd"
++++++-++-          System.debug('Hi');
++++++-+++          System.debug('Hi Hello');
++++++-@@ -225 +415 @@ diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/
++++++--index 1ec7a54..870d508 100644
++++++-+index 870d508..5eafcac 100644
++++++-@@ -229,2 +419,2 @@ index 1ec7a54..870d508 100644
++++++---          System.debug('Hi');
++++++--+          System.debug('Hi Hello');
++++++-+-          System.debug('Hi Hello');
++++++-++          System.debug('Happy');
++++++-diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/default/classes/Account_Insert.cls
++++++-index 5eafcac..1ec7a54 100644
++++++---- a/force-app/main/default/classes/Account_Insert.cls
++++++-+++ b/force-app/main/default/classes/Account_Insert.cls
++++++-@@ -70 +70 @@ public with sharing class AccountInsertClass {
++++++--          System.debug('Happy');
++++++-+          System.debug('Hi');
++++++diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/default/classes/Account_Insert.cls
++++++index 73696e2..9e21e88 100644
++++++--- a/force-app/main/default/classes/Account_Insert.cls
+++++++++ b/force-app/main/default/classes/Account_Insert.cls
++++++@@ -70 +70 @@ public with sharing class AccountInsertClass {
++++++-          System.debug('Hello and Hi');
+++++++          System.debug('Hi AND');
++++++diff --git a/scanner-reports/filtered-scanner-report-Account_Insert.cls.csv b/scanner-reports/filtered-scanner-report-Account_Insert.cls.csv
++++++deleted file mode 100644
++++++index 5a3a1ac..0000000
++++++--- a/scanner-reports/filtered-scanner-report-Account_Insert.cls.csv
+++++++++ /dev/null
++++++@@ -1 +0,0 @@
++++++-"Problem","Severity","File","Line","Column","Rule","Description","URL","Category","Engine"
++++++diff --git a/scanner-reports/filtered-scanner-report-Account_Insert.cls.json b/scanner-reports/filtered-scanner-report-Account_Insert.cls.json
++++++new file mode 100644
++++++index 0000000..ebc3aa5
++++++--- /dev/null
+++++++++ b/scanner-reports/filtered-scanner-report-Account_Insert.cls.json
++++++@@ -0,0 +1,30 @@
+++++++[
+++++++  {
+++++++    "engine": "pmd",
+++++++    "fileName": "C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls",
+++++++    "violations": [
+++++++      {
+++++++        "line": 70,
+++++++        "column": 11,
+++++++        "endLine": 70,
+++++++        "endColumn": 29,
+++++++        "severity": 3,
+++++++        "ruleName": "AvoidDebugStatements",
+++++++        "category": "Performance",
+++++++        "url": "https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements",
+++++++        "message": "\r\nAvoid debug statements since they impact on performance\r\n"
+++++++      },
+++++++      {
+++++++        "line": 70,
+++++++        "column": 11,
+++++++        "endLine": 70,
+++++++        "endColumn": 29,
+++++++        "severity": 3,
+++++++        "ruleName": "DebugsShouldUseLoggingLevel",
+++++++        "category": "Best Practices",
+++++++        "url": "https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel",
+++++++        "message": "\r\nCalls to System.debug should specify a logging level.\r\n"
+++++++      }
+++++++    ]
+++++++  }
+++++++]
++++++diff --git a/scanner-reports/final-filtered-scanner-report.csv b/scanner-reports/final-filtered-scanner-report.csv
++++++deleted file mode 100644
++++++index 5a3a1ac..0000000
++++++--- a/scanner-reports/final-filtered-scanner-report.csv
+++++++++ /dev/null
++++++@@ -1 +0,0 @@
++++++-"Problem","Severity","File","Line","Column","Rule","Description","URL","Category","Engine"
++++++diff --git a/scanner-reports/final-filtered-scanner-report.json b/scanner-reports/final-filtered-scanner-report.json
++++++new file mode 100644
++++++index 0000000..ebc3aa5
++++++--- /dev/null
+++++++++ b/scanner-reports/final-filtered-scanner-report.json
++++++@@ -0,0 +1,30 @@
+++++++[
+++++++  {
+++++++    "engine": "pmd",
+++++++    "fileName": "C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls",
+++++++    "violations": [
+++++++      {
+++++++        "line": 70,
+++++++        "column": 11,
+++++++        "endLine": 70,
+++++++        "endColumn": 29,
+++++++        "severity": 3,
+++++++        "ruleName": "AvoidDebugStatements",
+++++++        "category": "Performance",
+++++++        "url": "https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements",
+++++++        "message": "\r\nAvoid debug statements since they impact on performance\r\n"
+++++++      },
+++++++      {
+++++++        "line": 70,
+++++++        "column": 11,
+++++++        "endLine": 70,
+++++++        "endColumn": 29,
+++++++        "severity": 3,
+++++++        "ruleName": "DebugsShouldUseLoggingLevel",
+++++++        "category": "Best Practices",
+++++++        "url": "https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel",
+++++++        "message": "\r\nCalls to System.debug should specify a logging level.\r\n"
+++++++      }
+++++++    ]
+++++++  }
+++++++]
++++++diff --git a/scanner-reports/scanner-report-Account_Insert.cls.csv b/scanner-reports/scanner-report-Account_Insert.cls.csv
++++++deleted file mode 100644
++++++index e1ef0f0..0000000
++++++--- a/scanner-reports/scanner-report-Account_Insert.cls.csv
+++++++++ /dev/null
++++++@@ -1,5 +0,0 @@
++++++-"Problem","Severity","File","Line","Column","Rule","Description","URL","Category","Engine"
++++++-"1","3","C:\GitHub Folder\CodeScanningSolution\force-app\main\default\classes\Account_Insert.cls","20","11","AvoidDebugStatements","Avoid debug statements since they impact on performance","https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","Performance","pmd"
++++++-"2","3","C:\GitHub Folder\CodeScanningSolution\force-app\main\default\classes\Account_Insert.cls","20","11","DebugsShouldUseLoggingLevel","Calls to System.debug should specify a logging level.","https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","Best Practices","pmd"
++++++-"3","3","C:\GitHub Folder\CodeScanningSolution\force-app\main\default\classes\Account_Insert.cls","70","11","AvoidDebugStatements","Avoid debug statements since they impact on performance","https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","Performance","pmd"
++++++-"4","3","C:\GitHub Folder\CodeScanningSolution\force-app\main\default\classes\Account_Insert.cls","70","11","DebugsShouldUseLoggingLevel","Calls to System.debug should specify a logging level.","https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","Best Practices","pmd"
++++++diff --git a/scanner-reports/scanner-report-Account_Insert.cls.json b/scanner-reports/scanner-report-Account_Insert.cls.json
++++++new file mode 100644
++++++index 0000000..c973918
++++++--- /dev/null
+++++++++ b/scanner-reports/scanner-report-Account_Insert.cls.json
++++++@@ -0,0 +1 @@
+++++++[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":29,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":29,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
++++++\ No newline at end of file
+++++diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/default/classes/Account_Insert.cls
+++++index 9e21e88..800635e 100644
+++++--- a/force-app/main/default/classes/Account_Insert.cls
++++++++ b/force-app/main/default/classes/Account_Insert.cls
+++++@@ -70 +70 @@ public with sharing class AccountInsertClass {
+++++-          System.debug('Hi AND');
++++++          System.debug('Hi AND Hello');
+++++diff --git a/scanner-reports/filtered-scanner-report-Account_Insert.cls.json b/scanner-reports/filtered-scanner-report-Account_Insert.cls.json
+++++index ebc3aa5..fe51488 100644
+++++--- a/scanner-reports/filtered-scanner-report-Account_Insert.cls.json
++++++++ b/scanner-reports/filtered-scanner-report-Account_Insert.cls.json
+++++@@ -1,30 +1 @@
+++++-[
+++++-  {
+++++-    "engine": "pmd",
+++++-    "fileName": "C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls",
+++++-    "violations": [
+++++-      {
+++++-        "line": 70,
+++++-        "column": 11,
+++++-        "endLine": 70,
+++++-        "endColumn": 29,
+++++-        "severity": 3,
+++++-        "ruleName": "AvoidDebugStatements",
+++++-        "category": "Performance",
+++++-        "url": "https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements",
+++++-        "message": "\r\nAvoid debug statements since they impact on performance\r\n"
+++++-      },
+++++-      {
+++++-        "line": 70,
+++++-        "column": 11,
+++++-        "endLine": 70,
+++++-        "endColumn": 29,
+++++-        "severity": 3,
+++++-        "ruleName": "DebugsShouldUseLoggingLevel",
+++++-        "category": "Best Practices",
+++++-        "url": "https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel",
+++++-        "message": "\r\nCalls to System.debug should specify a logging level.\r\n"
+++++-      }
+++++-    ]
+++++-  }
+++++-]
++++++[]
+++++diff --git a/scanner-reports/final-filtered-scanner-report.json b/scanner-reports/final-filtered-scanner-report.json
+++++index ebc3aa5..fe51488 100644
+++++--- a/scanner-reports/final-filtered-scanner-report.json
++++++++ b/scanner-reports/final-filtered-scanner-report.json
+++++@@ -1,30 +1 @@
+++++-[
+++++-  {
+++++-    "engine": "pmd",
+++++-    "fileName": "C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls",
+++++-    "violations": [
+++++-      {
+++++-        "line": 70,
+++++-        "column": 11,
+++++-        "endLine": 70,
+++++-        "endColumn": 29,
+++++-        "severity": 3,
+++++-        "ruleName": "AvoidDebugStatements",
+++++-        "category": "Performance",
+++++-        "url": "https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements",
+++++-        "message": "\r\nAvoid debug statements since they impact on performance\r\n"
+++++-      },
+++++-      {
+++++-        "line": 70,
+++++-        "column": 11,
+++++-        "endLine": 70,
+++++-        "endColumn": 29,
+++++-        "severity": 3,
+++++-        "ruleName": "DebugsShouldUseLoggingLevel",
+++++-        "category": "Best Practices",
+++++-        "url": "https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel",
+++++-        "message": "\r\nCalls to System.debug should specify a logging level.\r\n"
+++++-      }
+++++-    ]
+++++-  }
+++++-]
++++++[]
+++++diff --git a/scanner-reports/scanner-report-Account_Insert.cls.json b/scanner-reports/scanner-report-Account_Insert.cls.json
+++++index c973918..a14d61d 100644
+++++--- a/scanner-reports/scanner-report-Account_Insert.cls.json
++++++++ b/scanner-reports/scanner-report-Account_Insert.cls.json
+++++@@ -1 +1 @@
+++++-[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":29,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":29,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
+++++\ No newline at end of file
++++++[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":33,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":33,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
+++++\ No newline at end of file
++++diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/default/classes/Account_Insert.cls
++++index 9e21e88..1ec7a54 100644
++++--- a/force-app/main/default/classes/Account_Insert.cls
+++++++ b/force-app/main/default/classes/Account_Insert.cls
++++@@ -70 +70 @@ public with sharing class AccountInsertClass {
++++-          System.debug('Hi AND');
+++++          System.debug('Hi');
++++diff --git a/scanner-reports/filtered-scanner-report-Account_Insert.cls.json b/scanner-reports/filtered-scanner-report-Account_Insert.cls.json
++++index ebc3aa5..bb2caee 100644
++++--- a/scanner-reports/filtered-scanner-report-Account_Insert.cls.json
+++++++ b/scanner-reports/filtered-scanner-report-Account_Insert.cls.json
++++@@ -5,0 +6,22 @@
+++++      {
+++++        "line": 20,
+++++        "column": 11,
+++++        "endLine": 20,
+++++        "endColumn": 35,
+++++        "severity": 3,
+++++        "ruleName": "AvoidDebugStatements",
+++++        "category": "Performance",
+++++        "url": "https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements",
+++++        "message": "\r\nAvoid debug statements since they impact on performance\r\n"
+++++      },
+++++      {
+++++        "line": 20,
+++++        "column": 11,
+++++        "endLine": 20,
+++++        "endColumn": 35,
+++++        "severity": 3,
+++++        "ruleName": "DebugsShouldUseLoggingLevel",
+++++        "category": "Best Practices",
+++++        "url": "https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel",
+++++        "message": "\r\nCalls to System.debug should specify a logging level.\r\n"
+++++      },
++++@@ -10 +32 @@
++++-        "endColumn": 29,
+++++        "endColumn": 39,
++++@@ -21 +43 @@
++++-        "endColumn": 29,
+++++        "endColumn": 39,
++++diff --git a/scanner-reports/final-filtered-scanner-report.json b/scanner-reports/final-filtered-scanner-report.json
++++index ebc3aa5..bb2caee 100644
++++--- a/scanner-reports/final-filtered-scanner-report.json
+++++++ b/scanner-reports/final-filtered-scanner-report.json
++++@@ -5,0 +6,22 @@
+++++      {
+++++        "line": 20,
+++++        "column": 11,
+++++        "endLine": 20,
+++++        "endColumn": 35,
+++++        "severity": 3,
+++++        "ruleName": "AvoidDebugStatements",
+++++        "category": "Performance",
+++++        "url": "https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements",
+++++        "message": "\r\nAvoid debug statements since they impact on performance\r\n"
+++++      },
+++++      {
+++++        "line": 20,
+++++        "column": 11,
+++++        "endLine": 20,
+++++        "endColumn": 35,
+++++        "severity": 3,
+++++        "ruleName": "DebugsShouldUseLoggingLevel",
+++++        "category": "Best Practices",
+++++        "url": "https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel",
+++++        "message": "\r\nCalls to System.debug should specify a logging level.\r\n"
+++++      },
++++@@ -10 +32 @@
++++-        "endColumn": 29,
+++++        "endColumn": 39,
++++@@ -21 +43 @@
++++-        "endColumn": 29,
+++++        "endColumn": 39,
++++diff --git a/scanner-reports/scanner-report-Account_Insert.cls.json b/scanner-reports/scanner-report-Account_Insert.cls.json
++++index c973918..866c0b7 100644
++++--- a/scanner-reports/scanner-report-Account_Insert.cls.json
+++++++ b/scanner-reports/scanner-report-Account_Insert.cls.json
++++@@ -1 +1 @@
++++-[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":29,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":29,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
++++\ No newline at end of file
+++++[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":39,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":39,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
++++\ No newline at end of file
+++diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/default/classes/Account_Insert.cls
+++index 9e21e88..9a5148a 100644
+++--- a/force-app/main/default/classes/Account_Insert.cls
++++++ b/force-app/main/default/classes/Account_Insert.cls
+++@@ -70 +70 @@ public with sharing class AccountInsertClass {
+++-          System.debug('Hi AND');
++++          System.debug('Hello');
+++diff --git a/scanner-reports/filtered-scanner-report-Account_Insert.cls.json b/scanner-reports/filtered-scanner-report-Account_Insert.cls.json
+++index ebc3aa5..b33da59 100644
+++--- a/scanner-reports/filtered-scanner-report-Account_Insert.cls.json
++++++ b/scanner-reports/filtered-scanner-report-Account_Insert.cls.json
+++@@ -5,0 +6,22 @@
++++      {
++++        "line": 20,
++++        "column": 11,
++++        "endLine": 20,
++++        "endColumn": 35,
++++        "severity": 3,
++++        "ruleName": "AvoidDebugStatements",
++++        "category": "Performance",
++++        "url": "https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements",
++++        "message": "\r\nAvoid debug statements since they impact on performance\r\n"
++++      },
++++      {
++++        "line": 20,
++++        "column": 11,
++++        "endLine": 20,
++++        "endColumn": 35,
++++        "severity": 3,
++++        "ruleName": "DebugsShouldUseLoggingLevel",
++++        "category": "Best Practices",
++++        "url": "https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel",
++++        "message": "\r\nCalls to System.debug should specify a logging level.\r\n"
++++      },
+++diff --git a/scanner-reports/final-filtered-scanner-report.json b/scanner-reports/final-filtered-scanner-report.json
+++index ebc3aa5..b33da59 100644
+++--- a/scanner-reports/final-filtered-scanner-report.json
++++++ b/scanner-reports/final-filtered-scanner-report.json
+++@@ -5,0 +6,22 @@
++++      {
++++        "line": 20,
++++        "column": 11,
++++        "endLine": 20,
++++        "endColumn": 35,
++++        "severity": 3,
++++        "ruleName": "AvoidDebugStatements",
++++        "category": "Performance",
++++        "url": "https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements",
++++        "message": "\r\nAvoid debug statements since they impact on performance\r\n"
++++      },
++++      {
++++        "line": 20,
++++        "column": 11,
++++        "endLine": 20,
++++        "endColumn": 35,
++++        "severity": 3,
++++        "ruleName": "DebugsShouldUseLoggingLevel",
++++        "category": "Best Practices",
++++        "url": "https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel",
++++        "message": "\r\nCalls to System.debug should specify a logging level.\r\n"
++++      },
++diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/default/classes/Account_Insert.cls
++index 9e21e88..1ec7a54 100644
++--- a/force-app/main/default/classes/Account_Insert.cls
+++++ b/force-app/main/default/classes/Account_Insert.cls
++@@ -70 +70 @@ public with sharing class AccountInsertClass {
++-          System.debug('Hi AND');
+++          System.debug('Hi');
++diff --git a/scanner-reports/filtered-scanner-report-Account_Insert.cls.json b/scanner-reports/filtered-scanner-report-Account_Insert.cls.json
++index ebc3aa5..d4945e4 100644
++--- a/scanner-reports/filtered-scanner-report-Account_Insert.cls.json
+++++ b/scanner-reports/filtered-scanner-report-Account_Insert.cls.json
++@@ -5,0 +6,22 @@
+++      {
+++        "line": 20,
+++        "column": 11,
+++        "endLine": 20,
+++        "endColumn": 35,
+++        "severity": 3,
+++        "ruleName": "AvoidDebugStatements",
+++        "category": "Performance",
+++        "url": "https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements",
+++        "message": "\r\nAvoid debug statements since they impact on performance\r\n"
+++      },
+++      {
+++        "line": 20,
+++        "column": 11,
+++        "endLine": 20,
+++        "endColumn": 35,
+++        "severity": 3,
+++        "ruleName": "DebugsShouldUseLoggingLevel",
+++        "category": "Best Practices",
+++        "url": "https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel",
+++        "message": "\r\nCalls to System.debug should specify a logging level.\r\n"
+++      },
++@@ -10 +32 @@
++-        "endColumn": 29,
+++        "endColumn": 32,
++@@ -21 +43 @@
++-        "endColumn": 29,
+++        "endColumn": 32,
++diff --git a/scanner-reports/final-filtered-scanner-report.json b/scanner-reports/final-filtered-scanner-report.json
++index ebc3aa5..d4945e4 100644
++--- a/scanner-reports/final-filtered-scanner-report.json
+++++ b/scanner-reports/final-filtered-scanner-report.json
++@@ -5,0 +6,22 @@
+++      {
+++        "line": 20,
+++        "column": 11,
+++        "endLine": 20,
+++        "endColumn": 35,
+++        "severity": 3,
+++        "ruleName": "AvoidDebugStatements",
+++        "category": "Performance",
+++        "url": "https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements",
+++        "message": "\r\nAvoid debug statements since they impact on performance\r\n"
+++      },
+++      {
+++        "line": 20,
+++        "column": 11,
+++        "endLine": 20,
+++        "endColumn": 35,
+++        "severity": 3,
+++        "ruleName": "DebugsShouldUseLoggingLevel",
+++        "category": "Best Practices",
+++        "url": "https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel",
+++        "message": "\r\nCalls to System.debug should specify a logging level.\r\n"
+++      },
++@@ -10 +32 @@
++-        "endColumn": 29,
+++        "endColumn": 32,
++@@ -21 +43 @@
++-        "endColumn": 29,
+++        "endColumn": 32,
++diff --git a/scanner-reports/scanner-report-Account_Insert.cls.json b/scanner-reports/scanner-report-Account_Insert.cls.json
++index c973918..e670f52 100644
++--- a/scanner-reports/scanner-report-Account_Insert.cls.json
+++++ b/scanner-reports/scanner-report-Account_Insert.cls.json
++@@ -1 +1 @@
++-[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":29,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":29,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
++\ No newline at end of file
+++[{"engine":"pmd","fileName":"C:\\GitHub Folder\\CodeScanningSolution\\force-app\\main\\default\\classes\\Account_Insert.cls","violations":[{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":20,"column":11,"endLine":20,"endColumn":35,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"AvoidDebugStatements","category":"Performance","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_performance.html#avoiddebugstatements","message":"\r\nAvoid debug statements since they impact on performance\r\n"},{"line":70,"column":11,"endLine":70,"endColumn":32,"severity":3,"ruleName":"DebugsShouldUseLoggingLevel","category":"Best Practices","url":"https://docs.pmd-code.org/pmd-doc-7.4.0/pmd_rules_apex_bestpractices.html#debugsshoulduselogginglevel","message":"\r\nCalls to System.debug should specify a logging level.\r\n"}]}]
++\ No newline at end of file
+diff --git a/force-app/main/default/classes/Account_Insert.cls b/force-app/main/default/classes/Account_Insert.cls
+index 9e21e88..d522ad0 100644
+--- a/force-app/main/default/classes/Account_Insert.cls
++++ b/force-app/main/default/classes/Account_Insert.cls
+@@ -49,0 +50 @@ public with sharing class AccountInsertClass {
++        System.debug('Happy');
+@@ -70 +71 @@ public with sharing class AccountInsertClass {
+-          System.debug('Hi AND');
++          System.debug('Hi');
