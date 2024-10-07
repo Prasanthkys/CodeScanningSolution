@@ -133,6 +133,7 @@ jobs:
 
       - name: Upload Filtered Scanner Report
         id: upload-report
+        if: always()
         uses: actions/upload-artifact@v3
         with:
           name: SFDX_Code_Scan_Report
