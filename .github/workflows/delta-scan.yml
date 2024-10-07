@@ -1,7 +1,7 @@
 on:
   pull_request:
     branches:
-      - "**"
+      - '**'
 
 jobs:
   quality-gate-code-check:
@@ -34,33 +34,19 @@ jobs:
       - name: Get changed files and lines (for .cls and .lwc files)
         id: get-changes
         run: |
-          # Check if the repository is shallow and unshallow if necessary
-          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
-            echo "Repository is shallow, unshallowing..."
-            git fetch --unshallow || { echo "Failed to unshallow the repository"; exit 0; }
-          else
-            echo "Repository is not shallow, skipping unshallow."
-          fi
-
-          # Fetch changes only if there is a previous commit
+          git fetch --unshallow || true
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files and lines between HEAD~1 and HEAD"
-            git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "No changes detected or failed to fetch git diff"; exit 0; }
+            git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
           else
             echo "No previous commit to compare to." > changes.diff
           fi
 
-          # Check if the diff file has any content
           if [ ! -s changes.diff ]; then
             echo "No changes detected between HEAD~1 and HEAD."
             exit 0
           fi
 
-          # Output the diff for logging purposes
-          echo "Changes found in the following diff:"
-          cat changes.diff
-
-          # Extract and print only the changed lines and line numbers from .cls and .lwc files
           echo "Processing changes for .cls and .lwc files only..."
           awk '
             BEGIN {valid_file=0} 
@@ -70,34 +56,26 @@ jobs:
             /^[+][^+]/ && valid_file {print "Line", start + line_offset++, ":", substr($0, 2)}  
           ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
 
-          # Check if any relevant changes were found in .cls or .lwc files
           if [ ! -s changed_cls_lwc_lines.txt ]; then
             echo "No changes detected in .cls or .lwc files."
             exit 0
           fi
 
-          # Output the found changes
-          echo "Detected changes in .cls and .lwc files:"
           cat changed_cls_lwc_lines.txt
 
       - name: Run SFDX Scanner on Changed Files and Lines
         run: |
-          # Get the changed .cls and .lwc files from the diff
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
-
           if [ -z "$files" ]; then
             echo "No changed .cls or .lwc files detected."
             exit 0
           fi
 
-          # Declare an array to store the line numbers
           declare -a line_numbers_array=()
 
           while IFS= read -r file; do
             echo "Processing file: $file"
-            file=$(echo "$file" | tr -d '"')  # Clean up the file path
-
-            # Extract the actual changed lines and line numbers for the specific file
+            file=$(echo "$file" | tr -d '"')
             changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^\+' | sed 's/^+//')
             line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
 
