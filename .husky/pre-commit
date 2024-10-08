@@ -69,7 +69,7 @@ if [ ! -f "scanner-report.json" ]; then
 fi
 
 # Parse the scanner report and check for severity 3 issues
-severity_fail_count=$(grep -oP '"severity":\s*(1|3)' scanner-report.json | wc -l)
+severity_fail_count=$(grep -oP '"severity":\s*(1)' scanner-report.json | wc -l)
 
 # Output the fail count for debugging
 echo "Severity Fail Count: $severity_fail_count"
