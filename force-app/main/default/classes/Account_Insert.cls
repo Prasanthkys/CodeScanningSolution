@@ -12,7 +12,6 @@ public with sharing class AccountInsertClass {
    */
   public static void insertAccount(List<Account> accList) {
     if (Schema.sObjectType.Account.isCreateable()) {
-      System.debug('Hi');
       for (Account acc : accList) {
         if (Schema.sObjectType.Account.fields.Description.isUpdateable()) {
           acc.Description = 'Happy Welcome';
@@ -21,7 +20,6 @@ public with sharing class AccountInsertClass {
         }
       }
       insert accList;
-      System.debug('Hello Hello');
     } else {
       throw new CustomException(
         'You do not have permission to create Account records.'

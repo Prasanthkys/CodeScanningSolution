@@ -5,37 +5,70 @@ changed_files=$(git diff --cached --name-only | grep -E '\.cls$|\.lwc$')
 
 # Check if there are any relevant changes
 if [ -z "$changed_files" ]; then
-  echo "No relevant changes to scan in the files."
-  exit 0
+  echo "No relevant changes to scan."
+  exit 0  # Gracefully exit if no relevant files are changed
 fi
 
-# Create a temporary file to store the uncommitted lines
-temp_file=$(mktemp)
+# Create a directory for temporary files
+temp_dir=$(mktemp -d)
 
-# Extract uncommitted lines from the changed files
+# Extract uncommitted lines and generate temp files
 for file in $changed_files; do
-  # Get uncommitted lines and append to temp_file
-  git diff --cached --unified=0 "$file" | awk '/^@@/ {next} /^+/ {print substr($0,2)}' >> "$temp_file"
+  echo "Processing file: $file"
+  
+  # Extract the actual uncommitted lines for the specific file
+  changed_lines=$(git diff --cached --unified=0 "$file" | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
+  
+  if [ -n "$changed_lines" ]; then
+    echo "Changed lines in $file:"
+    echo "$changed_lines"
+    
+    # Create a temporary file with a valid method/class structure
+    temp_file="$temp_dir/temp_${file//\//_}"
+    echo "/* Temporary file for changed lines scan */" > "$temp_file"
+    echo "public class TempWrapperClass {" >> "$temp_file"
+    echo "    public static void tempMethod() {" >> "$temp_file"
+    echo "        /* Begin of extracted changed lines */" >> "$temp_file"
+    echo "$changed_lines" >> "$temp_file"
+    echo "        /* End of extracted changed lines */" >> "$temp_file"
+    echo "    }" >> "$temp_file"
+    
+    # Check for unbalanced braces (ensure the method and class are closed properly)
+    open_braces=$(echo "$changed_lines" | grep -o '{' | wc -l)
+    close_braces=$(echo "$changed_lines" | grep -o '}' | wc -l)
+    if [ "$open_braces" -gt "$close_braces" ]; then
+      remaining_closing_braces=$(($open_braces - $close_braces))
+      for i in $(seq 1 $remaining_closing_braces); do
+        echo "}" >> "$temp_file"
+      done
+    fi
+    
+    echo "}" >> "$temp_file"  # Close the class
+    echo "Created temporary file with method structure: $temp_file"
+  else
+    echo "No relevant changes detected in $file."
+  fi
 done
 
-# Check if the temp file has content (uncommitted lines)
-if [ ! -s "$temp_file" ]; then
-  echo "No uncommitted lines to scan."
-  rm "$temp_file"
+# Check if any temp files were created
+if [ -z "$(ls -A $temp_dir)" ]; then
+  echo "No temporary files created. Exiting."
+  rm -rf "$temp_dir"
   exit 0
 fi
 
-# Run the SFDX scanner on the temp file
-sf scanner:run --target "$temp_file" --format "json" --outfile "scanner-report.json"
+# Run the SFDX scanner on the temp files
+echo "Running SFDX scanner on temporary files."
+sf scanner:run --target "$temp_dir" --format "json" --outfile "scanner-report.json"
 
 # Ensure that the scanner report was generated
 if [ ! -f "scanner-report.json" ]; then
   echo "Scanner report not found. Please check the scanner command."
-  rm "$temp_file"
+  rm -rf "$temp_dir"
   exit 1
 fi
 
-# Parse the updated (filtered) scanner report and check for severity 3 issues
+# Parse the scanner report and check for severity 3 issues
 severity_fail_count=$(grep -oP '"severity":\s*(1|3)' scanner-report.json | wc -l)
 
 # Output the fail count for debugging
@@ -44,10 +77,10 @@ echo "Severity Fail Count: $severity_fail_count"
 # Block commit if there are severity 3 issues
 if [ "$severity_fail_count" -gt 0 ]; then
   echo "Blocking your commit due to vulnerabilities found with severity 3."
-  rm "$temp_file"
+  rm -rf "$temp_dir"
   exit 1
 else
   echo "No vulnerabilities found. Proceeding with commit."
-  rm "$temp_file"
+  rm -rf "$temp_dir"
   exit 0
 fi
