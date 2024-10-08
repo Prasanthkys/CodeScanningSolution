@@ -139,46 +139,6 @@ jobs:
           name: SFDX_Code_Scan_Report
           path: filtered-scanner-report.csv
 
-      - name: Install mailx
-        run: sudo apt-get install -y mailutils
-
-      - name: Get Repository and Branch Info
-        id: get-info
-        run: |
-          REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
-          BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
-          COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
-          FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
-          echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
-
-      - name: Upload Scanner Report as Artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ env.FILE_TITLE }}
-          path: filtered-scanner-report.csv
-
-      - name: Get Pusher's Email
-        id: get-pusher-email
-        run: |
-          COMMIT_SHA=${{ github.sha }}
-          REPO=${{ github.repository }}
-          PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
-            "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
-          echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
-
-      - name: Send Email with actions-send-mail
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: "smtp.gmail.com"
-          server_port: "587"
-          username: ${{ secrets.GMAIL_EMAIL }}
-          password: ${{ secrets.GMAIL_APP_PASSWORD }}
-          from: ${{ secrets.GMAIL_EMAIL }}
-          subject: "SFDX Code Scan Delta Report"
-          body: "Please find the attached SFDX Code Scan Delta Report."
-          to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
-          attachments: filtered-scanner-report.csv
-
   quality-gate-critical-permissions-check:
     runs-on: ubuntu-latest
     needs: quality-gate-code-check
@@ -194,5 +154,50 @@ jobs:
 
       - name: Scan Profiles and Permission Sets for Critical Permissions
         run: |
-          CRITICAL_PERMISSIONS=( "AssignPermissionSets" "AuthorApex" ... )
-          # Critical Permissions Check Logic
+          CRITICAL_PERMISSIONS=(
+              "AssignPermissionSets"
+              "AuthorApex"
+              "CustomizeApplication"
+              "FreezeUsers"
+              "ManageEncryptionKeys"
+              "ManageInternalUsers"
+              "ManagePasswordPolicies"
+              "ManageProfilesPermissionSets"
+              "ManageRoles"
+              "ManageSharing"
+              "ManageUsers"
+              "ModifyAllData"
+              "MonitorLoginHistory"
+              "MultiFactorAuthenticationRequired"
+              "PasswordNeverExpires"
+              "ResetPasswordsUnlockUsers"
+              "ViewAllData"
+          )
+
+          BLOCKED_FILES=()
+
+          for FILE in $(find force-app/main/default/profiles -name '*.profile-meta.xml'); do
+            for PERMISSION in "${CRITICAL_PERMISSIONS[@]}"; do
+              if grep -q "$PERMISSION" "$FILE" && ! grep -q "System Administrator" "$FILE"; then
+                BLOCKED_FILES+=("$FILE")
+              fi
+            done
+          done
+
+          for FILE in $(find force-app/main/default/permissionsets -name '*.permissionset-meta.xml'); do
+            for PERMISSION in "${CRITICAL_PERMISSIONS[@]}"; do
+              if grep -q "$PERMISSION" "$FILE"; then
+                BLOCKED_FILES+=("$FILE")
+              fi
+            done
+          done
+
+          if [ ${#BLOCKED_FILES[@]} -gt 0 ]; then
+            echo "Critical permissions found in the following files:"
+            for FILE in "${BLOCKED_FILES[@]}"; do
+              echo "$FILE"
+            done
+            exit 1
+          else
+            echo "No critical permissions assigned to non-System Administrator profiles or permission sets."
+          fi
