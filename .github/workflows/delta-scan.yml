@@ -1,5 +1,5 @@
 on:
-  pull_request:
+  push:
     branches:
       - '**'
 
@@ -167,6 +167,7 @@ jobs:
           echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
 
       - name: Send Email with actions-send-mail
+        if: always()
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: "smtp.gmail.com"
