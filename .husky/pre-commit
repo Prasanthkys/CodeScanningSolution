@@ -1,82 +1,53 @@
 #!/bin/bash
-set -e
 
-# Step 1: Get changed files and lines (for .cls and .lwc files)
-git fetch --unshallow || true
-if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-  echo "Fetching changed files and lines between HEAD~1 and HEAD"
-  git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
-else
-  echo "No previous commit to compare to." > changes.diff
-fi
+# Get the list of changed Apex (.cls) or LWC files
+changed_files=$(git diff --cached --name-only | grep -E '\.cls$|\.lwc$')
 
-if [ ! -s changes.diff ]; then
-  echo "No changes detected between HEAD~1 and HEAD."
+# Check if there are any relevant changes
+if [ -z "$changed_files" ]; then
+  echo "No relevant changes to scan in the files."
   exit 0
 fi
 
-echo "Processing changes for .cls and .lwc files only..."
-files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+# Create a temporary file to store the uncommitted lines
+temp_file=$(mktemp)
 
-if [ -z "$files" ]; then
-  echo "No changed .cls or .lwc files detected."
+# Extract uncommitted lines from the changed files
+for file in $changed_files; do
+  # Get uncommitted lines and append to temp_file
+  git diff --cached --unified=0 "$file" | awk '/^@@/ {next} /^+/ {print substr($0,2)}' >> "$temp_file"
+done
+
+# Check if the temp file has content (uncommitted lines)
+if [ ! -s "$temp_file" ]; then
+  echo "No uncommitted lines to scan."
+  rm "$temp_file"
   exit 0
 fi
 
-# Step 2: Run SFDX Scanner on each file (run once per file, not per line)
-for file in $files; do
-  echo "Running SFDX Scanner on file: $file"
-  sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed for $file, skipping."; }
-done
+# Run the SFDX scanner on the temp file
+sf scanner:run --target "$temp_file" --format "json" --outfile "scanner-report.json"
 
-# Step 3: Filter the scanner report for specific lines
-echo "Filtering scanner report for changed lines..."
+# Ensure that the scanner report was generated
+if [ ! -f "scanner-report.json" ]; then
+  echo "Scanner report not found. Please check the scanner command."
+  rm "$temp_file"
+  exit 1
+fi
 
-# Extract the changed line numbers for each file and filter the scanner report
-for file in $files; do
-  echo "Processing file: $file"
-  line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk -F' ' '{print $2}' | cut -d',' -f1 | sed 's/-//')
-  
-  # Validate if line numbers were captured
-  if [ -z "$line_numbers" ]; then
-    echo "No valid line numbers for file: $file"
-    continue
-  fi
+# Parse the updated (filtered) scanner report and check for severity 3 issues
+severity_fail_count=$(grep -oP '"severity":\s*(1|3)' scanner-report.json | wc -l)
 
-  echo "Filtering results for file: $file with changed lines: $line_numbers"
-  
-  if [ -f scanner-report.csv ]; then
-    # Filter scanner report for the relevant line numbers
-    awk -v lines="$line_numbers" '
-    BEGIN {
-      FPAT = "([^,]+)|(\"[^\"]+\")";
-      split(lines, arr, " ");
-      for (i in arr) {
-        valid[arr[i]] = 1;
-      }
-    }
-    NR == 1 || (substr($4, 2, length($4)-2) in valid) {
-      print $0;
-    }
-    ' scanner-report.csv > filtered-scanner-report.csv
-    
-    cat filtered-scanner-report.csv
-  else
-    echo "No scanner report found for $file."
-  fi
-done
+# Output the fail count for debugging
+echo "Severity Fail Count: $severity_fail_count"
 
-# Step 4: Block commit if severity violations are found
-if [ -f filtered-scanner-report.csv ]; then
-  severity_fail_count=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' filtered-scanner-report.csv)
-  echo "Severity 3 issues count: $severity_fail_count"
-
-  if [ -n "$severity_fail_count" ] && [ "$severity_fail_count" -gt 0 ]; then
-    echo "Blocking your commit due to severity 3 vulnerabilities found."
-    exit 1
-  else
-    echo "No severity 3 vulnerabilities found. Proceeding with commit."
-  fi
+# Block commit if there are severity 3 issues
+if [ "$severity_fail_count" -gt 0 ]; then
+  echo "Blocking your commit due to vulnerabilities found with severity 3."
+  rm "$temp_file"
+  exit 1
 else
-  echo "No filtered scanner report found."
+  echo "No vulnerabilities found. Proceeding with commit."
+  rm "$temp_file"
+  exit 0
 fi
