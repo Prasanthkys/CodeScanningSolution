@@ -23,26 +23,25 @@ for file in $changed_files; do
     echo "Changed lines in $file:"
     echo "$changed_lines"
     
-    # Create a temporary file with a valid method/class structure
-    temp_file="$temp_dir/temp_${file//\//_}"
-    echo "/**
-          * @description This class handles the insertion of Account and related Opportunity records.
-          * It performs necessary validation, including CRUD and FLS checks, before executing any DML operations.
-          */">"$temp_file"
-    echo "/* Temporary file for changed lines scan */" > "$temp_file"
-    echo "public class TempWrapperClass {" >> "$temp_file"
-    echo "/**
-          * @description Inserts a list of Account records and updates their description.
-          * Performs CRUD and FLS validation before insertion.
-          *
-          * @param accList The list of Account records to be inserted.
-          * @throws CustomException If the user lacks permission to insert accounts.
-          */">"$temp_file"
-    echo "    public static void tempMethod() {" >> "$temp_file"
-    echo "        /* Begin of extracted changed lines */" >> "$temp_file"
-    echo "$changed_lines" >> "$temp_file"
-    echo "        /* End of extracted changed lines */" >> "$temp_file"
-    echo "    }" >> "$temp_file"
+   # Create a temporary file with a valid method/class structure
+      temp_file="$temp_dir/temp_${file//\//_}"
+      echo "/* Temporary file for changed lines scan */" > "$temp_file"
+      # ApexDoc for the TempWrapperClass
+      echo "/**" >> "$temp_file"
+      echo " * This is a temporary wrapper class created for scanning the changed lines." >> "$temp_file"
+      echo " */" >> "$temp_file"
+      echo "public class TempWrapperClass {" >> "$temp_file"
+      # ApexDoc for the tempMethod
+      echo "    /**" >> "$temp_file"
+      echo "     * This method holds the changed lines extracted from the original file." >> "$temp_file"
+      echo "     */" >> "$temp_file"
+      echo "    public static void tempMethod() {" >> "$temp_file"
+      echo "        /* Begin of extracted changed lines */" >> "$temp_file"
+      echo "$changed_lines" >> "$temp_file"
+      echo "        /* End of extracted changed lines */" >> "$temp_file"
+      echo "    }" >> "$temp_file"
+      echo "}" >> "$temp_file"
+
     
     # Check for unbalanced braces (ensure the method and class are closed properly)
     open_braces=$(echo "$changed_lines" | grep -o '{' | wc -l)
