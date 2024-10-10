@@ -45,7 +45,8 @@ jobs:
         run: |
           git fetch --unshallow || true
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-            git diff --unified=0 HEAD~1 HEAD > changes.diff || exit 1
+            echo "Fetching changed files and lines between HEAD~1 and HEAD"
+            git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
           else
             echo "No previous commit to compare to." > changes.diff
           fi
@@ -58,10 +59,11 @@ jobs:
           echo "Processing changes for .cls and .lwc files only..."
           awk '
             BEGIN {valid_file=0} 
+            /^diff --git/ {valid_file=0} 
             /\.cls$|\.lwc$/ {valid_file=1} 
-            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); next}  
-            /^[+][^+]/ && valid_file {print "Line", start++, ":", substr($0, 2)}  
-          ' changes.diff > changed_cls_lwc_lines.txt
+            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  
+            /^[+][^+]/ && valid_file {print "Line", start + line_offset++, ":", substr($0, 2)}  
+          ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
 
           if [ ! -s changed_cls_lwc_lines.txt ]; then
             echo "No changes detected in .cls or .lwc files."
@@ -144,7 +146,6 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: filtered-scanner-report
-
       - name: Block PR merge if severity violations are found
         id: block-check
         run: |
@@ -162,6 +163,7 @@ jobs:
           else
             echo "No filtered scanner report found."
             exit 1
+          fi
 
   uploading-the-artifact:
     runs-on: ubuntu-latest
