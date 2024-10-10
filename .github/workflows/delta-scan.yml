@@ -44,26 +44,27 @@ jobs:
       - name: Get changed files and lines (for .cls and .lwc files)
         id: get-changes
         run: |
-          git fetch --unshallow || true
-          if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-            echo "Fetching changed files and lines between HEAD~1 and HEAD"
-            git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
-          else
-            echo "No previous commit to compare to." > changes.diff
+          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            git fetch --unshallow || true
           fi
 
+          # Fetch the base branch to compare changes
+          git fetch origin ${{ github.event.pull_request.base.ref }}:base
+          echo "Fetching changed files and lines between base and HEAD"
+          git diff --unified=0 base...HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
+
           if [ ! -s changes.diff ]; then
-            echo "No changes detected between HEAD~1 and HEAD."
+            echo "No changes detected between base and HEAD."
             exit 0
           fi
 
           echo "Processing changes for .cls and .lwc files only..."
           awk '
-            BEGIN {valid_file=0} 
-            /^diff --git/ {valid_file=0} 
-            /\.cls$|\.lwc$/ {valid_file=1} 
-            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  
-            /^[+][^+]/ && valid_file {print "Line", start + line_offset++, ":", substr($0, 2)}  
+            BEGIN {valid_file=0}
+            /^diff --git/ {valid_file=0}
+            /\.cls$|\.lwc$/ {valid_file=1}
+            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}
+            /^[+][^+]/ && valid_file {print "Line", start + line_offset++, ":", substr($0, 2)}
           ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
 
           if [ ! -s changed_cls_lwc_lines.txt ]; then
