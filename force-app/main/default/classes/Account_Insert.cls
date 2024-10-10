@@ -20,7 +20,7 @@ public with sharing class AccountInsertClass {
           acc.Rating = 'Hotter';
           System.debug('Sample debug1');
           acc.Industry = 'Agriculture';
-          System.debug('Sample debug12');
+          System.debug('Sample debug123');
         }
       }
       insert accList;
@@ -42,7 +42,6 @@ public with sharing class AccountInsertClass {
     if (Schema.sObjectType.Opportunity.isCreateable()) {
       List<Opportunity> oppList = new List<Opportunity>();
       for (Account acc : accList) {
-        System.debug('Sample debug312345678');
         Opportunity opp = new Opportunity();
         opp.Name = acc.Name;
         opp.CloseDate = System.Today();
