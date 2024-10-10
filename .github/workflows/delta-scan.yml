@@ -72,8 +72,16 @@ jobs:
             BEGIN {valid_file=0}
             /^diff --git/ {valid_file=0}
             /\.cls$|\.lwc$/ {valid_file=1}
-            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}
-            /^[+][^+]/ && valid_file {print "Line", start + line_offset++, ":", substr($0, 2)}
+            /^@@/ && valid_file {
+              split($0, arr, " ");
+              gsub(",", "", arr[2]);
+              start_line = substr(arr[2], 2);
+              next;
+            }
+            /^[+][^+]/ && valid_file {
+              line_num = start_line++;
+              print "Line", line_num, ":", substr($0, 2);
+            }
           ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
 
           if [ ! -s changed_cls_lwc_lines.txt ]; then
