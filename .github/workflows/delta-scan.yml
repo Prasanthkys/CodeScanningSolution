@@ -8,8 +8,6 @@ on:
 jobs:
   set-up-installation:
     runs-on: ubuntu-latest
-    outputs:
-      scanner-report-path: ${{ steps.upload-report.outputs.artifact-path }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -38,6 +36,27 @@ jobs:
     outputs:
       changes-detected: ${{ steps.get-changes.outputs.changes-detected }}
     steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20.x
+
+      - name: Install Salesforce CLI
+        run: npm install @salesforce/cli --global
+
+      - name: Install Scanner Plugin
+        run: sf plugins install @salesforce/sfdx-scanner
+
+      - name: Verify Salesforce CLI Installation
+        run: sf --version
+
+      - name: Verify Scanner Plugin Installation
+        run: sf plugins --core
+
       - name: Get changed files and lines (for .cls and .lwc files)
         id: get-changes
         run: |
@@ -45,11 +64,13 @@ jobs:
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files and lines between HEAD~1 and HEAD"
             git diff --unified=0 HEAD~1 HEAD > changes.diff || exit 1
+          else
+            echo "No previous commit to compare to." > changes.diff
           fi
 
           if [ ! -s changes.diff ]; then
             echo "No changes detected between HEAD~1 and HEAD."
-            echo "::set-output name=changes-detected::false"
+            echo "changes-detected=false" >> $GITHUB_ENV
             exit 0
           fi
 
@@ -63,19 +84,40 @@ jobs:
 
           if [ ! -s changed_cls_lwc_lines.txt ]; then
             echo "No changes detected in .cls or .lwc files."
-            echo "::set-output name=changes-detected::false"
+            echo "changes-detected=false" >> $GITHUB_ENV
             exit 0
           fi
 
           cat changed_cls_lwc_lines.txt
-          echo "::set-output name=changes-detected::true"
+          echo "changes-detected=true" >> $GITHUB_ENV
 
   run-salesforce-code-analyzer:
     runs-on: ubuntu-latest
     needs: calculate-differences
     steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20.x
+
+      - name: Install Salesforce CLI
+        run: npm install @salesforce/cli --global
+
+      - name: Install Scanner Plugin
+        run: sf plugins install @salesforce/sfdx-scanner
+
+      - name: Verify Salesforce CLI Installation
+        run: sf --version
+
+      - name: Verify Scanner Plugin Installation
+        run: sf plugins --core
+
       - name: Run SFDX Scanner on Changed Files and Lines
-        if: ${{ needs.calculate-differences.outputs.changes-detected == 'true' }}
+        if: ${{ env.changes-detected == 'true' }}
         run: |
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
           if [ -z "$files" ]; then
@@ -127,9 +169,28 @@ jobs:
   block-pr-if-vulnerabilities-found:
     runs-on: ubuntu-latest
     needs: run-salesforce-code-analyzer
-    outputs:
-      block-pr: ${{ steps.block-check.outputs.block-status }}
     steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20.x
+
+      - name: Install Salesforce CLI
+        run: npm install @salesforce/cli --global
+
+      - name: Install Scanner Plugin
+        run: sf plugins install @salesforce/sfdx-scanner
+
+      - name: Verify Salesforce CLI Installation
+        run: sf --version
+
+      - name: Verify Scanner Plugin Installation
+        run: sf plugins --core
+
       - name: Block PR merge if severity violations are found
         id: block-check
         run: |
@@ -138,23 +199,43 @@ jobs:
             echo "Severity 3 issues count: $severity_fail_count"
             if [ "$severity_fail_count" -gt 0 ]; then
               echo "Blocking your pull request due to severity 3 vulnerabilities found."
-              echo "::set-output name=block-status::true"
+              echo "block-status=true" >> $GITHUB_ENV
               exit 1
             else
               echo "No severity 3 vulnerabilities found. Proceeding with Approval."
-              echo "::set-output name=block-status::false"
+              echo "block-status=false" >> $GITHUB_ENV
             fi
           else
             echo "No filtered scanner report found."
             exit 1
-          fi
 
   uploading-the-artifact:
     runs-on: ubuntu-latest
     needs: block-pr-if-vulnerabilities-found
     steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20.x
+
+      - name: Install Salesforce CLI
+        run: npm install @salesforce/cli --global
+
+      - name: Install Scanner Plugin
+        run: sf plugins install @salesforce/sfdx-scanner
+
+      - name: Verify Salesforce CLI Installation
+        run: sf --version
+
+      - name: Verify Scanner Plugin Installation
+        run: sf plugins --core
+
       - name: Upload Filtered Scanner Report
-        if: ${{ needs.block-pr-if-vulnerabilities-found.outputs.block-pr == 'false' }}
+        if: ${{ env.block-status == 'false' }}
         uses: actions/upload-artifact@v3
         with:
           name: SFDX_Code_Scan_Report
@@ -163,10 +244,28 @@ jobs:
   quality-gate-critical-permissions-check:
     runs-on: ubuntu-latest
     needs: block-pr-if-vulnerabilities-found
-    if: ${{ needs.block-pr-if-vulnerabilities-found.outputs.block-pr == 'false' }}
+    if: ${{ needs.quality-gate-code-check.outputs.block-pr == 'false' }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20.x
+
+      - name: Install Salesforce CLI
+        run: npm install @salesforce/cli --global
+
+      - name: Install Scanner Plugin
+        run: sf plugins install @salesforce/sfdx-scanner
+
+      - name: Verify Salesforce CLI Installation
+        run: sf --version
+
+      - name: Verify Scanner Plugin Installation
+        run: sf plugins --core
 
       - name: Download Scanner Report
         uses: actions/download-artifact@v3
@@ -176,4 +275,4 @@ jobs:
       - name: Scan Profiles and Permission Sets for Critical Permissions
         run: |
           CRITICAL_PERMISSIONS=( "AssignPermissionSets" "AuthorApex" ... )
-          # Critical Permissions Check Logic
+          # Add logic for scanning critical permissions
