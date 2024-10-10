@@ -144,6 +144,7 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: filtered-scanner-report
+
       - name: Block PR merge if severity violations are found
         id: block-check
         run: |
@@ -161,11 +162,11 @@ jobs:
           else
             echo "No filtered scanner report found."
             exit 1
-          fi
 
   uploading-the-artifact:
     runs-on: ubuntu-latest
-    needs: block-pr-if-vulnerabilities-found
+    needs: [block-pr-if-vulnerabilities-found, analyze-changed-files] # This ensures it always runs after these jobs
+    if: always() # Ensures the job runs even if previous jobs fail
     steps:
       - uses: actions/checkout@v3
         with:
@@ -178,8 +179,12 @@ jobs:
         run: npm install @salesforce/cli --global
       - name: Install Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
-      - name: Upload Filtered Scanner Report
-        if: always()
+      - name: Download Filtered Scanner Report
+        uses: actions/download-artifact@v3
+        with:
+          name: filtered-scanner-report
+
+      - name: Upload Filtered Scanner Report (Again)
         uses: actions/upload-artifact@v3
         with:
           name: SFDX_Code_Scan_Report
