@@ -62,7 +62,6 @@ jobs:
         run: |
           git fetch --unshallow || true
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-            echo "Fetching changed files and lines between HEAD~1 and HEAD"
             git diff --unified=0 HEAD~1 HEAD > changes.diff || exit 1
           else
             echo "No previous commit to compare to." > changes.diff
@@ -91,6 +90,14 @@ jobs:
           cat changed_cls_lwc_lines.txt
           echo "changes-detected=true" >> $GITHUB_ENV
 
+      - name: Upload diff and changed files as artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: diff-and-changed-files
+          path: |
+            changes.diff
+            changed_cls_lwc_lines.txt
+
   run-salesforce-code-analyzer:
     runs-on: ubuntu-latest
     needs: calculate-differences
@@ -116,8 +123,13 @@ jobs:
       - name: Verify Scanner Plugin Installation
         run: sf plugins --core
 
+      - name: Download the diff and changed files artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: diff-and-changed-files
+
       - name: Run SFDX Scanner on Changed Files and Lines
-        if: ${{ env.changes-detected == 'true' }}
+        if: ${{ needs.calculate-differences.outputs.changes-detected == 'true' }}
         run: |
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
           if [ -z "$files" ]; then
