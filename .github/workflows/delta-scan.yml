@@ -144,7 +144,6 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: filtered-scanner-report
-
       - name: Block PR merge if severity violations are found
         id: block-check
         run: |
@@ -162,6 +161,7 @@ jobs:
           else
             echo "No filtered scanner report found."
             exit 1
+          fi
 
   uploading-the-artifact:
     runs-on: ubuntu-latest
