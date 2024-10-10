@@ -41,20 +41,12 @@ jobs:
       - name: Install Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
 
-      - name: Fetch Git History (Only if shallow)
-        run: |
-          depth=$(git rev-list --count HEAD)
-          if [ "$depth" -eq 1 ]; then
-            echo "Shallow repo detected, fetching complete history..."
-            git fetch --unshallow
-          else
-            echo "Complete repo, skipping unshallowing..."
-          fi
-
       - name: Get changed files and lines (for .cls and .lwc files)
         id: get-changes
         run: |
+          git fetch --unshallow || true
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
+            echo "Fetching changed files and lines between HEAD~1 and HEAD"
             git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
           else
             echo "No previous commit to compare to." > changes.diff
@@ -66,22 +58,12 @@ jobs:
           fi
 
           echo "Processing changes for .cls and .lwc files only..."
-
-          # Extract changed lines for .cls and .lwc files
           awk '
-            BEGIN {valid_file=0}
-            /^diff --git/ {valid_file=0}
-            /\.cls$|\.lwc$/ {valid_file=1}
-            /^@@/ && valid_file {
-              split($0, arr, " ");
-              gsub(",", "", arr[2]);
-              start_line = substr(arr[2], 2);
-              next;
-            }
-            /^[+][^+]/ && valid_file {
-              line_num = start_line++;
-              print "Line", line_num, ":", substr($0, 2);
-            }
+            BEGIN {valid_file=0} 
+            /^diff --git/ {valid_file=0} 
+            /\.cls$|\.lwc$/ {valid_file=1} 
+            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  
+            /^[+][^+]/ && valid_file {print "Line", start + line_offset++, ":", substr($0, 2)}  
           ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
 
           if [ ! -s changed_cls_lwc_lines.txt ]; then
@@ -91,7 +73,7 @@ jobs:
 
           cat changed_cls_lwc_lines.txt
 
-      - name: Run SFDX Scanner once per changed file
+      - name: Run SFDX Scanner on Changed Files and Lines
         run: |
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
           if [ -z "$files" ]; then
@@ -99,19 +81,34 @@ jobs:
             exit 0
           fi
 
-          # Run SFDX Scanner once per file
-          for file in $files; do
-            echo "Running SFDX Scanner on file: $file..."
-            sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed or no issues found for $file, continuing with other files."; }
-          done
+          declare -a line_numbers_array=()
 
-      - name: Filter Scanner Report by Changed Lines
+          while IFS= read -r file; do
+            echo "Processing file: $file"
+            file=$(echo "$file" | tr -d '"')
+            changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^\+' | sed 's/^+//')
+            line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
+
+            current_line_number=$(echo "$line_numbers" | head -1)
+            echo "Starting line number: $current_line_number"
+
+            while IFS= read -r line; do
+              echo "Running SFDX Scanner on file: $file at line number: $current_line_number..."
+              sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed or no issues found for $file, continuing with other files."; }
+              line_numbers_array+=("$current_line_number")
+              current_line_number=$((current_line_number + 1))
+            done <<< "$changed_lines"
+          done <<< "$files"
+
+          echo "${line_numbers_array[*]}" > line_numbers.txt
+          cat line_numbers.txt
+
+      - name: Filter Scanner Report by Line Numbers
         run: |
-          line_numbers_array=$(awk '{print $2}' changed_cls_lwc_lines.txt)
-          echo "Filtering scanner report for the following line numbers: $line_numbers_array"
-
-          # Filter the scanner report by the line numbers in changed_cls_lwc_lines.txt
-          awk -v lines="$line_numbers_array" '
+          current_line_number_list=$(cat line_numbers.txt)
+          current_line_number_list=$(echo $current_line_number_list | xargs)
+          echo "Filtering scanner report for the following line numbers: $current_line_number_list"
+          awk -v lines="$current_line_number_list" '
           BEGIN {
             FPAT = "([^,]+)|(\"[^\"]+\")";
             split(lines, arr, " ");
@@ -123,7 +120,6 @@ jobs:
             print $0;
           }
           ' scanner-report.csv > filtered-scanner-report.csv
-
           cat filtered-scanner-report.csv
 
       - name: Upload Filtered Scanner Report as Artifact
