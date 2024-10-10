@@ -41,20 +41,18 @@ jobs:
       - name: Install Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
 
-      - name: Get changed files and lines (for .cls and .lwc files)
+      - name: Compare Previous Push and Current Commit
         id: get-changes
         run: |
-          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
-            git fetch --unshallow || true
-          fi
+          # Fetch history for proper diff comparison
+          git fetch origin
 
-          # Fetch the base branch to compare changes
-          git fetch origin ${{ github.event.pull_request.base.ref }}:base
-          echo "Fetching changed files and lines between base and HEAD"
-          git diff --unified=0 base...HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
+          # Compare the previous commit (HEAD~1) to the current HEAD of the branch
+          echo "Fetching changes between the previous pushed commit and the current commit on the branch"
+          git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
 
           if [ ! -s changes.diff ]; then
-            echo "No changes detected between base and HEAD."
+            echo "No changes detected between the previous commit and the current commit."
             exit 0
           fi
 
@@ -63,8 +61,12 @@ jobs:
             BEGIN {valid_file=0}
             /^diff --git/ {valid_file=0}
             /\.cls$|\.lwc$/ {valid_file=1}
-            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}
-            /^[+][^+]/ && valid_file {print "Line", start + line_offset++, ":", substr($0, 2)}
+            /^@@/ && valid_file {
+              split($0, arr, " "); 
+              start = substr(arr[2], 2); 
+              next 
+            } 
+            /^[+][^+]/ && valid_file {print "Line", start++, ":", substr($0, 2)}
           ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
 
           if [ ! -s changed_cls_lwc_lines.txt ]; then
@@ -72,9 +74,8 @@ jobs:
             exit 0
           fi
 
-          echo "Storing current committed line numbers..."
-          grep '^Line ' changed_cls_lwc_lines.txt | awk '{print $2}' | xargs > current_line_numbers.txt
-          cat current_line_numbers.txt
+          echo "Printing current committed lines and line numbers:"
+          cat changed_cls_lwc_lines.txt
 
       - name: Run SFDX Scanner on Changed Files and Lines
         run: |
@@ -108,7 +109,7 @@ jobs:
 
       - name: Filter Scanner Report by Line Numbers
         run: |
-          current_line_number_list=$(cat current_line_numbers.txt)
+          current_line_number_list=$(cat line_numbers.txt)
           current_line_number_list=$(echo $current_line_number_list | xargs)
           echo "Filtering scanner report for the following line numbers: $current_line_number_list"
           awk -v lines="$current_line_number_list" '
@@ -226,8 +227,3 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: SFDX_Code_Scan_Report
-
-      - name: Scan Profiles and Permission Sets for Critical Permissions
-        run: |
-          CRITICAL_PERMISSIONS=( "AssignPermissionSets" "AuthorApex" ... )
-          # Add logic for scanning critical permissions
