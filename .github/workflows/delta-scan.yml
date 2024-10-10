@@ -40,10 +40,20 @@ jobs:
         run: npm install @salesforce/cli --global
       - name: Install Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
+
+      - name: Fetch Git History (Only if shallow)
+        run: |
+          depth=$(git rev-list --count HEAD)
+          if [ "$depth" -eq 1 ]; then
+            echo "Shallow repo detected, fetching complete history..."
+            git fetch --unshallow
+          else
+            echo "Complete repo, skipping unshallowing..."
+          fi
+
       - name: Get changed files and lines (for .cls and .lwc files)
         id: get-changes
         run: |
-          git fetch --unshallow || true
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
           else
@@ -56,12 +66,14 @@ jobs:
           fi
 
           echo "Processing changes for .cls and .lwc files only..."
+
+          # Extract changed lines for .cls and .lwc files
           awk '
-            BEGIN {valid_file=0} 
-            /^diff --git/ {valid_file=0} 
-            /\.cls$|\.lwc$/ {valid_file=1} 
-            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  
-            /^[+][^+]/ && valid_file {print "Line", start + line_offset++, ":", substr($0, 2)}  
+            BEGIN {valid_file=0}
+            /^diff --git/ {valid_file=0}
+            /\.cls$|\.lwc$/ {valid_file=1}
+            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}
+            /^[+][^+]/ && valid_file {print "Line", start + line_offset++, ":", substr($0, 2)}
           ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
 
           if [ ! -s changed_cls_lwc_lines.txt ]; then
@@ -87,7 +99,7 @@ jobs:
 
       - name: Filter Scanner Report by Changed Lines
         run: |
-          line_numbers_array=$(cat changed_cls_lwc_lines.txt | awk '{print $2}')
+          line_numbers_array=$(awk '{print $2}' changed_cls_lwc_lines.txt)
           echo "Filtering scanner report for the following line numbers: $line_numbers_array"
 
           # Filter the scanner report by the line numbers in changed_cls_lwc_lines.txt
