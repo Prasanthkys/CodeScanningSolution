@@ -71,7 +71,9 @@ jobs:
             exit 0
           fi
 
-          cat changed_cls_lwc_lines.txt
+          echo "Storing current committed line numbers..."
+          grep '^Line ' changed_cls_lwc_lines.txt | awk '{print $2}' | xargs > current_line_numbers.txt
+          cat current_line_numbers.txt
 
       - name: Run SFDX Scanner on Changed Files and Lines
         run: |
@@ -105,7 +107,7 @@ jobs:
 
       - name: Filter Scanner Report by Line Numbers
         run: |
-          current_line_number_list=$(cat line_numbers.txt)
+          current_line_number_list=$(cat current_line_numbers.txt)
           current_line_number_list=$(echo $current_line_number_list | xargs)
           echo "Filtering scanner report for the following line numbers: $current_line_number_list"
           awk -v lines="$current_line_number_list" '
