@@ -36,14 +36,12 @@ jobs:
       - name: Get changed files and lines (for .cls and .lwc files)
         id: get-changes
         run: |
-          # Remove unnecessary unshallow command if the repository is already complete
-          if [ -z "$(git rev-parse --is-shallow-repository)" ]; then
-            echo "Repository is complete, skipping unshallow."
-          else
+          # Check if the repository is shallow, skip unshallow if it's not needed
+          if [ "$(git rev-parse --is-shallow-repository)" == "true" ]; then
             git fetch --unshallow || true
           fi
 
-          # Fetch and compare changes
+          # Get the diff between the current and previous commit
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files and lines between HEAD~1 and HEAD"
             git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
@@ -94,9 +92,9 @@ jobs:
           while IFS= read -r file; do
             echo "Processing file: $file"
             file=$(echo "$file" | tr -d '"')
-            
+
             # Capturing only the specific changed lines for the file
-            changed_lines=$(grep "^Line" changed_cls_lwc_lines.txt | grep "$file" | awk '{print $2}')
+            changed_lines=$(grep "^Line" changed_cls_lwc_lines.txt | awk '{print $2}')
             
             for changed_line in $changed_lines; do
               echo "Running SFDX Scanner on file: $file at line number: $changed_line..."
