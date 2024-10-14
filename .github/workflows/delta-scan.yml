@@ -34,7 +34,8 @@ jobs:
       - name: Get changed files and lines (for .cls and .lwc files)
         id: get-changes
         run: |
-          git fetch --unshallow || true
+          git fetch --unshallow || true || echo "Repository is already complete, skipping --unshallow."
+
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files and lines between HEAD~1 and HEAD"
             git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
@@ -54,13 +55,15 @@ jobs:
             /\.cls$|\.lwc$/ {valid_file=1} 
             /^@@/ && valid_file {
               split($0, arr, " "); 
-              gsub(",", "", arr[2]);
-              old_start = substr(arr[2], 2); 
-              new_start = substr(arr[3], 2); 
+              gsub(",", "", arr[2]); 
+              split(arr[2], old_info, "-"); 
+              split(arr[3], new_info, "+"); 
+              old_start = old_info[2]; 
+              new_start = new_info[2]; 
               next
             }
             /^[+][^+]/ && valid_file {print "Added Line", new_start++, ":", substr($0, 2)}
-            /^[^-+]/ && valid_file {print "Changed Line", old_start++, ":", $0}
+            /^[-][^-]/ && valid_file {print "Changed Line", old_start++, ":", substr($0, 2)}
           ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
 
           if [ ! -s changed_cls_lwc_lines.txt ]; then
