@@ -73,7 +73,7 @@ jobs:
 
           cat changed_cls_lwc_lines.txt
 
-      - name: Run SFDX Scanner on Changed Files and Lines
+      - name: Run SFDX Scanner on Changed Files
         run: |
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
           if [ -z "$files" ]; then
@@ -83,20 +83,23 @@ jobs:
 
           declare -a line_numbers_array=()
 
+          # Iterate over each changed file
           while IFS= read -r file; do
             echo "Processing file: $file"
             file=$(echo "$file" | tr -d '"')
             
-            # Capturing only the specific changed lines for the file
+            # Extract the line numbers for the specific file
             changed_lines=$(grep "^+" changes.diff | grep -v '^+++' | awk '{print NR}')
-
             for changed_line in $changed_lines; do
-              echo "Running SFDX Scanner on file: $file at line number: $changed_line..."
-              sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed or no issues found for $file, continuing with other files."; }
               line_numbers_array+=("$changed_line")
             done
+
+            # Run SFDX scanner ONCE for the file
+            echo "Running SFDX Scanner on file: $file..."
+            sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed or no issues found for $file, continuing with other files."; }
           done <<< "$files"
 
+          # Save all captured line numbers for filtering
           echo "${line_numbers_array[*]}" > line_numbers.txt
           cat line_numbers.txt
 
