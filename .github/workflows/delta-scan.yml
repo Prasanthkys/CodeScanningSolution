@@ -47,7 +47,7 @@ jobs:
 
           cat changes.diff
 
-      - name: Extract changed lines, create temp file with line numbers, and scan
+      - name: Extract changed lines, store line number in variable, and scan
         if: success()
         run: |
           # Extract only the changed files from the diff for .cls and .lwc files
@@ -65,17 +65,23 @@ jobs:
             changed_lines=$(grep -n '^+' changes.diff | grep -A 1000 "$file" | grep '^+' | grep -v '+++' | sed 's/^+//')
 
             if [ -n "$changed_lines" ]; then
-              echo "Changed lines with line numbers in $file:"
+              echo "Changed lines in $file:"
               echo "$changed_lines"
+              
+              # Extract the line number of the change from the @@ line
+              line_number=$(grep -A 1 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
+              
+              echo "The changed line number is: $line_number"
               
               # Create a temporary file with changed lines and line numbers
               temp_file="temp_changes_${file//\//_}.txt"
               echo "File: $file" > "$temp_file"
-              echo "Changed lines with line numbers:" >> "$temp_file"
+              echo "Changed line number: $line_number" >> "$temp_file"
+              echo "Changed lines:" >> "$temp_file"
               echo "$changed_lines" >> "$temp_file"
-              echo "Created temporary file with changed lines: $temp_file"
+              echo "Created temporary file with changed line number: $temp_file"
               
-              # Print the content of the temp file (line numbers and changes)
+              # Print the content of the temp file
               cat "$temp_file"
               
               # Run the SFDX scanner on the full file
