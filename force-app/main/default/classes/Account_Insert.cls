@@ -20,7 +20,7 @@ public with sharing class AccountInsertClass {
           acc.Industry = 'Agriculture';
         }
       }
-      System.debug('Hii');
+      System.debug('Hii1');
       insert accList;
     } else {
       throw new CustomException(

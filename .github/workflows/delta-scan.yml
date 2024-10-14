@@ -42,14 +42,17 @@ jobs:
           COMMIT_HASH=$(git rev-parse HEAD)
 
           # Use git show to get the changes for the current commit only
-          git show --unified=0 $COMMIT_HASH > changes.diff || { echo "Failed to get git diff"; exit 1; }
+          git show --unified=0 $COMMIT_HASH > changes.diff || { echo "Failed to get git show"; exit 1; }
 
+          # Check if changes.diff file exists and is not empty
           if [ ! -s changes.diff ]; then
             echo "No changes detected in the current commit."
             exit 0
           fi
 
           echo "Processing changes for .cls and .lwc files only..."
+
+          # Process the diff to find changes in .cls and .lwc files
           awk '
             BEGIN {valid_file=0} 
             /^diff --git/ {valid_file=0} 
@@ -67,8 +70,9 @@ jobs:
             }  
           ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
 
+          # Check if any .cls or .lwc file changes exist
           if [ ! -s changed_cls_lwc_lines.txt ]; then
-            echo "No changes detected in .cls or .lwc files."
+            echo "No .cls or .lwc changes detected in the current commit."
             exit 0
           fi
 
