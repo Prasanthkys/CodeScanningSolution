@@ -1,5 +1,3 @@
-name: Quality Gate and Delta Code Scan
-
 on:
   pull_request:
     branches:
@@ -33,68 +31,37 @@ jobs:
       - name: Verify Scanner Plugin Installation
         run: sf plugins --core
 
-      - name: Get current commit changes for .cls and .lwc files
+      - name: Get changed files and lines (for .cls and .lwc files)
         id: get-changes
         run: |
-          echo "Fetching changed files and lines for the current commit"
-
-          # Get the current commit hash
-          COMMIT_HASH=$(git rev-parse HEAD)
-          echo "Current commit hash: $COMMIT_HASH"
-
-          # Check if the commit is a merge commit
-          IS_MERGE=$(git rev-list --merges HEAD~1..HEAD)
-          if [ -n "$IS_MERGE" ]; then
-            echo "This is a merge commit. No changes to process."
-            exit 0
+          git fetch --unshallow || true
+          if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
+            echo "Fetching changed files and lines between HEAD~1 and HEAD"
+            git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
+          else
+            echo "No previous commit to compare to." > changes.diff
           fi
 
-          # Use git show to get the changes for the current commit only
-          git show --unified=0 $COMMIT_HASH > changes.diff || { echo "Failed to get git show output"; exit 1; }
-
-          echo "Git show output:"
-          cat changes.diff
-
-          # Check if changes.diff file exists and is not empty
           if [ ! -s changes.diff ]; then
-            echo "No changes detected in the current commit."
+            echo "No changes detected between HEAD~1 and HEAD."
             exit 0
           fi
 
           echo "Processing changes for .cls and .lwc files only..."
-
-          # Process the diff to find changes in .cls and .lwc files
           awk '
-            BEGIN {valid_file=0} 
-            /^diff --git/ {valid_file=0} 
-            /\.cls$|\.lwc$/ {valid_file=1} 
-            /^@@/ && valid_file {
-              split($0, arr, " "); 
-              gsub(",", "", arr[2]); 
-              start_line = substr(arr[2], 2); 
-              next
-            }  
-            /^[+][^+]/ && valid_file { 
-              current_line = start_line;
-              print "Line", current_line, ":", substr($0, 2); 
-              start_line++
-            }  
-          ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt || { echo "Error while processing changed lines"; exit 1; }
+            BEGIN {valid_file=0}
+            /^diff --git/ {valid_file=0}
+            /\.cls$|\.lwc$/ {valid_file=1}
+            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  
+            /^[+][^+]/ && valid_file {print "Line", start + line_offset++, ":", substr($0, 2)}  
+          ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
 
-          # Check if any .cls or .lwc file changes exist
           if [ ! -s changed_cls_lwc_lines.txt ]; then
-            echo "No .cls or .lwc changes detected in the current commit."
+            echo "No changes detected in .cls or .lwc files."
             exit 0
           fi
 
-          echo "Changed lines in .cls or .lwc files:"
           cat changed_cls_lwc_lines.txt
-
-      - name: Process and Increment Line Numbers
-        run: |
-          # Extract the line numbers, remove trailing zeros, and increment by 1
-          awk '{gsub(/0+$/, "", $2); print $2+1}' changed_cls_lwc_lines.txt > final_line_numbers.txt
-          cat final_line_numbers.txt
 
       - name: Run SFDX Scanner on Changed Files and Lines
         run: |
@@ -104,26 +71,25 @@ jobs:
             exit 0
           fi
 
-          echo "Changed files to process:"
-          echo "$files"
-
           declare -a line_numbers_array=()
 
           while IFS= read -r file; do
             echo "Processing file: $file"
             file=$(echo "$file" | tr -d '"')
+            changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^\+' | sed 's/^+//')
+            line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
 
-            # Capturing only the specific changed lines for the file
-            changed_lines=$(awk '{print $1}' final_line_numbers.txt)
-            
-            for changed_line in $changed_lines; do
-              echo "Running SFDX Scanner on file: $file at line number: $changed_line..."
+            current_line_number=$(echo "$line_numbers" | head -1)
+            echo "Starting line number: $current_line_number"
+
+            while IFS= read -r line; do
+              echo "Running SFDX Scanner on file: $file at line number: $current_line_number..."
               sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed or no issues found for $file, continuing with other files."; }
-              line_numbers_array+=("$changed_line")
-            done
+              line_numbers_array+=("$current_line_number")
+              current_line_number=$((current_line_number + 1))
+            done <<< "$changed_lines"
           done <<< "$files"
 
-          echo "Line numbers processed: ${line_numbers_array[*]}"
           echo "${line_numbers_array[*]}" > line_numbers.txt
           cat line_numbers.txt
 
@@ -173,47 +139,6 @@ jobs:
           name: SFDX_Code_Scan_Report
           path: filtered-scanner-report.csv
 
-      - name: Install mailx
-        run: sudo apt-get install -y mailutils
-
-      - name: Get Repository and Branch Info
-        id: get-info
-        run: |
-          REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
-          BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
-          COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
-          FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
-          echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
-
-      - name: Upload Scanner Report as Artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: ${{ env.FILE_TITLE }}
-          path: filtered-scanner-report.csv
-
-      - name: Get Pusher's Email
-        id: get-pusher-email
-        run: |
-          COMMIT_SHA=${{ github.sha }}
-          REPO=${{ github.repository }}
-          PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
-            "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
-          echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
-
-      - name: Send Email with actions-send-mail
-        if: always()
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: "smtp.gmail.com"
-          server_port: "587"
-          username: ${{ secrets.GMAIL_EMAIL }}
-          password: ${{ secrets.GMAIL_APP_PASSWORD }}
-          from: ${{ secrets.GMAIL_EMAIL }}
-          subject: "SFDX Code Scan Delta Report"
-          body: "Please find the attached SFDX Code Scan Delta Report."
-          to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
-          attachments: filtered-scanner-report.csv
-
   quality-gate-critical-permissions-check:
     runs-on: ubuntu-latest
     needs: quality-gate-code-check
@@ -229,5 +154,50 @@ jobs:
 
       - name: Scan Profiles and Permission Sets for Critical Permissions
         run: |
-          CRITICAL_PERMISSIONS=( "AssignPermissionSets" "AuthorApex" ... )
-          # Critical Permissions Check Logic
+          CRITICAL_PERMISSIONS=(
+              "AssignPermissionSets"
+              "AuthorApex"
+              "CustomizeApplication"
+              "FreezeUsers"
+              "ManageEncryptionKeys"
+              "ManageInternalUsers"
+              "ManagePasswordPolicies"
+              "ManageProfilesPermissionSets"
+              "ManageRoles"
+              "ManageSharing"
+              "ManageUsers"
+              "ModifyAllData"
+              "MonitorLoginHistory"
+              "MultiFactorAuthenticationRequired"
+              "PasswordNeverExpires"
+              "ResetPasswordsUnlockUsers"
+              "ViewAllData"
+          )
+
+          BLOCKED_FILES=()
+
+          for FILE in $(find force-app/main/default/profiles -name '*.profile-meta.xml'); do
+            for PERMISSION in "${CRITICAL_PERMISSIONS[@]}"; do
+              if grep -q "$PERMISSION" "$FILE" && ! grep -q "System Administrator" "$FILE"; then
+                BLOCKED_FILES+=("$FILE")
+              fi
+            done
+          done
+
+          for FILE in $(find force-app/main/default/permissionsets -name '*.permissionset-meta.xml'); do
+            for PERMISSION in "${CRITICAL_PERMISSIONS[@]}"; do
+              if grep -q "$PERMISSION" "$FILE"; then
+                BLOCKED_FILES+=("$FILE")
+              fi
+            done
+          done
+
+          if [ ${#BLOCKED_FILES[@]} -gt 0 ]; then
+            echo "Critical permissions found in the following files:"
+            for FILE in "${BLOCKED_FILES[@]}"; do
+              echo "$FILE"
+            done
+            exit 1
+          else
+            echo "No critical permissions assigned to non-System Administrator profiles or permission sets."
+          fi
