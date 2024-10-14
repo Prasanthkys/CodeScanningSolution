@@ -1,3 +1,5 @@
+name: SFDX Code Scan Delta
+
 on:
   pull_request:
     branches:
@@ -55,7 +57,7 @@ jobs:
               next
             }
             /^[+][^+]/ && valid_file {
-              print "Added Line", line_offset++, ":", substr($0, 2) # Print line number and line content
+              print line_offset++; # Print the actual line number of the added/modified line
             }
           ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
 
@@ -64,7 +66,7 @@ jobs:
             exit 0
           fi
 
-          echo "Changed lines and line numbers in .cls and .lwc files:"
+          echo "Changed lines in .cls and .lwc files:"
           cat changed_cls_lwc_lines.txt
 
       - name: Run SFDX Scanner on Changed Files
@@ -83,7 +85,7 @@ jobs:
             file=$(echo "$file" | tr -d '"')
             
             # Extract the line numbers for the specific file from current commit
-            changed_lines=$(grep "^+" changes.diff | grep -v '^+++' | awk '{print NR}')
+            changed_lines=$(cat changed_cls_lwc_lines.txt)
             for changed_line in $changed_lines; do
               line_numbers_array+=("$changed_line")
             done
@@ -100,20 +102,36 @@ jobs:
       - name: Filter Scanner Report by Line Numbers
         run: |
           current_line_number_list=$(cat line_numbers.txt)
-          current_line_number_list=$(echo $current_line_number_list | xargs)
+
+          # If there are no line numbers, exit early
+          if [ -z "$current_line_number_list" ]; then
+            echo "No current line numbers found."
+            exit 0
+          fi
+
           echo "Filtering scanner report for the following line numbers: $current_line_number_list"
+
+          # Use awk to filter the scanner report by the line numbers in the list
           awk -v lines="$current_line_number_list" '
           BEGIN {
-            FPAT = "([^,]+)|(\"[^\"]+\")";
-            split(lines, arr, " ");
+            FPAT = "([^,]+)|(\"[^\"]+\")"; # Handles CSV fields with or without quotes
+            split(lines, arr, " "); # Split line number list into an array
             for (i in arr) {
-              valid[arr[i]] = 1;
+              valid[arr[i]] = 1; # Mark the line numbers as valid
             }
           }
-          NR == 1 || (substr($4, 2, length($4)-2) in valid) {
-            print $0;
+          NR == 1 || (valid[substr($4, 2, length($4)-2)]) { # Check if the line number is valid
+            print $0; # Print the header or the matching lines
           }
           ' scanner-report.csv > filtered-scanner-report.csv
+
+          # Check if the filtered report contains data
+          if [ ! -s filtered-scanner-report.csv ]; then
+            echo "No relevant issues found in the current changed lines."
+            exit 0
+          fi
+
+          echo "Filtered scanner report:"
           cat filtered-scanner-report.csv
 
       - name: Block PR merge if severity violations are found

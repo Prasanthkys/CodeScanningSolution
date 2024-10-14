@@ -16,7 +16,7 @@ public with sharing class AccountInsertClass {
         if (Schema.sObjectType.Account.fields.Description.isUpdateable()) {
           System.debug('Sample debug');
           acc.Description = 'Happy Welcome';
-          System.debug('Sample debug12345');
+          System.debug('Sample debug123456');
           acc.Rating = 'Hotter';
           System.debug('Sample debug1');
           acc.Industry = 'Agriculture';
