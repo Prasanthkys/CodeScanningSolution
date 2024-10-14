@@ -48,15 +48,16 @@ jobs:
           echo "Processing changes for .cls and .lwc files only..."
           awk '
             BEGIN {valid_file=0; line_offset=0}
-            /^diff --git/ {valid_file=0} # Reset valid file flag
+            /^diff --git/ {valid_file=0} # Reset valid file flag when encountering a new file
             /\.cls$|\.lwc$/ {valid_file=1} # Set valid file flag if .cls or .lwc file is detected
             /^@@/ && valid_file {
-              match($0, /\+([0-9]+),/, arr); # Match the line number of the changed block
-              line_offset = arr[1]; # Starting line number of the changed block
+              split($0, arr, " ");
+              gsub(",", "", arr[2]); # Extract line range from the second field (e.g., +19,10)
+              line_offset = substr(arr[2], 2); # Extract starting line number
               next
             }
-            /^[+][^+]/ && valid_file {
-              print line_offset++; # Print the actual line number of the added/modified line
+            /^[+][^+]/ && valid_file { # Capture lines starting with + that aren't +++
+              print line_offset++; # Print the current line number and increment
             }
           ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
 
