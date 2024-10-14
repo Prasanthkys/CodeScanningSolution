@@ -14,7 +14,6 @@ public with sharing class AccountInsertClass {
     if (Schema.sObjectType.Account.isCreateable()) {
       for (Account acc : accList) {
         if (Schema.sObjectType.Account.fields.Description.isUpdateable()) {
-          System.debug('Hello');
           acc.Description = 'Happy Welcome';
           acc.Rating = 'Hotter';
           acc.Industry = 'Agriculture';
@@ -40,7 +39,6 @@ public with sharing class AccountInsertClass {
       List<Opportunity> oppList = new List<Opportunity>();
       for (Account acc : accList) {
         Opportunity opp = new Opportunity();
-        System.debug('Helloo');
         opp.Name = acc.Name;
         opp.CloseDate = System.Today();
         opp.StageName = 'Prospecting';
