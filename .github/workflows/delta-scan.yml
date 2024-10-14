@@ -36,15 +36,12 @@ jobs:
         run: |
           git fetch --unshallow || true || echo "Repository is already complete, skipping --unshallow."
 
-          if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-            echo "Fetching changed files and lines between HEAD~1 and HEAD"
-            git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
-          else
-            echo "No previous commit to compare to." > changes.diff
-          fi
+          # Compare current commit (HEAD) to its parent (HEAD^)
+          echo "Fetching changed files and lines between HEAD^ and HEAD"
+          git diff --unified=0 HEAD^ HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
 
           if [ ! -s changes.diff ]; then
-            echo "No changes detected between HEAD~1 and HEAD."
+            echo "No changes detected between HEAD^ and HEAD."
             exit 0
           fi
 
@@ -88,7 +85,7 @@ jobs:
             echo "Processing file: $file"
             file=$(echo "$file" | tr -d '"')
             
-            # Extract the line numbers for the specific file
+            # Extract the line numbers for the specific file from current commit
             changed_lines=$(grep "^+" changes.diff | grep -v '^+++' | awk '{print NR}')
             for changed_line in $changed_lines; do
               line_numbers_array+=("$changed_line")
