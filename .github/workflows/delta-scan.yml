@@ -33,22 +33,19 @@ jobs:
       - name: Verify Scanner Plugin Installation
         run: sf plugins --core
 
-      - name: Get changed files and lines (for .cls and .lwc files)
+      - name: Get current commit changes for .cls and .lwc files
         id: get-changes
         run: |
-          if [ "$(git rev-parse --is-shallow-repository)" == "true" ]; then
-            git fetch --unshallow || true
-          fi
+          echo "Fetching changed files and lines for the current commit"
 
-          if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-            echo "Fetching changed files and lines between HEAD~1 and HEAD"
-            git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
-          else
-            echo "No previous commit to compare to." > changes.diff
-          fi
+          # Get the current commit hash
+          COMMIT_HASH=$(git rev-parse HEAD)
+
+          # Use git show to get the changes for the current commit only
+          git show --unified=0 $COMMIT_HASH > changes.diff || { echo "Failed to get git diff"; exit 1; }
 
           if [ ! -s changes.diff ]; then
-            echo "No changes detected between HEAD~1 and HEAD."
+            echo "No changes detected in the current commit."
             exit 0
           fi
 
