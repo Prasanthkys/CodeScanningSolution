@@ -42,8 +42,15 @@ jobs:
           COMMIT_HASH=$(git rev-parse HEAD)
           echo "Current commit hash: $COMMIT_HASH"
 
+          # Check if the commit is a merge commit
+          IS_MERGE=$(git rev-list --merges HEAD~1..HEAD)
+          if [ -n "$IS_MERGE" ]; then
+            echo "This is a merge commit. No changes to process."
+            exit 0
+          fi
+
           # Use git show to get the changes for the current commit only
-          git show --unified=0 $COMMIT_HASH > changes.diff || { echo "Failed to get git show output"; cat changes.diff; exit 1; }
+          git show --unified=0 $COMMIT_HASH > changes.diff || { echo "Failed to get git show output"; exit 1; }
 
           echo "Git show output:"
           cat changes.diff
