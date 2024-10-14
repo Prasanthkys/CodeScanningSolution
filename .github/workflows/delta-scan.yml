@@ -51,9 +51,10 @@ jobs:
             /^diff --git/ {valid_file=0} # Reset valid file flag when encountering a new file
             /\.cls$|\.lwc$/ {valid_file=1} # Set valid file flag if .cls or .lwc file is detected
             /^@@/ && valid_file {
-              split($0, arr, " ");
-              gsub(",", "", arr[2]); # Extract line range from the second field (e.g., +19,10)
-              line_offset = substr(arr[2], 2); # Extract starting line number
+              # Extract line range information from @@ line
+              split($0, arr, " "); # Split the line based on space
+              match(arr[2], /[+-][0-9]+/, start_line); # Capture starting line number with +
+              line_offset = substr(start_line[0], 2); # Remove the + and set the line_offset
               next
             }
             /^[+][^+]/ && valid_file { # Capture lines starting with + that aren't +++
