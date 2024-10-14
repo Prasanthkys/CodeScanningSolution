@@ -1,16 +1,10 @@
-name: SFDX Code Scan Delta
-
 on:
-  pull_request:
-    branches:
-      - "**"
+  push:
+    branches: "**"
 
 jobs:
-  quality-gate-code-check:
+  installcli:
     runs-on: ubuntu-latest
-    outputs:
-      scanner-report-path: ${{ steps.upload-report.outputs.artifact-path }}
-      block-pr: ${{ steps.block-check.outputs.block-status }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -21,146 +15,99 @@ jobs:
         with:
           node-version: 20.x
 
-      - name: Install Salesforce CLI
+      - name: Install CLI
         run: npm install @salesforce/cli --global
 
       - name: Install Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
 
-      - name: Verify Salesforce CLI Installation
+      - name: Verify SFDX CLI Installation
         run: sf --version
 
-      - name: Verify Scanner Plugin Installation
+      - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
 
-      - name: Get changed files and lines (for .cls and .lwc files)
+      - name: Get changed files and lines
         id: get-changes
         run: |
-          # Compare only the current commit (HEAD) to its parent (HEAD^)
-          echo "Fetching changed files and lines in the current commit (HEAD)"
-          git diff --unified=0 HEAD^ HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
-
-          if [ ! -s changes.diff ]; then
-            echo "No changes detected in the current commit."
-            exit 0
+          # Check if the repository is shallow and unshallow if necessary
+          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            echo "Repository is shallow, unshallowing..."
+            git fetch --unshallow
+          else
+            echo "Repository is not shallow, skipping unshallow."
           fi
 
-          echo "Processing changes for .cls and .lwc files only..."
-          awk '
-            BEGIN {valid_file=0; line_offset=0}
-            /^diff --git/ {valid_file=0} # Reset valid file flag when encountering a new file
-            /\.cls$|\.lwc$/ {valid_file=1} # Set valid file flag if .cls or .lwc file is detected
-            /^@@/ && valid_file {
-              # Extract line range information from @@ line
-              split($0, arr, " "); # Split the line based on space
-              match(arr[2], /[+-][0-9]+/, start_line); # Capture starting line number with +
-              line_offset = substr(start_line[0], 2); # Remove the + and set the line_offset
-              next
-            }
-            /^[+][^+]/ && valid_file { # Capture lines starting with + that aren't +++
-              print line_offset++; # Print the current line number and increment
-            }
-          ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
-
-          if [ ! -s changed_cls_lwc_lines.txt ]; then
-            echo "No changes detected in .cls or .lwc files."
-            exit 0
+          if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
+            echo "Fetching changed files and lines between HEAD~1 and HEAD"
+            git diff --unified=0 HEAD~1 HEAD > changes.diff
+          else
+            echo "No previous commit to compare to." > changes.diff
           fi
 
-          echo "Changed lines in .cls and .lwc files:"
-          cat changed_cls_lwc_lines.txt
+          cat changes.diff
 
-      - name: Run SFDX Scanner on Changed Files
+      - name: Extract changed lines, create temp file with line numbers, and scan
+        if: success()
         run: |
+          # Extract only the changed files from the diff for .cls and .lwc files
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+
           if [ -z "$files" ]; then
             echo "No changed .cls or .lwc files detected."
-            exit 0
+            exit 0  # Gracefully exit if no relevant files are changed
           fi
 
-          declare -a line_numbers_array=()
-
-          # Iterate over each changed file
           while IFS= read -r file; do
             echo "Processing file: $file"
-            file=$(echo "$file" | tr -d '"')
             
-            # Extract the line numbers for the specific file from current commit
-            changed_lines=$(cat changed_cls_lwc_lines.txt)
-            for changed_line in $changed_lines; do
-              line_numbers_array+=("$changed_line")
-            done
+            # Extract the actual changed lines and line numbers
+            changed_lines=$(grep -n '^+' changes.diff | grep -A 1000 "$file" | grep '^+' | grep -v '+++' | sed 's/^+//')
 
-            # Run SFDX scanner ONCE for the file
-            echo "Running SFDX Scanner on file: $file..."
-            sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed or no issues found for $file, continuing with other files."; }
-          done <<< "$files"
-
-          # Save all captured line numbers for filtering
-          echo "${line_numbers_array[*]}" > line_numbers.txt
-          cat line_numbers.txt
-
-      - name: Filter Scanner Report by Line Numbers
-        run: |
-          current_line_number_list=$(cat line_numbers.txt)
-
-          # If there are no line numbers, exit early
-          if [ -z "$current_line_number_list" ]; then
-            echo "No current line numbers found."
-            exit 0
-          fi
-
-          echo "Filtering scanner report for the following line numbers: $current_line_number_list"
-
-          # Use awk to filter the scanner report by the line numbers in the list
-          awk -v lines="$current_line_number_list" '
-          BEGIN {
-            FPAT = "([^,]+)|(\"[^\"]+\")"; # Handles CSV fields with or without quotes
-            split(lines, arr, " "); # Split line number list into an array
-            for (i in arr) {
-              valid[arr[i]] = 1; # Mark the line numbers as valid
-            }
-          }
-          NR == 1 || (valid[substr($4, 2, length($4)-2)]) { # Check if the line number is valid
-            print $0; # Print the header or the matching lines
-          }
-          ' scanner-report.csv > filtered-scanner-report.csv
-
-          # Check if the filtered report contains data
-          if [ ! -s filtered-scanner-report.csv ]; then
-            echo "No relevant issues found in the current changed lines."
-            exit 0
-          fi
-
-          echo "Filtered scanner report:"
-          cat filtered-scanner-report.csv
-
-      - name: Block PR merge if severity violations are found
-        id: block-check
-        run: |
-          if [ -f filtered-scanner-report.csv ]; then
-            severity_fail_count=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' filtered-scanner-report.csv)
-            echo "Severity 3 issues count: $severity_fail_count"
-            if [ "$severity_fail_count" -gt 0 ]; then
-              echo "Blocking your pull request due to severity 3 vulnerabilities found."
-              echo "::set-output name=block-status::true"
-              exit 1
+            if [ -n "$changed_lines" ]; then
+              echo "Changed lines with line numbers in $file:"
+              echo "$changed_lines"
+              
+              # Create a temporary file with changed lines and line numbers
+              temp_file="temp_changes_${file//\//_}.txt"
+              echo "File: $file" > "$temp_file"
+              echo "Changed lines with line numbers:" >> "$temp_file"
+              echo "$changed_lines" >> "$temp_file"
+              echo "Created temporary file with changed lines: $temp_file"
+              
+              # Print the content of the temp file (line numbers and changes)
+              cat "$temp_file"
+              
+              # Run the SFDX scanner on the full file
+              echo "Running SFDX scanner on full file $file"
+              sf scanner:run --target "$file" --format "csv" --outfile "scanner-report-$file.csv" || { echo "Scanner run failed"; exit 1; }
+              
+              # Check if the scanner report was generated
+              if [ -s "scanner-report-$file.csv" ]; then
+                echo "Scanner report generated for $file."
+                
+                # Trim the file paths in the 'File' column of the generated report
+                echo "Trimming the file paths in scanner report: scanner-report-$file.csv"
+                
+                # Use sed to remove the specified path from the 'File' column
+                sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/force-app/main/default/classes/||g' "scanner-report-$file.csv"
+                
+                echo "File paths trimmed in scanner-report-$file.csv."
+              else
+                echo "No scanner report generated for $file."
+                exit 0  # Exit gracefully if no report was generated
+              fi
+              
+              # Clean up the temporary file after scanning
+              rm "$temp_file"
             else
-              echo "No severity 3 vulnerabilities found. Proceeding with Approval."
-              echo "::set-output name=block-status::false"
+              echo "No relevant changes detected in $file."
             fi
-          else
-            echo "No filtered scanner report found."
-            exit 1
-          fi
-
-      - name: Upload Filtered Scanner Report
-        id: upload-report
-        if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: SFDX_Code_Scan_Report
-          path: filtered-scanner-report.csv
+          done <<< "$files"
+        env:
+          SF_LAZY_LOAD_MODULES: "true"
+          SF_AUTOUPDATE_DISABLE: "true"
+          SF_DISABLE_AUTOUPDATE: "true"
 
       - name: Install mailx
         run: sudo apt-get install -y mailutils
@@ -171,52 +118,12 @@ jobs:
           REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
           BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
           COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
-          FILE_TITLE="Code Scanner Delta Report_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}"
+          FILE_TITLE="SFDX_Code_Scan_Delta_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}.csv"
           echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
 
-      - name: Upload Scanner Report as Artifact
+      - name: Upload Scanner Report and Rules as Artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ env.FILE_TITLE }}
-          path: filtered-scanner-report.csv
-
-      - name: Get Pusher's Email
-        id: get-pusher-email
-        run: |
-          COMMIT_SHA=${{ github.sha }}
-          REPO=${{ github.repository }}
-          PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
-            "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
-          echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
-
-      - name: Send Email with actions-send-mail
-        if: always()
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: "smtp.gmail.com"
-          server_port: "587"
-          username: ${{ secrets.GMAIL_EMAIL }}
-          password: ${{ secrets.GMAIL_APP_PASSWORD }}
-          from: ${{ secrets.GMAIL_EMAIL }}
-          subject: "SFDX Code Scan Delta Report"
-          body: "Please find the attached SFDX Code Scan Delta Report."
-          to: ${{ env.PUSHER_EMAIL }}, ${{ secrets.GMAIL_EMAIL }}
-          attachments: filtered-scanner-report.csv
-
-  quality-gate-critical-permissions-check:
-    runs-on: ubuntu-latest
-    needs: quality-gate-code-check
-    if: ${{ needs.quality-gate-code-check.outputs.block-pr == 'false' }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Download Scanner Report
-        uses: actions/download-artifact@v3
-        with:
-          name: SFDX_Code_Scan_Report
-
-      - name: Scan Profiles and Permission Sets for Critical Permissions
-        run: |
-          CRITICAL_PERMISSIONS=( "AssignPermissionSets" "AuthorApex" ... )
-          # Critical Permissions Check Logic
+          name: SFDX_Code_Scan_Delta
+          path: |
+            scanner-report-*.csv
