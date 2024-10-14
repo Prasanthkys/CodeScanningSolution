@@ -36,12 +36,10 @@ jobs:
       - name: Get changed files and lines (for .cls and .lwc files)
         id: get-changes
         run: |
-          # Check if the repository is shallow, skip unshallow if it's not needed
           if [ "$(git rev-parse --is-shallow-repository)" == "true" ]; then
             git fetch --unshallow || true
           fi
 
-          # Get the diff between the current and previous commit
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             echo "Fetching changed files and lines between HEAD~1 and HEAD"
             git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
@@ -79,6 +77,12 @@ jobs:
 
           cat changed_cls_lwc_lines.txt
 
+      - name: Process and Increment Line Numbers
+        run: |
+          # Extract the line numbers, remove any trailing zeros, and increment by 1
+          awk '{print $2+1}' changed_cls_lwc_lines.txt > final_line_numbers.txt
+          cat final_line_numbers.txt
+
       - name: Run SFDX Scanner on Changed Files and Lines
         run: |
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
@@ -94,7 +98,7 @@ jobs:
             file=$(echo "$file" | tr -d '"')
 
             # Capturing only the specific changed lines for the file
-            changed_lines=$(grep "^Line" changed_cls_lwc_lines.txt | awk '{print $2}')
+            changed_lines=$(awk '{print $1}' final_line_numbers.txt)
             
             for changed_line in $changed_lines; do
               echo "Running SFDX Scanner on file: $file at line number: $changed_line..."
