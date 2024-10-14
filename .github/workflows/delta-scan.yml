@@ -51,9 +51,8 @@ jobs:
             /^diff --git/ {valid_file=0} # Reset valid file flag
             /\.cls$|\.lwc$/ {valid_file=1} # Set valid file flag if .cls or .lwc file is detected
             /^@@/ && valid_file {
-              split($0, arr, " ");
-              gsub(",", "", arr[2]); # Extract line range
-              line_offset = substr(arr[2], 2); # Starting line number of the changed block
+              match($0, /\+([0-9]+),/, arr); # Match the line number of the changed block
+              line_offset = arr[1]; # Starting line number of the changed block
               next
             }
             /^[+][^+]/ && valid_file {
