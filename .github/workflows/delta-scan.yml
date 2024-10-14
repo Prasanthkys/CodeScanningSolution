@@ -79,8 +79,8 @@ jobs:
 
       - name: Process and Increment Line Numbers
         run: |
-          # Extract the line numbers, remove any trailing zeros, and increment by 1
-          awk '{print $2+1}' changed_cls_lwc_lines.txt > final_line_numbers.txt
+          # Extract the line numbers, remove trailing zeros, and increment by 1
+          awk '{gsub(/0+$/, "", $2); print $2+1}' changed_cls_lwc_lines.txt > final_line_numbers.txt
           cat final_line_numbers.txt
 
       - name: Run SFDX Scanner on Changed Files and Lines
