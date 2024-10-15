@@ -97,8 +97,8 @@ jobs:
           echo "${line_numbers_array[*]}" > line_numbers.txt
           cat line_numbers.txt
 
-          # Store current line numbers as environment variable
-          echo "::set-env name=CURRENT_LINE_NUMBERS::$(cat line_numbers.txt)"
+          # Store current line numbers in environment file
+          echo "CURRENT_LINE_NUMBERS=$(cat line_numbers.txt)" >> $GITHUB_ENV
 
       - name: Filter Scanner Report by Line Numbers
         run: |
