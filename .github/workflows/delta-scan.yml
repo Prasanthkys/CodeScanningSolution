@@ -49,11 +49,21 @@ jobs:
 
           echo "Processing changes for .cls and .lwc files only..."
           awk '
-            BEGIN {valid_file=0}
+            BEGIN {valid_file=0; start=0; line_offset=0}
             /^diff --git/ {valid_file=0}
             /\.cls$|\.lwc$/ {valid_file=1}
-            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  
-            /^[+][^+]/ && valid_file {print "Line", start + line_offset++, ":", substr($0, 2)}  
+            /^@@/ && valid_file {
+              split($0, arr, " "); 
+              gsub(",", "", arr[2]); 
+              start = substr(arr[2], 2); 
+              line_offset = 0; 
+              next
+            }  
+            /^[+][^+]/ && valid_file {
+              current_line = start + line_offset;
+              print "File:", FILENAME, "Line", current_line, ":", substr($0, 2);
+              line_offset++;
+            }
           ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
 
           if [ ! -s changed_cls_lwc_lines.txt ]; then
@@ -76,18 +86,14 @@ jobs:
           while IFS= read -r file; do
             echo "Processing file: $file"
             file=$(echo "$file" | tr -d '"')
-            changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^\+' | sed 's/^+//')
-            line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
-
-            current_line_number=$(echo "$line_numbers" | head -1)
-            echo "Starting line number: $current_line_number"
-
-            while IFS= read -r line; do
+            line_entries=$(grep "$file" changed_cls_lwc_lines.txt)
+            
+            while IFS= read -r line_entry; do
+              current_line_number=$(echo "$line_entry" | awk '{print $3}')
               echo "Running SFDX Scanner on file: $file at line number: $current_line_number..."
               sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed or no issues found for $file, continuing with other files."; }
               line_numbers_array+=("$current_line_number")
-              current_line_number=$((current_line_number + 1))
-            done <<< "$changed_lines"
+            done <<< "$line_entries"
           done <<< "$files"
 
           echo "${line_numbers_array[*]}" > line_numbers.txt
