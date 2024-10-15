@@ -26,6 +26,7 @@ public with sharing class AccountInsertClass {
       );
     }
     System.debug('Hello');
+    System.debug('Hi');
   }
 
   /**
