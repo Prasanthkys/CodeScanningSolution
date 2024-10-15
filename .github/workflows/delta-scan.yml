@@ -1,3 +1,5 @@
+name: SFDX Code Scan
+
 on:
   pull_request:
     branches:
@@ -31,51 +33,52 @@ jobs:
       - name: Verify Scanner Plugin Installation
         run: sf plugins --core
 
-      - name: Get changed files and lines (for .cls and .lwc files)
-        id: get-changes
+      - name: Get uncommitted changed files and line numbers (for .cls and .lwc files)
+        id: get-uncommitted-changes
         run: |
-          git fetch --unshallow || true
-          if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-            echo "Fetching changed files and lines between HEAD~1 and HEAD"
-            git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
-          else
-            echo "No previous commit to compare to." > changes.diff
+          # Get the list of uncommitted changed Apex (.cls) or LWC files
+          changed_files=$(git diff --cached --name-only | grep -E '\.cls$|\.lwc$')
+
+          # Check if there are any relevant changes
+          if [ -z "$changed_files" ]; then
+            echo "No relevant changes to scan."
+            exit 0  # Gracefully exit if no relevant files are changed
           fi
 
-          if [ ! -s changes.diff ]; then
-            echo "No changes detected between HEAD~1 and HEAD."
-            exit 0
-          fi
+          # Create a directory for temporary files
+          temp_dir=$(mktemp -d)
 
-          echo "Processing changes for .cls and .lwc files only..."
-          awk '
-            BEGIN {valid_file=0; start=0; line_offset=0}
-            /^diff --git/ {valid_file=0}
-            /\.cls$|\.lwc$/ {valid_file=1}
-            /^@@/ && valid_file {
-              split($0, arr, " "); 
-              gsub(",", "", arr[2]); 
-              start = substr(arr[2], 2); 
-              line_offset = 0; 
-              next
-            }  
-            /^[+][^+]/ && valid_file {
-              current_line = start + line_offset;
-              print "File:", FILENAME, "Line", current_line, ":", substr($0, 2);
-              line_offset++;
-            }
-          ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
+          # Prepare the array to store uncommitted line numbers
+          declare -a line_numbers_array=()
 
-          if [ ! -s changed_cls_lwc_lines.txt ]; then
-            echo "No changes detected in .cls or .lwc files."
-            exit 0
-          fi
+          # Loop through each changed file
+          for file in $changed_files; do
+            echo "Processing file: $file"
+            
+            # Get the uncommitted changed lines with line numbers
+            git diff --cached --unified=0 "$file" > "$temp_dir/$file.diff"
+            
+            # Extract the changed line numbers
+            awk '
+              /^@@/ {split($0, arr, " "); start = substr(arr[2], 2); line_offset=0; next}  
+              /^[+][^+]/ {print "Line", start + line_offset++, ":", substr($0, 2)}
+            ' "$temp_dir/$file.diff" | grep -v '^+++' > "$temp_dir/$file.changed_lines"
 
-          cat changed_cls_lwc_lines.txt
+            # Append the changed line numbers to the array
+            changed_line_numbers=$(awk '{print $2}' "$temp_dir/$file.changed_lines")
+            for line_number in $changed_line_numbers; do
+              line_numbers_array+=("$line_number")
+            done
+          done
+
+          # Output the line numbers
+          echo "${line_numbers_array[*]}" > uncommitted_line_numbers.txt
+          echo "Uncommitted line numbers: ${line_numbers_array[*]}"
+          cat uncommitted_line_numbers.txt
 
       - name: Run SFDX Scanner on Changed Files and Lines
         run: |
-          files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+          files=$(git diff --cached --name-only | grep -E '\.cls$|\.lwc$')
           if [ -z "$files" ]; then
             echo "No changed .cls or .lwc files detected."
             exit 0
@@ -86,20 +89,24 @@ jobs:
           while IFS= read -r file; do
             echo "Processing file: $file"
             file=$(echo "$file" | tr -d '"')
-            line_entries=$(grep "$file" changed_cls_lwc_lines.txt)
-            
-            while IFS= read -r line_entry; do
-              current_line_number=$(echo "$line_entry" | awk '{print $3}')
+            changed_lines=$(git diff --cached --unified=0 "$file" | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
+            line_numbers=$(git diff --cached --unified=0 "$file" | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
+
+            current_line_number=$(echo "$line_numbers" | head -1)
+            echo "Starting line number: $current_line_number"
+
+            while IFS= read -r line; do
               echo "Running SFDX Scanner on file: $file at line number: $current_line_number..."
               sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed or no issues found for $file, continuing with other files."; }
               line_numbers_array+=("$current_line_number")
-            done <<< "$line_entries"
+              current_line_number=$((current_line_number + 1))
+            done <<< "$changed_lines"
           done <<< "$files"
 
           echo "${line_numbers_array[*]}" > line_numbers.txt
           cat line_numbers.txt
 
-      - name: Filter Scanner Report by Line Numbers
+      - name: Filter Scanner Report by Uncommitted Line Numbers
         run: |
           current_line_number_list=$(cat line_numbers.txt)
           current_line_number_list=$(echo $current_line_number_list | xargs)
