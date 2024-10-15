@@ -58,11 +58,21 @@ jobs:
             # Get the uncommitted changed lines with line numbers
             git diff --cached --unified=0 "$file" > "$temp_dir/$file.diff"
             
+            if [ ! -s "$temp_dir/$file.diff" ]; then
+              echo "No diff for $file."
+              continue
+            fi
+            
             # Extract the changed line numbers
             awk '
               /^@@/ {split($0, arr, " "); start = substr(arr[2], 2); line_offset=0; next}  
               /^[+][^+]/ {print "Line", start + line_offset++, ":", substr($0, 2)}
             ' "$temp_dir/$file.diff" | grep -v '^+++' > "$temp_dir/$file.changed_lines"
+
+            if [ ! -s "$temp_dir/$file.changed_lines" ]; then
+              echo "No changed lines detected for $file."
+              continue
+            fi
 
             # Append the changed line numbers to the array
             changed_line_numbers=$(awk '{print $2}' "$temp_dir/$file.changed_lines")
@@ -72,6 +82,11 @@ jobs:
           done
 
           # Output the line numbers
+          if [ ${#line_numbers_array[@]} -eq 0 ]; then
+            echo "No line numbers to process."
+            exit 0
+          fi
+
           echo "${line_numbers_array[*]}" > uncommitted_line_numbers.txt
           echo "Uncommitted line numbers: ${line_numbers_array[*]}"
           cat uncommitted_line_numbers.txt
