@@ -44,23 +44,53 @@ jobs:
           cat changes.diff
       - name: Extract changed lines, create temp file, and scan
         run: |
+          # Extract only the changed .cls or .lwc files from the diff
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+
           if [ -z "$files" ]; then
             echo "No changed .cls or .lwc files detected."
-            exit 0
+            exit 0  # Gracefully exit if no relevant files are changed
           fi
+
           while IFS= read -r file; do
+            echo "Processing file: $file"
+            
+            # Extract the actual changed lines
             changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
+            
             if [ -n "$changed_lines" ]; then
+              # Clean problematic characters (remove quotes and backslashes)
+              cleaned_lines=$(echo "$changed_lines" | sed 's/[\"\\]//g')
+              echo "Cleaned changed lines: $cleaned_lines"
+              
+              # Create a temporary file with a valid class and method structure
               temp_file="temp_${file//\//_}"
               echo "/* Temporary file for changed lines scan */" > "$temp_file"
               echo "public class TempWrapperClass {" >> "$temp_file"
               echo "    public static void tempMethod() {" >> "$temp_file"
-              echo "$changed_lines" >> "$temp_file"
+              echo "$cleaned_lines" >> "$temp_file"
+              echo "    }" >> "$temp_file"
               echo "}" >> "$temp_file"
-              echo "}" >> "$temp_file"
-              sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv"
+              echo "Created temporary file with method structure: $temp_file"
+              
+              # Run the SFDX scanner on the temporary file
+              sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
+              
+              # Check if the scanner report was generated
+              if [ -s "scanner-report-$temp_file.csv" ]; then
+                echo "Scanner report generated for $temp_file."
+                
+                # Trim the file paths in the 'File' column of the generated report
+                sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_force-app_main_default_classes_||g' "scanner-report-$temp_file.csv"
+                echo "File paths trimmed in scanner-report-$temp_file.csv."
+              else
+                echo "No scanner report generated for $temp_file."
+              fi
+              
+              # Clean up the temporary file after scanning
               rm "$temp_file"
+            else
+              echo "No relevant changes detected in $file."
             fi
           done <<< "$files"
 
@@ -69,7 +99,7 @@ jobs:
         with:
           name: SFDX_Code_Scan_Delta
           path: |
-            scanner-report-*.csv
+            scanner-report-$temp_file.csv
 
   quality-gate-critical-permissions-check:
     runs-on: ubuntu-latest
