@@ -25,10 +25,9 @@ public with sharing class AccountInsertClass {
         'You do not have permission to create Account records.'
       );
     }
-    System.debug('Hellooooooo1234567');
+    System.debug('Hellooooooo12345678');
     System.debug('Hi');
   }
-
   /**
    * @description Inserts related Opportunity records for a given list of Account records.
    * Performs CRUD validation before inserting opportunities.
