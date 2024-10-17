@@ -52,8 +52,8 @@ jobs:
             BEGIN {valid_file=0}
             /^diff --git/ {valid_file=0}
             /\.cls$|\.lwc$/ {valid_file=1}
-            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  
-            /^[+][^+]/ && valid_file {print "Line", start + line_offset++, ":", substr($0, 2)}  
+            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); next}  
+            /^[+][^+]/ && valid_file {print "Line", start++, ":", substr($0, 2)}  
           ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
 
           if [ ! -s changed_cls_lwc_lines.txt ]; then
@@ -71,24 +71,23 @@ jobs:
             exit 0
           fi
 
-          declare -a line_numbers_array=()
-
           while IFS= read -r file; do
             echo "Processing file: $file"
             file=$(echo "$file" | tr -d '"')
-            changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^\+' | sed 's/^+//')
-            line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
+            changed_lines=$(grep "^Line" changed_cls_lwc_lines.txt | awk -F: '{print $2}' | xargs)
 
-            current_line_number=$(echo "$line_numbers" | head -1)
-            echo "Starting line number: $current_line_number"
+            if [ -z "$changed_lines" ]; then
+              echo "No changes detected in file $file."
+              continue
+            fi
 
-            while IFS= read -r line; do
-              echo "Running SFDX Scanner on file: $file at line number: $current_line_number..."
-              sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed or no issues found for $file, continuing with other files."; }
-              line_numbers_array+=("$current_line_number")
-              current_line_number=$((current_line_number + 1))
-            done <<< "$changed_lines"
+            echo "Running SFDX Scanner on file: $file at lines: $changed_lines..."
+            for line_number in $changed_lines; do
+              echo "Running SFDX Scanner on line: $line_number"
+              sf scanner:run --target "$file" --line "$line_number" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed or no issues found for $file, continuing with other files."; }
+            done
           done <<< "$files"
+
 
           echo "${line_numbers_array[*]}" > line_numbers.txt
           cat line_numbers.txt
