@@ -1,14 +1,13 @@
+name: SFDX Code Scan Workflow
+
 on:
   pull_request:
     branches:
       - "**"
 
 jobs:
-  quality-gate-code-check:
+  installcli:
     runs-on: ubuntu-latest
-    outputs:
-      scanner-report-path: ${{ steps.upload-report.outputs.artifact-path }}
-      block-pr: ${{ steps.block-check.outputs.block-status }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -19,102 +18,79 @@ jobs:
         with:
           node-version: 20.x
 
-      - name: Install Salesforce CLI
+      - name: Install CLI
         run: npm install @salesforce/cli --global
 
       - name: Install Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
 
-      - name: Verify Salesforce CLI Installation
+      - name: Verify SFDX CLI Installation
         run: sf --version
 
-      - name: Verify Scanner Plugin Installation
+      - name: Verify SFDX Scanner Plugin Installation
         run: sf plugins --core
 
-      - name: Get changed files and lines (for .cls and .lwc files)
+      - name: Get changed files and lines
         id: get-changes
         run: |
-          git fetch --unshallow || true
+          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
+            git fetch --unshallow
+          else
+            echo "Repository is not shallow, skipping unshallow."
+          fi
+
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-            echo "Fetching changed files and lines between HEAD~1 and HEAD"
-            git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
+            git diff --unified=0 HEAD~1 HEAD > changes.diff
           else
             echo "No previous commit to compare to." > changes.diff
           fi
 
-          if [ ! -s changes.diff ]; then
-            echo "No changes detected between HEAD~1 and HEAD."
+      - name: Extract changed lines, create temp file, and scan
+        if: success()
+        run: |
+          files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+
+          if [ -z "$files" ]; then
+            echo "No changed .cls or .lwc files detected."
             exit 0
           fi
 
-          echo "Processing changes for .cls and .lwc files only..."
-          awk '
-            BEGIN {valid_file=0} 
-            /^diff --git/ {valid_file=0} 
-            /\.cls$|\.lwc$/ {valid_file=1} 
-            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  
-            /^[+][^+]/ && valid_file {print substr($0, 2)}  
-          ' changes.diff > changed_cls_lwc_lines.txt
-
-          if [ ! -s changed_cls_lwc_lines.txt ]; then
-            echo "No changes detected in .cls or .lwc files."
-            exit 0
-          fi
-
-          cat changed_cls_lwc_lines.txt
-
-      - name: Create Temporary Class for SFDX Scan
-        run: |
-          # Create a temp class file to store the changed lines
-          echo "public class TempClass {" > TempClass.cls
-          echo "  // Temporary class to hold the changed lines" >> TempClass.cls
-          cat changed_cls_lwc_lines.txt | sed 's/^/  /' >> TempClass.cls
-          echo "}" >> TempClass.cls
-
-          echo "TempClass content:"
-          cat TempClass.cls
-
-      - name: Run SFDX Scanner on Temporary Class
-        run: |
-          echo "Running SFDX Scanner on TempClass.cls"
-          sf scanner:run --target TempClass.cls --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed or no issues found for TempClass.cls."; }
-
-      - name: Clean up Temporary Class File
-        run: |
-          echo "Cleaning up temporary class file"
-          rm TempClass.cls
+          while IFS= read -r file; do
+            changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
+            if [ -n "$changed_lines" ]; then
+              temp_file="temp_${file//\//_}"
+              echo "/* Temporary file for changed lines scan */" > "$temp_file"
+              echo "public class TempWrapperClass {" >> "$temp_file"
+              echo "    public static void tempMethod() {" >> "$temp_file"
+              echo "$changed_lines" >> "$temp_file"
+              echo "    }" >> "$temp_file"
+              sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv"
+              rm "$temp_file"
+            fi
+          done <<< "$files"
 
       - name: Block PR merge if severity violations are found
         id: block-check
         run: |
-          if [ -f scanner-report.csv ]; then
-            severity_fail_count=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' scanner-report.csv)
-            echo "Severity 3 issues count: $severity_fail_count"
+          if [ -f scanner-report-*.csv ]; then
+            severity_fail_count=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' scanner-report-*.csv)
             if [ "$severity_fail_count" -gt 0 ]; then
-              echo "Blocking your pull request due to severity 3 vulnerabilities found."
-              echo "::set-output name=block-status::true"
+              echo "Blocking pull request due to severity 3 vulnerabilities found."
               exit 1
-            else
-              echo "No severity 3 vulnerabilities found. Proceeding with Approval."
-              echo "::set-output name=block-status::false"
             fi
-          else
-            echo "No scanner report found."
-            exit 1
           fi
 
-      - name: Upload Scanner Report
+      - name: Upload Filtered Scanner Report
         id: upload-report
         if: always()
         uses: actions/upload-artifact@v3
         with:
           name: SFDX_Code_Scan_Report
-          path: scanner-report.csv
+          path: scanner-report-*.csv
 
   quality-gate-critical-permissions-check:
     runs-on: ubuntu-latest
-    needs: quality-gate-code-check
-    if: ${{ needs.quality-gate-code-check.outputs.block-pr == 'false' }}
+    needs: installcli
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -170,6 +146,4 @@ jobs:
               echo "$FILE"
             done
             exit 1
-          else
-            echo "No critical permissions assigned to non-System Administrator profiles or permission sets."
           fi
