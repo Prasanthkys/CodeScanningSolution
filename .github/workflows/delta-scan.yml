@@ -1,5 +1,3 @@
-name: Quality Gate Code Check
-
 on:
   pull_request:
     branches:
@@ -51,9 +49,9 @@ jobs:
 
           echo "Processing changes for .cls and .lwc files only..."
           awk '
-            BEGIN {valid_file=0}
-            /^diff --git/ {valid_file=0}
-            /\.cls$|\.lwc$/ {valid_file=1}
+            BEGIN {valid_file=0} 
+            /^diff --git/ {valid_file=0} 
+            /\.cls$|\.lwc$/ {valid_file=1} 
             /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  
             /^[+][^+]/ && valid_file {print "Line", start + line_offset++, ":", substr($0, 2)}  
           ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
@@ -65,8 +63,7 @@ jobs:
 
           cat changed_cls_lwc_lines.txt
 
-      - name: Run SFDX Scanner on Changed Files and Lines
-        id: run-scanner
+      - name: Run SFDX Scanner on Changed Lines
         run: |
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
           if [ -z "$files" ]; then
@@ -74,55 +71,64 @@ jobs:
             exit 0
           fi
 
-          declare -a line_numbers_array=()
-
           while IFS= read -r file; do
             echo "Processing file: $file"
-            file=$(echo "$file" | tr -d '"')
+
+            # Extract the actual changed lines for the specific file
             changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^\+' | sed 's/^+//')
-            line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
 
-            current_line_number=$(echo "$line_numbers" | head -1)
-            echo "Starting line number: $current_line_number"
-            export current_line_number
+            if [ -n "$changed_lines" ]; then
+              # Create a temporary file with a valid method structure
+              temp_file="temp_${file//\//_}"
+              echo "/* Temporary file for changed lines scan */" > "$temp_file"
+              echo "public class TempWrapperClass {" >> "$temp_file"
+              echo "    public static void tempMethod() {" >> "$temp_file"
+              echo "        /* Begin of extracted changed lines */" >> "$temp_file"
+              echo "$changed_lines" >> "$temp_file"
+              echo "        /* End of extracted changed lines */" >> "$temp_file"
+              echo "    }" >> "$temp_file"
+              
+              # Ensure the method and class are closed properly
+              open_braces=$(echo "$changed_lines" | grep -o '{' | wc -l)
+              close_braces=$(echo "$changed_lines" | grep -o '}' | wc -l)
+              if [ "$open_braces" -gt "$close_braces" ]; then
+                remaining_closing_braces=$(($open_braces - $close_braces))
+                for i in $(seq 1 $remaining_closing_braces); do
+                  echo "}" >> "$temp_file"
+                done
+              fi
+              echo "}" >> "$temp_file"  # Close the class
 
-            while IFS= read -r line; do
-              echo "Running SFDX Scanner on file: $file at line number: $current_line_number..."
-              sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed or no issues found for $file, continuing with other files."; }
-              line_numbers_array+=("$current_line_number")
-              current_line_number=$((current_line_number + 1))
-            done <<< "$changed_lines"
+              echo "Created temporary file with method structure: $temp_file"
+
+              # Run the SFDX scanner on the temporary file
+              echo "Running SFDX scanner on temporary file $temp_file"
+              sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
+
+              # Check if the scanner report was generated
+              if [ -s "scanner-report-$temp_file.csv" ]; then
+                echo "Scanner report generated for $temp_file."
+
+                # Trim the file paths in the 'File' column of the generated report
+                sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_force-app_main_default_classes_||g' "scanner-report-$temp_file.csv"
+                echo "File paths trimmed in scanner-report-$temp_file.csv."
+              else
+                echo "No scanner report generated for $temp_file."
+                exit 0  # Exit gracefully if no report was generated
+              fi
+
+              # Clean up the temporary file after scanning
+              rm "$temp_file"
+            else
+              echo "No relevant changes detected in $file."
+            fi
           done <<< "$files"
-
-          echo "${line_numbers_array[*]}" > line_numbers.txt
-          cat line_numbers.txt
-
-          # Store current line numbers in environment file
-          echo "CURRENT_LINE_NUMBERS=$(cat line_numbers.txt)" >> $GITHUB_ENV
-
-      - name: Filter Scanner Report by Line Numbers
-        run: |
-          current_line_number_list=$(echo ${{ env.CURRENT_LINE_NUMBERS }} | xargs)
-          echo "Filtering scanner report for the following line numbers: $current_line_number_list"
-          awk -v lines="$current_line_number_list" '
-          BEGIN {
-            FPAT = "([^,]+)|(\"[^\"]+\")";
-            split(lines, arr, " ");
-            for (i in arr) {
-              valid[arr[i]] = 1;
-            }
-          }
-          NR == 1 || (substr($4, 2, length($4)-2) in valid) {
-            print $0;
-          }
-          ' scanner-report.csv > filtered-scanner-report.csv
-          cat filtered-scanner-report.csv
 
       - name: Block PR merge if severity violations are found
         id: block-check
         run: |
-          if [ -f filtered-scanner-report.csv ]; then
-            severity_fail_count=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' filtered-scanner-report.csv)
+          if [ -f scanner-report.csv ]; then
+            severity_fail_count=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' scanner-report.csv)
             echo "Severity 3 issues count: $severity_fail_count"
             if [ "$severity_fail_count" -gt 0 ]; then
               echo "Blocking your pull request due to severity 3 vulnerabilities found."
@@ -133,7 +139,7 @@ jobs:
               echo "::set-output name=block-status::false"
             fi
           else
-            echo "No filtered scanner report found."
+            echo "No scanner report found."
             exit 1
           fi
 
@@ -143,7 +149,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: SFDX_Code_Scan_Report
-          path: filtered-scanner-report.csv
+          path: scanner-report.csv
 
   quality-gate-critical-permissions-check:
     runs-on: ubuntu-latest
@@ -160,7 +166,7 @@ jobs:
 
       - name: Scan Profiles and Permission Sets for Critical Permissions
         run: |
-          CRITICAL_PERMISSIONS=(
+          CRITICAL_PERMISSIONS=( 
               "AssignPermissionSets"
               "AuthorApex"
               "CustomizeApplication"
