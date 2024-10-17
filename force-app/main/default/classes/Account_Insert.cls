@@ -25,7 +25,7 @@ public with sharing class AccountInsertClass {
         'You do not have permission to create Account records.'
       );
     }
-    System.debug('Hellooooooo');
+    System.debug('Hellooooooo1');
     System.debug('Hi');
   }
 

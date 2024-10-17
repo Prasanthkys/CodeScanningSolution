@@ -64,12 +64,16 @@ jobs:
           cat changed_cls_lwc_lines.txt
 
       - name: Run SFDX Scanner on Changed Lines
+        id: run-sfdx-scan
         run: |
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
           if [ -z "$files" ]; then
             echo "No changed .cls or .lwc files detected."
             exit 0
           fi
+
+          temp_files=""
+          scanner_reports=""
 
           while IFS= read -r file; do
             echo "Processing file: $file"
@@ -100,6 +104,7 @@ jobs:
               echo "}" >> "$temp_file"  # Close the class
 
               echo "Created temporary file with method structure: $temp_file"
+              temp_files="$temp_files $temp_file"
 
               # Run the SFDX scanner on the temporary file
               echo "Running SFDX scanner on temporary file $temp_file"
@@ -112,23 +117,29 @@ jobs:
                 # Trim the file paths in the 'File' column of the generated report
                 sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_force-app_main_default_classes_||g' "scanner-report-$temp_file.csv"
                 echo "File paths trimmed in scanner-report-$temp_file.csv."
+                scanner_reports="$scanner_reports scanner-report-$temp_file.csv"
               else
                 echo "No scanner report generated for $temp_file."
                 exit 0  # Exit gracefully if no report was generated
               fi
-
-              # Clean up the temporary file after scanning
-              rm "$temp_file"
             else
               echo "No relevant changes detected in $file."
             fi
           done <<< "$files"
 
+      - name: Upload Scanner Reports
+        id: upload-report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: SFDX_Code_Scan_Report
+          path: ${{ steps.run-sfdx-scan.outputs.scanner_reports }}
+
       - name: Block PR merge if severity violations are found
         id: block-check
         run: |
-          if [ -f scanner-report.csv ]; then
-            severity_fail_count=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' scanner-report.csv)
+          if [ -f "scanner-report-$temp_file.csv" ]; then
+            severity_fail_count=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' ${{ steps.run-sfdx-scan.outputs.scanner_reports }})
             echo "Severity 3 issues count: $severity_fail_count"
             if [ "$severity_fail_count" -gt 0 ]; then
               echo "Blocking your pull request due to severity 3 vulnerabilities found."
@@ -142,14 +153,6 @@ jobs:
             echo "No scanner report found."
             exit 1
           fi
-
-      - name: Upload Filtered Scanner Report
-        id: upload-report
-        if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: SFDX_Code_Scan_Report
-          path: scanner-report.csv
 
   quality-gate-critical-permissions-check:
     runs-on: ubuntu-latest
