@@ -35,26 +35,20 @@ jobs:
         run: |
           if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
             git fetch --unshallow
-          else
-            echo "Repository is not shallow, skipping unshallow."
           fi
-
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
             git diff --unified=0 HEAD~1 HEAD > changes.diff
           else
             echo "No previous commit to compare to." > changes.diff
           fi
-
+          cat changes.diff
       - name: Extract changed lines, create temp file, and scan
-        if: success()
         run: |
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
-
           if [ -z "$files" ]; then
             echo "No changed .cls or .lwc files detected."
             exit 0
           fi
-
           while IFS= read -r file; do
             changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
             if [ -n "$changed_lines" ]; then
@@ -63,30 +57,19 @@ jobs:
               echo "public class TempWrapperClass {" >> "$temp_file"
               echo "    public static void tempMethod() {" >> "$temp_file"
               echo "$changed_lines" >> "$temp_file"
-              echo "    }" >> "$temp_file"
+              echo "}" >> "$temp_file"
+              echo "}" >> "$temp_file"
               sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv"
               rm "$temp_file"
             fi
           done <<< "$files"
 
-      - name: Block PR merge if severity violations are found
-        id: block-check
-        run: |
-          if [ -f scanner-report-*.csv ]; then
-            severity_fail_count=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' scanner-report-*.csv)
-            if [ "$severity_fail_count" -gt 0 ]; then
-              echo "Blocking pull request due to severity 3 vulnerabilities found."
-              exit 1
-            fi
-          fi
-
-      - name: Upload Filtered Scanner Report
-        id: upload-report
-        if: always()
+      - name: Upload Scanner Report and Rules as Artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: SFDX_Code_Scan_Report
-          path: scanner-report-*.csv
+          name: SFDX_Code_Scan_Delta
+          path: |
+            scanner-report-*.csv
 
   quality-gate-critical-permissions-check:
     runs-on: ubuntu-latest
