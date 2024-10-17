@@ -63,7 +63,7 @@ jobs:
 
           cat changed_cls_lwc_lines.txt
 
-      - name: Run SFDX Scanner on Changed Files and Lines
+      - name: Run SFDX Scanner on Changed Files
         run: |
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
           if [ -z "$files" ]; then
@@ -71,23 +71,30 @@ jobs:
             exit 0
           fi
 
+          declare -a line_numbers_array=()
+
           while IFS= read -r file; do
             echo "Processing file: $file"
             file=$(echo "$file" | tr -d '"')
-            changed_lines=$(grep "^Line" changed_cls_lwc_lines.txt | awk -F: '{print $2}' | xargs)
 
+            changed_lines=$(grep "^Line" changed_cls_lwc_lines.txt | awk -F: '{print $2}' | xargs)
+            line_numbers=$(grep "^Line" changed_cls_lwc_lines.txt | awk -F' ' '{print $2}' | xargs)
+            
             if [ -z "$changed_lines" ]; then
               echo "No changes detected in file $file."
               continue
             fi
 
-            echo "Running SFDX Scanner on file: $file at lines: $changed_lines..."
-            for line_number in $changed_lines; do
-              echo "Running SFDX Scanner on line: $line_number"
-              sf scanner:run --target "$file" --line "$line_number" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed or no issues found for $file, continuing with other files."; }
-            done
-          done <<< "$files"
+            echo "Running SFDX Scanner on the entire file: $file"
+            sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed or no issues found for $file, continuing with other files."; }
 
+            # Filter violations based on the changed lines
+            echo "Filtering violations for lines: $line_numbers"
+            grep -E "($line_numbers)" scanner-report.csv > filtered-scanner-report.csv
+
+            echo "Filtered results:"
+            cat filtered-scanner-report.csv
+          done <<< "$files"
 
           echo "${line_numbers_array[*]}" > line_numbers.txt
           cat line_numbers.txt
