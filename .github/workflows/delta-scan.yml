@@ -64,37 +64,44 @@ jobs:
           cat changed_cls_lwc_lines.txt
 
       - name: Run SFDX Scanner on Changed Files
-        run: |
-          files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
-          if [ -z "$files" ]; then
-            echo "No changed .cls or .lwc files detected."
-            exit 0
-          fi
-
-          declare -a line_numbers_array=()
-
-          while IFS= read -r file; do
-            echo "Processing file: $file"
-            file=$(echo "$file" | tr -d '"')
-
-            changed_lines=$(grep "^Line" changed_cls_lwc_lines.txt | awk -F: '{print $2}' | xargs)
-            line_numbers=$(grep "^Line" changed_cls_lwc_lines.txt | awk -F' ' '{print $2}' | xargs)
-            
-            if [ -z "$changed_lines" ]; then
-              echo "No changes detected in file $file."
-              continue
+          run: |
+            files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+            if [ -z "$files" ]; then
+              echo "No changed .cls or .lwc files detected."
+              exit 0
             fi
 
-            echo "Running SFDX Scanner on the entire file: $file"
-            sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed or no issues found for $file, continuing with other files."; }
+            declare -a line_numbers_array=()
 
-            # Filter violations based on the changed lines
-            echo "Filtering violations for lines: $line_numbers"
-            grep -E "($line_numbers)" scanner-report.csv > filtered-scanner-report.csv
+            while IFS= read -r file; do
+              echo "Processing file: $file"
+              file=$(echo "$file" | tr -d '"')
 
-            echo "Filtered results:"
-            cat filtered-scanner-report.csv
-          done <<< "$files"
+              changed_lines=$(grep "^Line" changed_cls_lwc_lines.txt | awk -F: '{print $2}' | xargs)
+              line_numbers=$(grep "^Line" changed_cls_lwc_lines.txt | awk -F' ' '{print $2}' | xargs)
+
+              if [ -z "$changed_lines" ]; then
+                echo "No changes detected in file $file."
+                continue
+              fi
+
+              echo "Running SFDX Scanner on the entire file: $file"
+              sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed or no issues found for $file, continuing with other files."; }
+
+              # Filter violations based on the changed lines
+              echo "Filtering violations for lines: $line_numbers"
+              
+              # Safely grep and handle cases where no violations are found for the lines
+              grep -E "$(echo "$line_numbers" | tr ' ' '|')" scanner-report.csv > filtered-scanner-report.csv || true
+
+              if [ -s filtered-scanner-report.csv ]; then
+                echo "Filtered violations for $file:"
+                cat filtered-scanner-report.csv
+              else
+                echo "No violations found for the specified lines in $file."
+              fi
+            done <<< "$files"
+
 
           echo "${line_numbers_array[*]}" > line_numbers.txt
           cat line_numbers.txt
