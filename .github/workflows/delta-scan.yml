@@ -39,7 +39,19 @@ jobs:
           if [ ! -s changes.diff ]; then
             echo "No changes detected."
             exit 0
-          fi
+
+      - name: Print Diff Output
+        run: |
+          cat changes.diff
+
+      - name: Detect Changed Files
+        run: |
+          files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+          if [ -z "$files" ]; then
+            echo "No changed .cls or .lwc files detected."
+            exit 0
+          else
+            echo "Changed files detected: $files"
 
       - name: Install Python
         uses: actions/setup-python@v2
@@ -75,6 +87,8 @@ jobs:
             exit 0
           fi
 
+          echo "Processing files: $files"
+
           declare -a line_numbers_array=()
 
           while IFS= read -r file; do
@@ -100,7 +114,7 @@ jobs:
             # Safely grep and handle cases where no violations are found for the lines
             grep -E "$(echo "$line_numbers" | tr ' ' '|')" scanner-report.csv > filtered-scanner-report.csv || true
 
-            if [ -s filtered-scanner-report.csv]; then
+            if [ -s filtered-scanner-report.csv ]; then
               echo "Filtered violations for $file:"
               cat filtered-scanner-report.csv
             else
