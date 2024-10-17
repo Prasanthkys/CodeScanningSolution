@@ -47,28 +47,28 @@ jobs:
             exit 0
           fi
 
-          echo "Processing changes for .cls files only..."
+          echo "Processing changes for .cls and .lwc files only..."
           awk '
             BEGIN {valid_file=0} 
             /^diff --git/ {valid_file=0} 
-            /\.cls$/ {valid_file=1} 
+            /\.cls$|\.lwc$/ {valid_file=1} 
             /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  
-            /^[+][^+]/ && valid_file {print "Line", start + line_offset++, ":", substr($0, 2)}  
-          ' changes.diff | grep -v '^+++' > changed_cls_lines.txt
+            /^[+][^+]/ && valid_file {print substr($0, 2)}  
+          ' changes.diff > changed_cls_lwc_lines.txt
 
-          if [ ! -s changed_cls_lines.txt ]; then
-            echo "No changes detected in .cls files."
+          if [ ! -s changed_cls_lwc_lines.txt ]; then
+            echo "No changes detected in .cls or .lwc files."
             exit 0
           fi
 
-          cat changed_cls_lines.txt
+          cat changed_cls_lwc_lines.txt
 
       - name: Create Temporary Class for SFDX Scan
         run: |
           # Create a temp class file to store the changed lines
           echo "public class TempClass {" > TempClass.cls
           echo "  // Temporary class to hold the changed lines" >> TempClass.cls
-          cat changed_cls_lines.txt | sed 's/^Line [0-9]* : /  /' >> TempClass.cls
+          cat changed_cls_lwc_lines.txt | sed 's/^/  /' >> TempClass.cls
           echo "}" >> TempClass.cls
 
           echo "TempClass content:"
