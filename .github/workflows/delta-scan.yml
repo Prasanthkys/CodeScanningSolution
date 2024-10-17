@@ -1,3 +1,5 @@
+name: SFDX Quality Gate
+
 on:
   pull_request:
     branches:
@@ -6,9 +8,6 @@ on:
 jobs:
   quality-gate-code-check:
     runs-on: ubuntu-latest
-    outputs:
-      scanner-report-path: ${{ steps.upload-report.outputs.artifact-path }}
-      block-pr: ${{ steps.block-check.outputs.block-status }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -53,7 +52,7 @@ jobs:
             /^diff --git/ {valid_file=0}
             /\.cls$|\.lwc$/ {valid_file=1}
             /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); next}  
-            /^[+][^+]/ && valid_file {print "Line", start++, ":", substr($0, 2)}  
+            /^[+][^+]/ && valid_file {print "Line", start, ":", substr($0, 2); next}  
           ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
 
           if [ ! -s changed_cls_lwc_lines.txt ]; then
@@ -101,8 +100,6 @@ jobs:
               echo "No violations found for the specified lines in $file."
             fi
           done <<< "$files"
-
-
 
           echo "${line_numbers_array[*]}" > line_numbers.txt
           cat line_numbers.txt
