@@ -1,13 +1,14 @@
-name: SFDX Code Scan Workflow
-
 on:
   pull_request:
     branches:
       - "**"
 
 jobs:
-  installcli:
+  quality-gate-code-check:
     runs-on: ubuntu-latest
+    outputs:
+      scanner-report-path: ${{ steps.upload-report.outputs.artifact-path }}
+      block-pr: ${{ steps.block-check.outputs.block-status }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -18,92 +19,130 @@ jobs:
         with:
           node-version: 20.x
 
-      - name: Install CLI
+      - name: Install Salesforce CLI
         run: npm install @salesforce/cli --global
 
       - name: Install Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
 
-      - name: Verify SFDX CLI Installation
+      - name: Verify Salesforce CLI Installation
         run: sf --version
 
-      - name: Verify SFDX Scanner Plugin Installation
+      - name: Verify Scanner Plugin Installation
         run: sf plugins --core
 
-      - name: Get changed files and lines
+      - name: Get changed files and lines (for .cls and .lwc files)
         id: get-changes
         run: |
-          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
-            git fetch --unshallow
-          fi
+          git fetch --unshallow || true
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-            git diff --unified=0 HEAD~1 HEAD > changes.diff
+            echo "Fetching changed files and lines between HEAD~1 and HEAD"
+            git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
           else
             echo "No previous commit to compare to." > changes.diff
           fi
-          cat changes.diff
-      - name: Extract changed lines, create temp file, and scan
-        run: |
-          # Extract only the changed .cls or .lwc files from the diff
-          files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
 
+          if [ ! -s changes.diff ]; then
+            echo "No changes detected between HEAD~1 and HEAD."
+            exit 0
+          fi
+
+          echo "Processing changes for .cls and .lwc files only..."
+          awk '
+            BEGIN {valid_file=0}
+            /^diff --git/ {valid_file=0}
+            /\.cls$|\.lwc$/ {valid_file=1}
+            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); line_offset=0; next}  
+            /^[+][^+]/ && valid_file {print "Line", start + line_offset++, ":", substr($0, 2)}  
+          ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
+
+          if [ ! -s changed_cls_lwc_lines.txt ]; then
+            echo "No changes detected in .cls or .lwc files."
+            exit 0
+          fi
+
+          cat changed_cls_lwc_lines.txt
+
+      - name: Run SFDX Scanner on Changed Files and Lines
+        run: |
+          files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
           if [ -z "$files" ]; then
             echo "No changed .cls or .lwc files detected."
-            exit 0  # Gracefully exit if no relevant files are changed
+            exit 0
           fi
+
+          declare -a line_numbers_array=()
 
           while IFS= read -r file; do
             echo "Processing file: $file"
-            
-            # Extract the actual changed lines
-            changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | grep -v '+++' | cut -d'+' -f2-)
-            
-            if [ -n "$changed_lines" ]; then
-              # Clean problematic characters (remove quotes and backslashes)
-              cleaned_lines=$(echo "$changed_lines" | sed 's/[\"\\]//g')
-              echo "Cleaned changed lines: $cleaned_lines"
-              
-              # Create a temporary file with a valid class and method structure
-              temp_file="temp_${file//\//_}"
-              echo "/* Temporary file for changed lines scan */" > "$temp_file"
-              echo "public class TempWrapperClass {" >> "$temp_file"
-              echo "    public static void tempMethod() {" >> "$temp_file"
-              echo "$cleaned_lines" >> "$temp_file"
-              echo "    }" >> "$temp_file"
-              echo "}" >> "$temp_file"
-              echo "Created temporary file with method structure: $temp_file"
-              
-              # Run the SFDX scanner on the temporary file
-              sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
-              
-              # Check if the scanner report was generated
-              if [ -s "scanner-report-$temp_file.csv" ]; then
-                echo "Scanner report generated for $temp_file."
-                
-                # Trim the file paths in the 'File' column of the generated report
-                sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_force-app_main_default_classes_||g' "scanner-report-$temp_file.csv"
-                echo "File paths trimmed in scanner-report-$temp_file.csv."
-              else
-                echo "No scanner report generated for $temp_file."
-              fi
-              
-              # Clean up the temporary file after scanning
-              rm "$temp_file"
-            else
-              echo "No relevant changes detected in $file."
-            fi
+            file=$(echo "$file" | tr -d '"')
+            changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^\+' | sed 's/^+//')
+            line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
+
+            current_line_number=$(echo "$line_numbers" | head -1)
+            echo "Starting line number: $current_line_number"
+
+            while IFS= read -r line; do
+              echo "Running SFDX Scanner on file: $file at line number: $current_line_number..."
+              sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed or no issues found for $file, continuing with other files."; }
+              line_numbers_array+=("$current_line_number")
+              current_line_number=$((current_line_number + 1))
+            done <<< "$changed_lines"
           done <<< "$files"
 
-      - name: Upload Scanner Report and Rules as Artifacts
+          echo "${line_numbers_array[*]}" > line_numbers.txt
+          cat line_numbers.txt
+
+      - name: Filter Scanner Report by Line Numbers
+        run: |
+          current_line_number_list=$(cat line_numbers.txt)
+          current_line_number_list=$(echo $current_line_number_list | xargs)
+          echo "Filtering scanner report for the following line numbers: $current_line_number_list"
+          awk -v lines="$current_line_number_list" '
+          BEGIN {
+            FPAT = "([^,]+)|(\"[^\"]+\")";
+            split(lines, arr, " ");
+            for (i in arr) {
+              valid[arr[i]] = 1;
+            }
+          }
+          NR == 1 || (substr($4, 2, length($4)-2) in valid) {
+            print $0;
+          }
+          ' scanner-report.csv > filtered-scanner-report.csv
+          cat filtered-scanner-report.csv
+
+      - name: Block PR merge if severity violations are found
+        id: block-check
+        run: |
+          if [ -f filtered-scanner-report.csv ]; then
+            severity_fail_count=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' filtered-scanner-report.csv)
+            echo "Severity 3 issues count: $severity_fail_count"
+            if [ "$severity_fail_count" -gt 0 ]; then
+              echo "Blocking your pull request due to severity 3 vulnerabilities found."
+              echo "::set-output name=block-status::true"
+              exit 1
+            else
+              echo "No severity 3 vulnerabilities found. Proceeding with Approval."
+              echo "::set-output name=block-status::false"
+            fi
+          else
+            echo "No filtered scanner report found."
+            exit 1
+          fi
+
+      - name: Upload Filtered Scanner Report
+        id: upload-report
+        if: always()
         uses: actions/upload-artifact@v3
         with:
-          name: SFDX_Code_Scan_Delta
-          path: |
-            scanner-report-$temp_file.csv
+          name: SFDX_Code_Scan_Report
+          path: filtered-scanner-report.csv
 
   quality-gate-critical-permissions-check:
     runs-on: ubuntu-latest
-    needs: installcli
+    needs: quality-gate-code-check
+    if: ${{ needs.quality-gate-code-check.outputs.block-pr == 'false' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -159,4 +198,6 @@ jobs:
               echo "$FILE"
             done
             exit 1
+          else
+            echo "No critical permissions assigned to non-System Administrator profiles or permission sets."
           fi
