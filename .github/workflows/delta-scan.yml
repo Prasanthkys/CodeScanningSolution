@@ -48,21 +48,20 @@ jobs:
 
           echo "Processing changes for .cls and .lwc files only..."
           awk '
-            BEGIN {valid_file=0}
-            /^diff --git/ {valid_file=0}
-            /\.cls$|\.lwc$/ {valid_file=1}
-            /^@@/ && valid_file {
-              split($0, arr, " ");
-              gsub(",", "", arr[3]); 
-              start = substr(arr[3], 2); 
-              next
-            }
-            /^[+][^+]/ && valid_file {
-              if (substr($0, 2) != "" && !/^\s*$/) {
-                print "Line", start, ":", substr($0, 2);
-              }
-            }
+          BEGIN {valid_file=0}
+          /^diff --git/ {valid_file=0}
+          /\.cls$|\.lwc$/ {valid_file=1}
+          /^@@/ && valid_file {
+            split($0, arr, " ");
+            gsub(",", "", arr[3]); 
+            start = substr(arr[3], 2); 
+            next
+          }
+          /^[+]/ && valid_file && substr($0, 2) != "" {
+            print "Line", start, ":", substr($0, 2);
+          }
           ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
+
 
           if [ ! -s changed_cls_lwc_lines.txt ]; then
             echo "No changes detected in .cls or .lwc files."
