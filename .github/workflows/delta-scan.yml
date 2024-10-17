@@ -58,9 +58,8 @@ jobs:
               next
             }
             /^[+][^+]/ && valid_file {
-              if (substr($0, 2) != "") {
+              if (substr($0, 2) != "" && !/^\s*$/) {
                 print "Line", start, ":", substr($0, 2);
-                start++;
               }
             }
           ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
