@@ -55,16 +55,28 @@ jobs:
           fi
           cat changed_cls_lwc_files.txt
 
-      - name: Show Changed Lines from .cls or .lwc Files
+      - name: Show Changed Lines and Line Numbers from .cls or .lwc Files
         run: |
           files=$(cat changed_cls_lwc_files.txt)
           if [ -z "$files" ]; then
             echo "No .cls or .lwc files detected."
             exit 0
           fi
+
           for file in $files; do
             echo "Showing changed lines for file: $file"
-            git diff HEAD~1 HEAD -- "$file" | grep '^+' | grep -v '^+++' || echo "No changes found in $file"
+            
+            # Extracting the changed lines along with their line numbers
+            git diff HEAD~1 HEAD -- "$file" | awk '
+              /^@@/ { 
+                split($0, arr, " "); 
+                line_number = substr(arr[3], 2); 
+              } 
+              /^[+][^+]/ { 
+                print "Line", line_number ":", $0; 
+                line_number++;
+              }
+            ' || echo "No changes found in $file"
           done
 
       - name: Run SFDX Scanner on Changed Files
