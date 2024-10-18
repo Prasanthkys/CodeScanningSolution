@@ -14,11 +14,9 @@ public with sharing class AccountInsertClass {
     if (Schema.sObjectType.Account.isCreateable()) {
       for (Account acc : accList) {
         if (Schema.sObjectType.Account.fields.Description.isUpdateable()) {
-          System.debug('Sample debug1');
           acc.Description = 'Happy Welcome';
           acc.Rating = 'Hotter';
           acc.Industry = 'Agriculture';
-          System.debug('Sample debug2');
         }
       }
       insert accList;
