@@ -63,6 +63,7 @@ jobs:
 
             # Extract the line numbers using the @@ syntax
             touched_lines_for_file=$(awk '/^@@/ { split($2, lines, ","); print lines[1] }' changes.diff | sed 's/-//')
+            cat changes.diff
 
             if [ -n "$touched_lines_for_file" ]; then
               touched_lines["$file"]="$touched_lines_for_file"
