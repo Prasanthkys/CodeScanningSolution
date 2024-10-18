@@ -55,7 +55,7 @@ jobs:
           fi
           cat changed_cls_lwc_files.txt
 
-      - name: Show Changed Lines and Line Numbers from .cls or .lwc Files
+      - name: Show Changed Lines and Correct Line Numbers from .cls or .lwc Files
         run: |
           files=$(cat changed_cls_lwc_files.txt)
           if [ -z "$files" ]; then
@@ -66,10 +66,11 @@ jobs:
           for file in $files; do
             echo "Showing changed lines for file: $file"
             
-            # Extracting the changed lines along with their line numbers
+            # Extracting the changed lines along with their correct line numbers
             git diff HEAD~1 HEAD -- "$file" | awk '
               /^@@/ { 
                 split($0, arr, " "); 
+                # Extracting the starting line number from the @@ line (e.g. +17 for the new file)
                 line_number = substr(arr[3], 2); 
               } 
               /^[+][^+]/ { 
