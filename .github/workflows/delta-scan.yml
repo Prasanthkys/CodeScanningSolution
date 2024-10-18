@@ -33,27 +33,41 @@ jobs:
       - name: Verify Scanner Plugin Installation
         run: sf plugins --core
 
-      - name: Get changed files (for .cls and .lwc files)
+      - name: Get changed files and line numbers (for .cls and .lwc files)
         id: get-changes
         run: |
           git fetch --unshallow || true
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-            echo "Fetching changed files between HEAD~1 and HEAD"
-            git diff --name-only HEAD~1 HEAD > changed-files.txt || { echo "Failed to get git diff"; exit 1; }
+            echo "Fetching changed files and line numbers between HEAD~1 and HEAD"
+            git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
           else
-            echo "No previous commit to compare to." > changed-files.txt
+            echo "No previous commit to compare to." > changes.diff
           fi
-          if [ ! -s changed-files.txt ]; then
+          if [ ! -s changes.diff ]; then
             echo "No changes detected between HEAD~1 and HEAD."
             exit 0
           fi
           echo "Processing changes for .cls and .lwc files only..."
-          grep '\.cls$\|\.lwc$' changed-files.txt > changed_cls_lwc_files.txt
+          grep '\.cls$\|\.lwc$' changes.diff > changed_cls_lwc_files.txt
           if [ ! -s changed_cls_lwc_files.txt ]; then
             echo "No .cls or .lwc files detected."
             exit 0
           fi
-          cat changed_cls_lwc_files.txt
+
+          # Extract the touched line numbers and store them in an array
+          declare -A touched_lines
+          while read -r file; do
+            echo "Processing file: $file"
+            lines=$(awk -v file="$file" '/^diff --git/ {found=0} /\.cls$|\.lwc$/ {found=1} found && /^@@/ {print substr($2, 2)}' changes.diff)
+            if [ -n "$lines" ]; then
+              touched_lines["$file"]="$lines"
+              echo "Touched lines for $file: $lines"
+            fi
+          done < changed_cls_lwc_files.txt
+
+          # Store the touched lines array in the environment variable
+          declare -p touched_lines > touched_lines.env
+          cat touched_lines.env
 
       - name: Run SFDX Scanner on Changed Files
         run: |
@@ -93,6 +107,14 @@ jobs:
         with:
           name: SFDX_Code_Scan_Report
           path: scanner-report.csv
+
+      - name: Print Touched Lines
+        run: |
+          source touched_lines.env
+          for file in "${!touched_lines[@]}"; do
+            echo "File: $file"
+            echo "Touched lines: ${touched_lines[$file]}"
+          done
 
   quality-gate-critical-permissions-check:
     runs-on: ubuntu-latest
