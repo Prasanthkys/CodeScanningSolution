@@ -48,8 +48,10 @@ jobs:
             exit 0
           fi
           echo "Processing changes for .cls and .lwc files only..."
-          grep '\.cls$\|\.lwc$' changes.diff > changed_cls_lwc_files.txt
-          if [ ! -s changed_cls_lwc_files.txt ]; then
+
+          # Extract the changed .cls and .lwc files
+          files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
+          if [ -z "$files" ]; then
             echo "No .cls or .lwc files detected."
             exit 0
           fi
@@ -58,12 +60,15 @@ jobs:
           declare -A touched_lines
           while read -r file; do
             echo "Processing file: $file"
-            lines=$(awk -v file="$file" '/^diff --git/ {found=0} /\.cls$|\.lwc$/ {found=1} found && /^@@/ {print substr($2, 2)}' changes.diff)
-            if [ -n "$lines" ]; then
-              touched_lines["$file"]="$lines"
-              echo "Touched lines for $file: $lines"
+
+            # Extract the line numbers using the @@ syntax
+            touched_lines_for_file=$(awk '/^@@/ { split($2, lines, ","); print lines[1] }' changes.diff | sed 's/-//')
+
+            if [ -n "$touched_lines_for_file" ]; then
+              touched_lines["$file"]="$touched_lines_for_file"
+              echo "Touched lines for $file: $touched_lines_for_file"
             fi
-          done < changed_cls_lwc_files.txt
+          done <<< "$files"
 
           # Store the touched lines array in the environment variable
           declare -p touched_lines > touched_lines.env
