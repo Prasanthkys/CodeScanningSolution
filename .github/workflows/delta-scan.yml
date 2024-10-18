@@ -34,39 +34,37 @@ jobs:
       - name: Get changed files and lines (for .cls and .lwc files)
         id: get-changes
         run: |
-          # Fetch only changes from the latest commit
-          git log -p -1 > changes.diff || { echo "Failed to get git diff"; exit 1; }
-
+          git fetch --unshallow || true
+          if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
+            echo "Fetching changed files and lines between HEAD~1 and HEAD"
+            git diff --unified=0 HEAD~1 HEAD > changes.diff || { echo "Failed to get git diff"; exit 1; }
+          else
+            echo "No previous commit to compare to." > changes.diff
+          fi
           if [ ! -s changes.diff ]; then
-            echo "No changes detected."
+            echo "No changes detected between HEAD~1 and HEAD."
             exit 0
           fi
-
           echo "Processing changes for .cls and .lwc files only..."
-
-          # Extract changed lines for .cls and .lwc files only
           awk '
-            BEGIN {valid_file=0}
-            /^diff --git/ {valid_file=0}
-            /\.cls$|\.lwc$/ {valid_file=1}
+            BEGIN {valid_file=0} 
+            /^diff --git/ {valid_file=0} 
+            /\.cls$|\.lwc$/ {valid_file=1} 
             /^@@/ && valid_file {
-              split($0, arr, " ");
-              gsub(",", "", arr[2]);
-              start_line = substr(arr[2], 2);
+              split($0, arr, " "); 
+              gsub(",", "", arr[2]); 
+              start_line = substr(arr[2], 2); 
               next
-            }
+            }  
             /^[+][^+]/ && valid_file {
               print "Line", start_line++, ":", substr($0, 2)
             }
           ' changes.diff | grep -v '^+++' > changed_cls_lwc_lines.txt
-
           if [ ! -s changed_cls_lwc_lines.txt ]; then
             echo "No changes detected in .cls or .lwc files."
             exit 0
           fi
-
           cat changed_cls_lwc_lines.txt
-
       - name: Run SFDX Scanner on Changed Files and Lines
         run: |
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
@@ -74,27 +72,21 @@ jobs:
             echo "No changed .cls or .lwc files detected."
             exit 0
           fi
-
-          # Process each changed line and run the scanner on those lines
           while IFS= read -r file; do
             echo "Processing file: $file"
             file=$(echo "$file" | tr -d '"')
             changed_lines=$(awk '/^Line/ {print $2}' changed_cls_lwc_lines.txt)
-
             if [ -z "$changed_lines" ]; then
               echo "No lines to scan in $file."
               continue
             fi
-
             for line in $changed_lines; do
               echo "Running SFDX Scanner on file: $file at line number: $line..."
               sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed or no issues found for $file, continuing with other files."; }
             done
           done <<< "$files"
-
           echo "${line_numbers_array[*]}" > line_numbers.txt
           cat line_numbers.txt
-
       - name: Filter Scanner Report by Line Numbers
         run: |
           current_line_number_list=$(cat line_numbers.txt)
@@ -113,7 +105,6 @@ jobs:
           }
           ' scanner-report.csv > filtered-scanner-report.csv
           cat filtered-scanner-report.csv
-
       - name: Block PR merge if severity violations are found
         id: block-check
         run: |
@@ -132,7 +123,6 @@ jobs:
             echo "No filtered scanner report found."
             exit 1
           fi
-
       - name: Upload Filtered Scanner Report
         id: upload-report
         if: always()
@@ -175,9 +165,7 @@ jobs:
               "ResetPasswordsUnlockUsers"
               "ViewAllData"
           )
-
           BLOCKED_FILES=()
-
           for FILE in $(find force-app/main/default/profiles -name '*.profile-meta.xml'); do
             for PERMISSION in "${CRITICAL_PERMISSIONS[@]}"; do
               if grep -q "$PERMISSION" "$FILE" && ! grep -q "System Administrator" "$FILE"; then
@@ -185,7 +173,6 @@ jobs:
               fi
             done
           done
-
           for FILE in $(find force-app/main/default/permissionsets -name '*.permissionset-meta.xml'); do
             for PERMISSION in "${CRITICAL_PERMISSIONS[@]}"; do
               if grep -q "$PERMISSION" "$FILE"; then
@@ -193,7 +180,6 @@ jobs:
               fi
             done
           done
-
           if [ ${#BLOCKED_FILES[@]} -gt 0 ]; then
             echo "Critical permissions found in the following files:"
             for FILE in "${BLOCKED_FILES[@]}"; do
