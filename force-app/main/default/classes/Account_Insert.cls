@@ -40,6 +40,7 @@ public with sharing class AccountInsertClass {
       List<Opportunity> oppList = new List<Opportunity>();
       for (Account acc : accList) {
         System.debug('Debug3');
+        System.debug('Debug4');
         Opportunity opp = new Opportunity();
         opp.Name = acc.Name;
         opp.CloseDate = System.Today();
