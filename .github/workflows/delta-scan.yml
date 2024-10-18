@@ -47,9 +47,15 @@ jobs:
             echo "No changes detected between HEAD~1 and HEAD."
             exit 0
           fi
-          echo "Processing changes for .cls and .lwc files only..."
 
-          # Extract the changed .cls and .lwc files
+          # Extract only .cls and .lwc files from the diff
+          grep '\.cls$\|\.lwc$' changes.diff > changed_cls_lwc_files.txt
+          if [ ! -s changed_cls_lwc_files.txt ]; then
+            echo "No .cls or .lwc files detected."
+            exit 0
+          fi
+
+          # Process only .cls and .lwc files
           files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
           if [ -z "$files" ]; then
             echo "No .cls or .lwc files detected."
@@ -60,10 +66,8 @@ jobs:
           declare -A touched_lines
           while read -r file; do
             echo "Processing file: $file"
-
             # Extract the line numbers using the @@ syntax
-            touched_lines_for_file=$(awk '/^@@/ { split($2, lines, ","); print lines[1] }' changes.diff | sed 's/-//')
-            cat changes.diff
+            touched_lines_for_file=$(awk -v file="$file" '/^@@/ { split($2, lines, ","); print lines[1] }' changes.diff | sed 's/-//')
 
             if [ -n "$touched_lines_for_file" ]; then
               touched_lines["$file"]="$touched_lines_for_file"
