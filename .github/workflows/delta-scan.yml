@@ -55,34 +55,32 @@ jobs:
           fi
           cat changed_cls_lwc_files.txt
 
-      - name: Show Changed Lines and Correct Line Numbers from .cls or .lwc Files
-        run: |
-          files=$(cat changed_cls_lwc_files.txt)
-          if [ -z "$files" ]; then
-            echo "No .cls or .lwc files detected."
-            exit 0
-          fi
+        - name: Show Changed Lines and Correct Line Numbers from .cls or .lwc Files
+          run: |
+            files=$(cat changed_cls_lwc_files.txt)
+            if [ -z "$files" ]; then
+              echo "No .cls or .lwc files detected."
+              exit 0
+            fi
 
-          for file in $files; do
-            echo "Showing changed lines for file: $file"
-            
-            # Get the merge-base commit to compare against the base of the branch (instead of the previous commit)
-            base_commit=$(git merge-base HEAD origin/main)
+            for file in $files; do
+              echo "Showing changed lines for file: $file"
+              
+              # Compare the current commit (HEAD) with the previous commit (HEAD~1)
+              git diff -U0 HEAD~1 HEAD -- "$file" | awk '
+                /^@@/ {
+                  # Extract the starting line number of the changes in the new file
+                  match($0, /\+[0-9]+/)
+                  line_number = substr($0, RSTART+1, RLENGTH-1)
+                }
+                /^[+][^+]/ {
+                  # Process only lines that are changes (starting with a single '+')
+                  print "Line", line_number ":", $0
+                  line_number++
+                }
+              ' || echo "No changes found in $file"
+            done
 
-            # Generate a diff without context lines and extract correct line numbers
-            git diff -U0 $base_commit HEAD -- "$file" | awk '
-              /^@@/ {
-                # Extract the starting line number of the changes in the new file
-                match($0, /\+[0-9]+/)
-                line_number = substr($0, RSTART+1, RLENGTH-1)
-              }
-              /^[+][^+]/ {
-                # Process only lines that are changes (starting with a single '+')
-                print "Line", line_number ":", $0
-                line_number++
-              }
-            ' || echo "No changes found in $file"
-          done
 
       - name: Run SFDX Scanner on Changed Files
         run: |
