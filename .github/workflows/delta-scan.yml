@@ -137,6 +137,7 @@ jobs:
 
       - name: Upload New Scanner Report (New Rows Only)
         uses: actions/upload-artifact@v3
+        if: always()
         with:
           name: SFDX_Code_Scan_New_Report
           path: new-scanner-report.csv
