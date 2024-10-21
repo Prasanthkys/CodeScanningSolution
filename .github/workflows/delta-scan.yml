@@ -66,17 +66,16 @@ jobs:
           for file in $files; do
             echo "Showing changed lines for file: $file"
             
-            # Compare the current commit (HEAD) with the previous commit (HEAD~1)
-            git diff -U0 HEAD~1 HEAD -- "$file" | awk '
-              /^@@/ {
-                # Extract the starting line number of the changes in the new file
-                match($0, /\+[0-9]+/)
-                line_number = substr($0, RSTART+1, RLENGTH-1)
-              }
-              /^[+][^+]/ {
-                # Process only lines that are changes (starting with a single '+')
-                print "Line", line_number ":", $0
-                line_number++
+            # Extracting the changed lines along with their correct line numbers
+            git diff HEAD~1 HEAD -- "$file" | awk '
+              /^@@/ { 
+                split($0, arr, " "); 
+                # Extracting the starting line number from the @@ line (e.g. +17 for the new file)
+                line_number = substr(arr[3], 2); 
+              } 
+              /^[+][^+]/ { 
+                print "Line", line_number ":", $0; 
+                line_number++;
               }
             ' || echo "No changes found in $file"
           done
@@ -177,3 +176,4 @@ jobs:
             exit 1
           else
             echo "No critical permissions assigned to non-System Administrator profiles or permission sets."
+          fi
