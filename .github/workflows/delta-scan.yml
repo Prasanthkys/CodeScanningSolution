@@ -74,8 +74,11 @@ jobs:
                 line_number = substr(arr[3], 2); 
               } 
               /^[+][^+]/ { 
-                print "Line", line_number ":", $0; 
-                line_number++;
+                # Only process lines that are changes, excluding context lines
+                if ($0 ~ /^[+]/ && $0 !~ /^\+\+\+/) {
+                  print "Line", line_number ":", $0; 
+                  line_number++;
+                }
               }
             ' || echo "No changes found in $file"
           done
