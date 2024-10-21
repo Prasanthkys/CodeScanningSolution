@@ -37,7 +37,7 @@ public with sharing class AccountInsertClass {
     if (Schema.sObjectType.Opportunity.isCreateable()) {
       List<Opportunity> oppList = new List<Opportunity>();
       for (Account acc : accList) {
-        System.debug('Debug');
+        System.debug('Debug1');
         Opportunity opp = new Opportunity();
         opp.Name = acc.Name;
         opp.CloseDate = System.Today();
