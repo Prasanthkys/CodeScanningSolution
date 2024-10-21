@@ -66,8 +66,11 @@ jobs:
           for file in $files; do
             echo "Showing changed lines for file: $file"
             
+            # Get the merge-base commit to compare against the base of the branch (instead of the previous commit)
+            base_commit=$(git merge-base HEAD origin/main)
+
             # Generate a diff without context lines and extract correct line numbers
-            git diff -U0 HEAD~1 HEAD -- "$file" | awk '
+            git diff -U0 $base_commit HEAD -- "$file" | awk '
               /^@@/ {
                 # Extract the starting line number of the changes in the new file
                 match($0, /\+[0-9]+/)
