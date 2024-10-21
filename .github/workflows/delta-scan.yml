@@ -66,8 +66,8 @@ jobs:
           for file in $files; do
             echo "Showing changed lines for file: $file"
             
-            # Compare the current commit (HEAD) with the previous commit (HEAD~1)
-            git diff -U0 HEAD~1 HEAD -- "$file" | awk '
+            # Compare the current commit (HEAD) with the immediate previous commit (HEAD^)
+            git diff -U0 HEAD^ HEAD -- "$file" | awk '
               /^@@/ {
                 # Extract the starting line number of the changes in the new file
                 match($0, /\+[0-9]+/)
