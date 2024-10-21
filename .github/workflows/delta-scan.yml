@@ -1,5 +1,3 @@
-name: SFDX Code Scan
-
 on:
   pull_request:
     branches:
@@ -93,6 +91,23 @@ jobs:
             sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed for $file, continuing with other files."; }
           done
 
+      - name: Extract Newly Added Rows from Scanner Report
+        run: |
+          if [ -f scanner-report.csv ]; then
+            # Extract the header
+            header=$(head -n 1 scanner-report.csv)
+
+            # Extract new rows (those with added "+" lines)
+            grep '^+' scanner-report.csv | sed 's/^+//' > new-rows.csv
+
+            # Combine header and new rows into a new CSV
+            echo "$header" > new-scanner-report.csv
+            cat new-rows.csv >> new-scanner-report.csv
+          else
+            echo "No scanner report found to process."
+            exit 1
+          fi
+
       - name: Block PR merge if severity violations are found
         id: block-check
         run: |
@@ -120,6 +135,12 @@ jobs:
           name: SFDX_Code_Scan_Report
           path: scanner-report.csv
 
+      - name: Upload New Scanner Report (New Rows Only)
+        uses: actions/upload-artifact@v3
+        with:
+          name: SFDX_Code_Scan_New_Report
+          path: new-scanner-report.csv
+
   quality-gate-critical-permissions-check:
     runs-on: ubuntu-latest
     needs: quality-gate-code-check
@@ -135,25 +156,7 @@ jobs:
 
       - name: Scan Profiles and Permission Sets for Critical Permissions
         run: |
-          CRITICAL_PERMISSIONS=(
-              "AssignPermissionSets"
-              "AuthorApex"
-              "CustomizeApplication"
-              "FreezeUsers"
-              "ManageEncryptionKeys"
-              "ManageInternalUsers"
-              "ManagePasswordPolicies"
-              "ManageProfilesPermissionSets"
-              "ManageRoles"
-              "ManageSharing"
-              "ManageUsers"
-              "ModifyAllData"
-              "MonitorLoginHistory"
-              "MultiFactorAuthenticationRequired"
-              "PasswordNeverExpires"
-              "ResetPasswordsUnlockUsers"
-              "ViewAllData"
-          )
+          CRITICAL_PERMISSIONS=( "AssignPermissionSets" "AuthorApex" "CustomizeApplication" "FreezeUsers" "ManageEncryptionKeys" "ManageInternalUsers" "ManagePasswordPolicies" "ManageProfilesPermissionSets" "ManageRoles" "ManageSharing" "ManageUsers" "ModifyAllData" "MonitorLoginHistory" "MultiFactorAuthenticationRequired" "PasswordNeverExpires" "ResetPasswordsUnlockUsers" "ViewAllData" )
           BLOCKED_FILES=()
           for FILE in $(find force-app/main/default/profiles -name '*.profile-meta.xml'); do
             for PERMISSION in "${CRITICAL_PERMISSIONS[@]}"; do
