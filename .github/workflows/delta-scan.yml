@@ -66,16 +66,15 @@ jobs:
           for file in $files; do
             echo "Showing changed lines for file: $file"
             
-            # Get the two latest commit hashes and compare only between them
-            previous_commit=$(git log -2 --pretty=format:"%H" | tail -n 1)
-            current_commit=$(git log -1 --pretty=format:"%H")
-            
-            git diff -U0 $previous_commit $current_commit -- "$file" | awk '
+            # Compare the current commit (HEAD) with the previous commit (HEAD~1)
+            git diff -U0 HEAD~1 HEAD -- "$file" | awk '
               /^@@/ {
+                # Extract the starting line number of the changes in the new file
                 match($0, /\+[0-9]+/)
                 line_number = substr($0, RSTART+1, RLENGTH-1)
               }
               /^[+][^+]/ {
+                # Process only lines that are changes (starting with a single '+')
                 print "Line", line_number ":", $0
                 line_number++
               }
