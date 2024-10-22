@@ -65,7 +65,7 @@ jobs:
             echo "Showing changed lines for file: $file"
             
             # Compare the current commit (HEAD) with the previous commit (HEAD~1)
-            git diff -U0 HEAD~1 HEAD -- "$file" | awk '
+            git diff --unified=0 HEAD~1 HEAD -- "$file" | awk '
               /^@@/ {
                 # Extract the starting line number of the changes in the new file
                 match($0, /\+[0-9]+/)
@@ -90,23 +90,6 @@ jobs:
             echo "Running SFDX Scanner on file: $file"
             sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed for $file, continuing with other files."; }
           done
-
-      - name: Extract Newly Added Rows from Scanner Report
-        run: |
-          if [ -f scanner-report.csv ]; then
-            # Extract the header
-            header=$(head -n 1 scanner-report.csv)
-
-            # Extract new rows (those with added "+" lines)
-            grep '^+' scanner-report.csv | sed 's/^+//' > new-rows.csv
-
-            # Combine header and new rows into a new CSV
-            echo "$header" > new-scanner-report.csv
-            cat new-rows.csv >> new-scanner-report.csv
-          else
-            echo "No scanner report found to process."
-            exit 1
-          fi
 
       - name: Block PR merge if severity violations are found
         id: block-check
@@ -134,13 +117,6 @@ jobs:
         with:
           name: SFDX_Code_Scan_Report
           path: scanner-report.csv
-
-      - name: Upload New Scanner Report (New Rows Only)
-        uses: actions/upload-artifact@v3
-        if: always()
-        with:
-          name: SFDX_Code_Scan_New_Report
-          path: new-scanner-report.csv
 
   quality-gate-critical-permissions-check:
     runs-on: ubuntu-latest
