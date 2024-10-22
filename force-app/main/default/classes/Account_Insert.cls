@@ -14,6 +14,7 @@ public with sharing class AccountInsertClass {
     if (Schema.sObjectType.Account.isCreateable()) {
       for (Account acc : accList) {
         if (Schema.sObjectType.Account.fields.Description.isUpdateable()) {
+          System.debug('Debug');
           acc.Description = 'Happy Welcome';
           acc.Rating = 'Hotter';
           acc.Industry = 'Agriculture';
@@ -26,7 +27,6 @@ public with sharing class AccountInsertClass {
       );
     }
   }
-
   /**
    * @description Inserts related Opportunity records for a given list of Account records.
    * Performs CRUD validation before inserting opportunities.
@@ -38,6 +38,7 @@ public with sharing class AccountInsertClass {
     if (Schema.sObjectType.Opportunity.isCreateable()) {
       List<Opportunity> oppList = new List<Opportunity>();
       for (Account acc : accList) {
+        System.debug('Debug1');
         Opportunity opp = new Opportunity();
         opp.Name = acc.Name;
         opp.CloseDate = System.Today();

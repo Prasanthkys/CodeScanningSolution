@@ -1,12 +1,14 @@
-name: SFDX Code Scan Delta
-
 on:
-  push:
-    branches: "**"
+  pull_request:
+    branches:
+      - "**"
 
 jobs:
-  installcli:
+  quality-gate-code-check:
     runs-on: ubuntu-latest
+    outputs:
+      scanner-report-path: ${{ steps.upload-report.outputs.artifact-path }}
+      block-pr: ${{ steps.block-check.outputs.block-status }}
     steps:
       - uses: actions/checkout@v3
         with:
@@ -17,233 +19,141 @@ jobs:
         with:
           node-version: 20.x
 
-      - name: Install CLI
+      - name: Install Salesforce CLI
         run: npm install @salesforce/cli --global
 
       - name: Install Scanner Plugin
         run: sf plugins install @salesforce/sfdx-scanner
 
-      - name: Verify SFDX CLI Installation
+      - name: Verify Salesforce CLI Installation
         run: sf --version
 
-      - name: Verify SFDX Scanner Plugin Installation
+      - name: Verify Scanner Plugin Installation
         run: sf plugins --core
 
-      - name: Get changed files and lines (for .cls and .lwc files)
+      - name: Get changed files (for .cls and .lwc files)
         id: get-changes
         run: |
-          # Check if the repository is shallow and unshallow if necessary
-          if [ "$(git rev-parse --is-shallow-repository)" = "true" ]; then
-            echo "Repository is shallow, unshallowing..."
-            git fetch --unshallow
-          else
-            echo "Repository is not shallow, skipping unshallow."
-          fi
-
+          git fetch --unshallow || true
           if [ "$(git rev-list --count HEAD)" -gt "1" ]; then
-            echo "Fetching changed files and lines between HEAD~1 and HEAD"
-            git diff --unified=0 HEAD~1 HEAD > changes.diff
+            echo "Fetching changed files between HEAD~1 and HEAD"
+            git diff --name-only HEAD~1 HEAD > changed-files.txt || { echo "Failed to get git diff"; exit 1; }
           else
-            echo "No previous commit to compare to." > changes.diff
+            echo "No previous commit to compare to." > changed-files.txt
           fi
-
-          # Extract and print only the changed lines and line numbers from .cls and .lwc files
+          if [ ! -s changed-files.txt ]; then
+            echo "No changes detected between HEAD~1 and HEAD."
+            exit 0
+          fi
           echo "Processing changes for .cls and .lwc files only..."
-          awk '
-            BEGIN {valid_file=0} 
-            /^diff --git/ {valid_file=0} 
-            /\.cls$|\.lwc$/ {valid_file=1} 
-            /^@@/ && valid_file {split($0, arr, " "); gsub(",", "", arr[2]); start = substr(arr[2], 2); next} 
-            /^[+][^+]/ && valid_file {print "Line", start++, ":", $0}
-          ' changes.diff > changed_cls_lwc_lines.txt
-          cat changed_cls_lwc_lines.txt
+          grep '\.cls$\|\.lwc$' changed-files.txt > changed_cls_lwc_files.txt
+          if [ ! -s changed_cls_lwc_files.txt ]; then
+            echo "No .cls or .lwc files detected."
+            exit 0
+          fi
+          cat changed_cls_lwc_files.txt
 
-      - name: Extract changed lines, create temp file, and scan
-        if: success()
+      - name: Show Changed Lines and Correct Line Numbers from .cls or .lwc Files
         run: |
-          files=$(grep -E '^\+\+\+ b/.*(\.cls|\.lwc)$' changes.diff | sed 's/+++ b\///')
-
+          files=$(cat changed_cls_lwc_files.txt)
           if [ -z "$files" ]; then
-            echo "No changed .cls or .lwc files detected."
+            echo "No .cls or .lwc files detected."
             exit 0
           fi
 
-          # Declare an array to map the line numbers
-          declare -A line_map
-
-          while IFS= read -r file; do
-            echo "Processing file: $file"
+          for file in $files; do
+            echo "Showing changed lines for file: $file"
             
-            # Ensure that the file path doesn't contain unnecessary quotes
-            file=$(echo "$file" | tr -d '"')
-            
-            # Extract the actual changed lines and line numbers for the specific file
-            changed_lines=$(grep -A 1000 "$file" changes.diff | grep '^+' | cut -d'+' -f2-)
-            line_numbers=$(grep -A 1000 "$file" changes.diff | grep '^@@' | awk '{print $2}' | cut -d',' -f1 | sed 's/-//')
+            # Compare the current commit (HEAD) with the previous commit (HEAD~1)
+            git diff --unified=0 HEAD~1 HEAD -- "$file" | awk '
+              /^@@/ {
+                # Extract the starting line number of the changes in the new file
+                match($0, /\+[0-9]+/)
+                line_number = substr($0, RSTART+1, RLENGTH-1)
+              }
+              /^[+][^+]/ {
+                # Process only lines that are changes (starting with a single '+')
+                print "Line", line_number ":", $0
+                line_number++
+              }
+            ' || echo "No changes found in $file"
+          done
 
-            # Print changed lines and line numbers for debugging
-            echo "Changed lines in $file:"
-            echo "$changed_lines"
-            echo "Line numbers corresponding to the changed lines in $file:"
-            echo "$line_numbers"
+      - name: Run SFDX Scanner on Changed Files
+        run: |
+          files=$(cat changed_cls_lwc_files.txt)
+          if [ -z "$files" ]; then
+            echo "No .cls or .lwc files detected."
+            exit 0
+          fi
+          for file in $files; do
+            echo "Running SFDX Scanner on file: $file"
+            sf scanner:run --target "$file" --format "csv" --outfile "scanner-report.csv" || { echo "Scanner run failed for $file, continuing with other files."; }
+          done
 
-            # Populate the line_map array
-            i=0
-            echo "$changed_lines" | while read -r line; do
-              line_map[$i]=$(echo "$line_numbers" | sed -n "$((i + 1))p")
-              echo "Mapped line $i to original line number: ${line_map[$i]}"  # Debug output
-              i=$((i + 1))
-            done
-
-            # Create a temporary file with a valid method structure
-            temp_file="temp_${file//\//_}"
-            echo "/* Temporary file for changed lines scan */" > "$temp_file"
-            echo "public class TempWrapperClass {" >> "$temp_file"
-            echo "    public static void tempMethod() {" >> "$temp_file"
-
-            # Keep track of the line number within the temporary class
-            temp_line_number=3  # Starting after the class declaration
-
-            # Ensure that each line ends with a semicolon if it's not already present
-            echo "$changed_lines" | while read -r line; do
-              if ! echo "$line" | grep -qE ';$'; then
-                line="${line};"
-              fi
-              echo "        $line" >> "$temp_file"
-              temp_line_number=$((temp_line_number + 1))
-            done
-
-            echo "    }" >> "$temp_file"
-            echo "}" >> "$temp_file"  # Close the class
-
-            echo "Created temporary file with method structure: $temp_file"
-
-            # Run the SFDX scanner on the temporary file
-            sf scanner:run --target "$temp_file" --format "csv" --outfile "scanner-report-$temp_file.csv" || { echo "Scanner run failed"; exit 1; }
-
-            # Check if the scanner report was generated
-            if [ -s "scanner-report-$temp_file.csv" ]; then
-              echo "Scanner report generated for $temp_file."
-              
-              # Trim the file paths in the 'File' column of the generated report
-              echo "Trimming the file paths in scanner report: scanner-report-$temp_file.csv"
-              sed -i 's|/home/runner/work/CodeScanningSolution/CodeScanningSolution/temp_force-app_main_default_classes_||g' "scanner-report-$temp_file.csv"
-              
-              echo "File paths trimmed in scanner-report-$temp_file.csv."
-              
-              # Now match the violations with the corresponding original file line numbers
-              i=0  # To track the position in the array
-              while IFS=, read -r problem severity file line column rule description url category engine; do
-                # Replace the line number with the original line number and add the Changed Line column
-                if [ -n "${line_map[$i]}" ]; then
-                  original_line="${line_map[$i]}"
-                  changed_line="$original_line"  # Store the changed line number
-                  echo "$problem,$severity,$file,$original_line,$changed_line,$column,$rule,$description,$url,$category,$engine" >> "updated-scanner-report-$temp_file.csv"
-                  i=$((i + 1))
-                else
-                  # If no match, just append the original row without changed line info
-                  echo "$problem,$severity,$file,$line,N/A,$column,$rule,$description,$url,$category,$engine" >> "updated-scanner-report-$temp_file.csv"
-                fi
-              done < <(tail -n +2 "scanner-report-$temp_file.csv") # Skip the header while reading the CSV
-
-              # Add the header for the new CSV with the "Changed Line" column
-              echo "Problem,Severity,File,Line,Changed Line,Column,Rule,Description,URL,Category,Engine" > "final-scanner-report-$temp_file.csv"
-              cat "updated-scanner-report-$temp_file.csv" >> "final-scanner-report-$temp_file.csv"
-
-              echo "Final report with original line numbers generated: final-scanner-report-$temp_file.csv"
-
+      - name: Block PR merge if severity violations are found
+        id: block-check
+        run: |
+          if [ -f scanner-report.csv ]; then
+            severity_fail_count=$(awk -F',' '{gsub(/^ *| *$/, "", $2); if($2 == "\"3\"") count++} END {print count}' scanner-report.csv)
+            echo "Severity 3 issues count: $severity_fail_count"
+            if [ "$severity_fail_count" -gt 0 ]; then
+              echo "Blocking your pull request due to severity 3 vulnerabilities found."
+              echo "::set-output name=block-status::true"
+              exit 1
             else
-              echo "No scanner report generated for $temp_file."
-              exit 0  # Exit gracefully if no report was generated
+              echo "No severity 3 vulnerabilities found. Proceeding with Approval."
+              echo "::set-output name=block-status::false"
             fi
-            
-            # Clean up the temporary file after scanning
-            rm "$temp_file"
-          done <<< "$files"
-
-        env:
-          SF_LAZY_LOAD_MODULES: "true"
-          SF_AUTOUPDATE_DISABLE: "true"
-          SF_DISABLE_AUTOUPDATE: "true"
-
-      - name: Install mailx
-        run: sudo apt-get install -y mailutils
-
-      - name: Get Repository and Branch Info
-        id: get-info
-        run: |
-          REPO_NAME=$(echo $GITHUB_REPOSITORY | cut -d'/' -f2)
-          BRANCH_NAME=$(echo $GITHUB_REF | sed 's/refs\/heads\///')
-          COMMIT_LABEL=$(git log -1 --pretty=format:'%s')
-          FILE_TITLE="SFDX_Code_Scan_Delta_${REPO_NAME}_${BRANCH_NAME}_${COMMIT_LABEL}.csv"
-          echo "FILE_TITLE=${FILE_TITLE}" >> $GITHUB_ENV
-
-      - name: Upload Scanner Report and Rules as Artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: SFDX_Code_Scan_Delta
-          path: |
-            final-scanner-report-*.csv
-
-      - name: Get Pusher's Email
-        id: get-pusher-email
-        run: |
-          COMMIT_SHA=${{ github.sha }}
-          REPO=${{ github.repository }}
-          PUSHER_EMAIL=$(curl -s -H "Authorization: token ${{ secrets.GIT_TOKEN }}" \
-            "https://api.github.com/repos/${REPO}/commits/${COMMIT_SHA}" | jq -r '.commit.committer.email')
-          echo "PUSHER_EMAIL=${PUSHER_EMAIL}" >> $GITHUB_ENV
-
-      - name: Encode CSV report to base64
-        run: |
-          report_file=$(find . -name "final-scanner-report-*.csv" | head -n 1)
-          if [ -s "$report_file" ]; then
-            base64 "$report_file" > encoded_report.txt
           else
             echo "No scanner report found."
-            exit 0  # Gracefully exit if no report was found
+            exit 1
           fi
 
-      - name: Upload CSV Report to Salesforce
-        if: success()
+      - name: Upload Scanner Report
+        id: upload-report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: SFDX_Code_Scan_Report
+          path: scanner-report.csv
+
+  quality-gate-critical-permissions-check:
+    runs-on: ubuntu-latest
+    needs: quality-gate-code-check
+    if: ${{ needs.quality-gate-code-check.outputs.block-pr == 'false' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Download Scanner Report
+        uses: actions/download-artifact@v3
+        with:
+          name: SFDX_Code_Scan_Report
+
+      - name: Scan Profiles and Permission Sets for Critical Permissions
         run: |
-          if [ -s encoded_report.txt ]; then
-            # Read the base64 content from the file and escape special characters for JSON
-            ENCODED_DATA=$(cat encoded_report.txt | tr -d '\n')
-            
-            # Upload the encoded report to Salesforce
-            contentDocumentResponse=$(curl -X POST https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/ \
-              -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}" \
-              -H "Content-Type: application/json" \
-              -d '{
-                "Title": "'"${{ env.FILE_TITLE }}"'",
-                "PathOnClient": "final-scanner-report.csv",
-                "VersionData": "'"$ENCODED_DATA"'"
-              }')
-              
-            echo "Response: $contentDocumentResponse"
-              
-            # Extract the ContentVersionId from the response
-            contentVersionId=$(echo $contentDocumentResponse | jq -r '.id // empty')
-            if [ -z "$contentVersionId" ]; then
-              echo "Error: Failed to upload file. No ContentVersionId found."
-              exit 1
-            fi
-            echo "ContentVersionId: $contentVersionId"
-            
-            # Get the ContentDocumentId
-            contentDocumentResponse=$(curl -X GET https://individual-fc-dev-ed.develop.my.salesforce.com/services/data/v61.0/sobjects/ContentVersion/$contentVersionId \
-              -H "Authorization: Bearer ${{ secrets.SF_ACCESS_TOKEN }}")
-            echo "ContentDocument Response: $contentDocumentResponse"
-            
-            contentDocumentId=$(echo $contentDocumentResponse | jq -r '.ContentDocumentId // empty')
-            if [ -z "$contentDocumentId" ]; then
-              echo "Error: Failed to retrieve ContentDocumentId. No ContentDocumentId found."
-              exit 1
-            fi
-            echo "ContentDocumentId: $contentDocumentId"
+          CRITICAL_PERMISSIONS=( "AssignPermissionSets" "AuthorApex" "CustomizeApplication" "FreezeUsers" "ManageEncryptionKeys" "ManageInternalUsers" "ManagePasswordPolicies" "ManageProfilesPermissionSets" "ManageRoles" "ManageSharing" "ManageUsers" "ModifyAllData" "MonitorLoginHistory" "MultiFactorAuthenticationRequired" "PasswordNeverExpires" "ResetPasswordsUnlockUsers" "ViewAllData" )
+          BLOCKED_FILES=()
+          for FILE in $(find force-app/main/default/profiles -name '*.profile-meta.xml'); do
+            for PERMISSION in "${CRITICAL_PERMISSIONS[@]}"; do
+              if grep -q "$PERMISSION" "$FILE" && ! grep -q "System Administrator" "$FILE"; then
+                BLOCKED_FILES+=("$FILE")
+              fi
+            done
+          done
+          for FILE in $(find force-app/main/default/permissionsets -name '*.permissionset-meta.xml'); do
+            for PERMISSION in "${CRITICAL_PERMISSIONS[@]}"; do
+              if grep -q "$PERMISSION" "$FILE"; then
+                BLOCKED_FILES+=("$FILE")
+              fi
+            done
+          done
+          if [ ${#BLOCKED_FILES[@]} -gt 0 ]; then
+            echo "Critical permissions found in the following files:"
+            for FILE in "${BLOCKED_FILES[@]}"; do
+              echo "$FILE"
+            done
+            exit 1
           else
-            echo "No encoded report found, skipping upload."
-          fi
-        env:
-          SF_ACCESS_TOKEN: ${{ secrets.SF_ACCESS_TOKEN }}
+            echo "No critical permissions assigned to non-System Administrator profiles or permission sets."
