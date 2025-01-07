@@ -46,6 +46,7 @@ public with sharing class AccountInsertClass {
         opp.AccountId = acc.Id;
         oppList.add(opp);
         System.debug('Hi Bye');
+        System.debug('Sample');
       }
       if (oppList.size() > 0) {
         insert oppList;
