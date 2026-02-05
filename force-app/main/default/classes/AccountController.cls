@@ -1,8 +1,7 @@
+```apex
 public with sharing class AccountController {
     public static void insertAccount(List<Account> accList){
         for(Account acc:accList){
-            System.debug('AccountController');
-            System.debug('AccountController Method');
             acc.Description='Happy Welcome';
         }
     }
@@ -21,3 +20,4 @@ public with sharing class AccountController {
         }
     }
 }
+```
